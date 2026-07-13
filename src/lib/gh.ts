@@ -44,6 +44,14 @@ export const fetchPrState = async (repo: string, prNumber: number): Promise<'ope
   return out.state.toLowerCase() as 'open' | 'merged' | 'closed'
 }
 
+// PR numbers with a conversation comment from me (comments are not "reviews" in GitHub's model)
+export const listCommentedByMe = async (repo: string, me: string): Promise<Set<number>> => {
+  const out = JSON.parse(
+    await gh(['search', 'prs', '--repo', repo, '--commenter', me, '--state', 'open', '--json', 'number']),
+  ) as { number: number }[]
+  return new Set(out.map((pr) => pr.number))
+}
+
 export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
 
 // Activity = review comments + reviews + issue comments; CI from status check rollup

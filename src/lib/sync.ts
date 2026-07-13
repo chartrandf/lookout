@@ -1,7 +1,7 @@
 import type { ReviewTask } from '../types'
 import { getConfig, setGithubUser } from './config'
 import { allTasks, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
-import { fetchLogin, fetchPrActivity, fetchPrState, listOpenPrs } from './gh'
+import { fetchLogin, fetchPrActivity, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { scanRepoSessions } from './sessions'
@@ -26,11 +26,13 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     let prs: Awaited<ReturnType<typeof listOpenPrs>>
     let sessionsByBranch: Awaited<ReturnType<typeof scanRepoSessions>>
     let reviewsByBranch: Awaited<ReturnType<typeof scanReviewFiles>>
+    let commentedByMe: Set<number>
     try {
-      ;[prs, sessionsByBranch, reviewsByBranch] = await Promise.all([
+      ;[prs, sessionsByBranch, reviewsByBranch, commentedByMe] = await Promise.all([
         listOpenPrs(repo),
         scanRepoSessions(path),
         scanReviewFiles(path),
+        listCommentedByMe(repo, me),
       ])
     } catch (e) {
       console.error(`sync failed for ${repo}:`, e)
@@ -57,12 +59,13 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const reviewFiles = reviewsByBranch.get(pr.headRefName) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
 
-      // already reviewed on GitHub -> skip Discovery, board it in the right column
+      // already reviewed or commented on GitHub -> skip Discovery, board it in the right column
       const myReview = pr.latestReviews.find((r) => r.author.login === me)
-      if (myReview && (known.get(id)?.stage ?? 'discovered') === 'discovered')
-        await setStage(id, myReview.state === 'CHANGES_REQUESTED' ? 'followup' : 'reviewed')
+      const engaged = myReview || commentedByMe.has(pr.number)
+      if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered')
+        await setStage(id, myReview?.state === 'CHANGES_REQUESTED' ? 'followup' : 'reviewed')
 
-      if (!known.has(id) && !firstSync && !myReview) {
+      if (!known.has(id) && !firstSync && !engaged) {
         const requested = pr.reviewRequests.some((r) => r.login === me)
         await notify(
           requested ? 'Review requested' : 'New PR',
