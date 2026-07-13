@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PrLink } from '../components/PrLink'
 import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
@@ -9,6 +10,7 @@ type Props = {
   onFollowup: (t: ReviewTask) => void
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
+  onSnooze: (t: ReviewTask, snoozed: boolean) => void
 }
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
@@ -29,13 +31,14 @@ type CardProps = {
   onFollowup: () => void
   onOpenSession: () => void
   onSeen: () => void
+  onSnooze: (snoozed: boolean) => void
 }
 
 const actionClass =
   'cursor-pointer rounded bg-deck-700 px-1.5 py-0.5 text-xs text-deck-300 hover:bg-deck-600 disabled:cursor-default disabled:opacity-40'
 
-const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps) => (
-  <div className="rounded-lg border border-deck-700 bg-deck-800/60 p-3">
+const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen, onSnooze }: CardProps) => (
+  <div className={`rounded-lg border border-deck-700 bg-deck-800/60 p-3 ${t.snoozed ? 'opacity-50' : ''}`}>
     <PrLink url={t.prUrl} className="block text-sm font-medium leading-snug">
       {t.prTitle}
     </PrLink>
@@ -98,41 +101,65 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps
             session
           </button>
         )}
+        <button
+          type="button"
+          onClick={() => onSnooze(!t.snoozed)}
+          title={t.snoozed ? 'Unhide now' : 'Hide until new activity on the PR'}
+          className={`${actionClass} ml-auto`}
+        >
+          {t.snoozed ? 'unhide' : '💤 hide'}
+        </button>
       </div>
     )}
   </div>
 )
 
-export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen }: Props) => {
+export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen, onSnooze }: Props) => {
+  const [showSnoozed, setShowSnoozed] = useState(false)
   const now = Date.now()
-  const visible = tasks.filter(
+  const active = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
   )
+  // snoozed cards stay hidden until new activity; Done column always shows
+  const visible = active.filter((t) => showSnoozed || !t.snoozed || t.stage === 'done')
+  const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-      {COLUMNS.map((col) => {
-        const items = visible.filter((t) => col.stage.includes(t.stage))
-        return (
-          <div key={col.title} className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-deck-400">
-              {col.title} <span className="font-normal">({items.length})</span>
-            </h3>
-            {items.map((t) => (
-              <Card
-                key={t.id}
-                t={t}
-                run={runByTask.get(t.id)}
-                onReview={() => onReview(t)}
-                onFollowup={() => onFollowup(t)}
-                onOpenSession={() => onOpenSession(t)}
-                onSeen={() => onSeen(t)}
-              />
-            ))}
-          </div>
-        )
-      })}
+    <div className="flex flex-col gap-3">
+      {snoozedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setShowSnoozed((s) => !s)}
+          className="cursor-pointer self-end text-xs text-deck-400 hover:text-deck-200"
+        >
+          {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
+        </button>
+      )}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+        {COLUMNS.map((col) => {
+          const items = visible.filter((t) => col.stage.includes(t.stage))
+          return (
+            <div key={col.title} className="flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-deck-400">
+                {col.title} <span className="font-normal">({items.length})</span>
+              </h3>
+              {items.map((t) => (
+                <Card
+                  key={t.id}
+                  t={t}
+                  run={runByTask.get(t.id)}
+                  onReview={() => onReview(t)}
+                  onFollowup={() => onFollowup(t)}
+                  onOpenSession={() => onOpenSession(t)}
+                  onSeen={() => onSeen(t)}
+                  onSnooze={(snoozed) => onSnooze(t, snoozed)}
+                />
+              ))}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

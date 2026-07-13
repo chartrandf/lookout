@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { SessionPanel } from './components/SessionPanel'
 import { getConfig, setRepos } from './lib/config'
-import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setStage } from './lib/db'
+import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setSnoozed, setStage } from './lib/db'
 import { getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount } from './lib/tray'
@@ -118,8 +118,8 @@ const App = () => {
   )
 
   return (
-    <div className="min-h-screen bg-deck-900 text-deck-100">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-deck-800 bg-deck-900/95 px-4 py-2.5">
+    <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
+      <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
         {tab('board', 'Board', runningCount)}
         {tab('discovery', 'Discovery', discoveredCount)}
@@ -140,7 +140,7 @@ const App = () => {
 
       {error && <div className="mx-4 mt-3 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</div>}
 
-      <main className="p-4">
+      <main className="flex-1 overflow-y-auto p-4">
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
@@ -164,6 +164,10 @@ const App = () => {
             onOpenSession={(t) => setPanelTaskId(t.id)}
             onSeen={async (t) => {
               await clearNewActivity(t.id)
+              await reload()
+            }}
+            onSnooze={async (t, snoozed) => {
+              await setSnoozed(t.id, snoozed)
               await reload()
             }}
           />

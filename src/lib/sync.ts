@@ -1,6 +1,6 @@
 import type { ReviewTask } from '../types'
 import { getConfig, setGithubUser } from './config'
-import { allTasks, setActivity, setLinks, setPrState, setStage, upsertPr } from './db'
+import { allTasks, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
 import { fetchLogin, fetchPrActivity, fetchPrState, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
@@ -99,8 +99,10 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         const isNew = !baseline && count > (t.activityCount ?? 0)
         await setActivity(t.id, count, ciState, isNew)
         if (isNew) await notify('New PR activity', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
-        if (ciState === 'fail' && t.ciState !== 'fail' && !baseline)
+        if (ciState === 'fail' && t.ciState !== 'fail' && !baseline) {
           await notify('CI failed', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
+          if (t.snoozed) await setSnoozed(t.id, false) // CI failure also wakes a hidden card
+        }
       } catch (e) {
         console.error(`activity poll failed for ${t.id}:`, e)
       }

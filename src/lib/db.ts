@@ -27,6 +27,7 @@ type Row = {
   activity_count: number | null
   ci_state: string | null
   new_activity: number
+  snoozed: number
   done_at: string | null
   updated_at: string
 }
@@ -50,6 +51,7 @@ const toTask = (r: Row): ReviewTask => ({
   activityCount: r.activity_count,
   ciState: r.ci_state as ReviewTask['ciState'],
   hasNewActivity: r.new_activity === 1,
+  snoozed: r.snoozed === 1,
   doneAt: r.done_at,
   updatedAt: r.updated_at,
 })
@@ -115,10 +117,18 @@ export const setPrState = async (id: string, prState: string) => {
 
 export const setActivity = async (id: string, count: number, ciState: string | null, isNew: boolean) => {
   const d = await getDb()
+  // new activity wakes a snoozed card
   await d.execute(
-    'UPDATE tasks SET activity_count = $1, ci_state = $2, new_activity = MAX(new_activity, $3) WHERE id = $4',
+    `UPDATE tasks SET activity_count = $1, ci_state = $2, new_activity = MAX(new_activity, $3),
+       snoozed = CASE WHEN $3 = 1 THEN 0 ELSE snoozed END
+     WHERE id = $4`,
     [count, ciState, isNew ? 1 : 0, id],
   )
+}
+
+export const setSnoozed = async (id: string, snoozed: boolean) => {
+  const d = await getDb()
+  await d.execute('UPDATE tasks SET snoozed = $1 WHERE id = $2', [snoozed ? 1 : 0, id])
 }
 
 export const clearNewActivity = async (id: string) => {
