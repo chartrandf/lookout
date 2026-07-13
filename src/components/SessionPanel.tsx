@@ -307,11 +307,20 @@ export const SessionPanel = ({
               {approved ? '✅ approved' : approving ? 'approving…' : '✅ approve'}
             </button>
           )}
-          {running && <span className="animate-pulse self-center text-xs text-amber-300">running…</span>}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>
           )}
         </div>
+
+        {running && (
+          <div className="flex items-center gap-2.5 border-b border-amber-500/30 bg-amber-500/15 px-4 py-2 text-sm text-amber-200">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+            </span>
+            claude is working — /{run?.command} in progress…
+          </div>
+        )}
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {run && run.lines.length > 0 && (
