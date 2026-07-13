@@ -34,7 +34,12 @@ export const History = ({ tasks }: Props) => {
         {items.map((t) => (
           <li key={t.id} className="rounded-lg border border-deck-800 bg-deck-800/40 p-3">
             <div className="flex items-center gap-2">
-              <PrLink url={t.prUrl} className="min-w-0 flex-1 truncate text-sm font-medium">
+              <PrLink
+                url={t.prUrl}
+                repo={t.repo}
+                prNumber={t.prNumber}
+                className="min-w-0 flex-1 truncate text-sm font-medium"
+              >
                 {t.prTitle}
               </PrLink>
               <span

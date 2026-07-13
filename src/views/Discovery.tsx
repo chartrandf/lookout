@@ -58,7 +58,7 @@ export const Discovery = ({ tasks, onReview, onWatch, onIgnore, showIgnored, onT
                 <li key={t.id} className="flex items-center gap-3 rounded-lg border border-deck-700 bg-deck-800/60 p-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <PrLink url={t.prUrl} className="truncate font-medium">
+                      <PrLink url={t.prUrl} repo={t.repo} prNumber={t.prNumber} className="truncate font-medium">
                         {t.prTitle}
                       </PrLink>
                       <span className="shrink-0 text-xs text-deck-500">#{t.prNumber}</span>

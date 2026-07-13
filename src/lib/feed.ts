@@ -1,0 +1,97 @@
+import type { ReviewTask } from '../types'
+import { fetchPrTimeline } from './gh'
+import { sessionsForBranch } from './sessions'
+
+export type FeedEvent = {
+  ts: string
+  icon: string
+  actor: string
+  text: string
+  mine: boolean // my action -> right side of the chat, others -> left
+  url?: string // opens in the PR window
+  filePath?: string // opens the local review report
+}
+
+const REVIEW_ICONS: Record<string, string> = {
+  approved: '✅',
+  'changes requested': '🔴',
+  commented: '📝',
+}
+
+const KIND_ICONS = {
+  commit: '📦',
+  comment: '💬',
+  review_requested: '👀',
+  merged: '🟣',
+  closed: '❌',
+  reopened: '♻️',
+  force_pushed: '⚠️',
+}
+
+// filename: YYYY-MM-DD-HH-MM-<branch>.md -> local time ISO
+const reviewFileTs = (path: string): string | null => {
+  const m = path
+    .split('/')
+    .at(-1)
+    ?.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-/)
+  if (!m) return null
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString()
+}
+
+// Merge consecutive commits by the same actor into one "pushed N commits" event
+const groupCommits = (events: FeedEvent[]): FeedEvent[] => {
+  const out: FeedEvent[] = []
+  for (const e of events) {
+    const prev = out.at(-1)
+    if (e.icon === KIND_ICONS.commit && prev?.icon === KIND_ICONS.commit && prev.actor === e.actor) {
+      const count = (prev.text.match(/^pushed (\d+) commits/)?.[1] ?? '1') as string
+      prev.text = `pushed ${Number(count) + 1} commits — ${e.text.replace(/^pushed \d+ commits — /, '')}`
+      prev.ts = e.ts
+      continue
+    }
+    out.push({ ...e })
+  }
+  return out
+}
+
+export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent[]> => {
+  const events: FeedEvent[] = []
+
+  if (task.prCreatedAt)
+    events.push({
+      ts: task.prCreatedAt,
+      icon: '🌱',
+      actor: task.prAuthor,
+      text: 'opened the pull request',
+      mine: false,
+    })
+
+  if (task.repoPath) {
+    const sessions = await sessionsForBranch(task.repoPath, task.branch).catch(() => [])
+    for (const s of sessions)
+      if (s.ts) events.push({ ts: s.ts, icon: '🤖', actor: 'you', text: `started /${s.command} session`, mine: true })
+  }
+
+  for (const f of task.reviewFiles) {
+    const ts = reviewFileTs(f)
+    if (ts) events.push({ ts, icon: '📄', actor: 'claude', text: 'review report created', filePath: f, mine: true })
+  }
+
+  const gh = await fetchPrTimeline(task.repo, task.prNumber).catch(() => [])
+  for (const e of gh) {
+    const mine = e.actor === me
+    if (e.kind === 'review')
+      events.push({
+        ts: e.ts,
+        icon: REVIEW_ICONS[e.text] ?? '📝',
+        actor: e.actor,
+        text: `review: ${e.text}`,
+        url: e.url,
+        mine,
+      })
+    else events.push({ ts: e.ts, icon: KIND_ICONS[e.kind], actor: e.actor, text: e.text, url: e.url, mine })
+  }
+
+  const asc = events.sort((a, b) => a.ts.localeCompare(b.ts))
+  return groupCommits(asc).reverse() // recent first
+}

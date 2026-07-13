@@ -57,6 +57,20 @@ const App = () => {
     return () => clearInterval(interval)
   }, [refresh, reload])
 
+  // ⌘1..⌘4 switch tabs (in tab order)
+  useEffect(() => {
+    const VIEWS: View[] = ['board', 'discovery', 'history', 'settings']
+    const onKey = (e: KeyboardEvent) => {
+      const idx = Number(e.key) - 1
+      if (e.metaKey && !e.shiftKey && !e.altKey && VIEWS[idx]) {
+        e.preventDefault()
+        setView(VIEWS[idx])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
     await reload()
@@ -106,14 +120,17 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
-  const tab = (v: View, label: string, badge?: number) => (
+  const tab = (v: View, label: string, shortcut: string, badge?: number) => (
     <button
       type="button"
       onClick={() => setView(v)}
-      className={`cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
+      className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
     >
       {label}
       {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
+      <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
+        ⌘{shortcut}
+      </span>
     </button>
   )
 
@@ -121,10 +138,10 @@ const App = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
-        {tab('board', 'Board', runningCount)}
-        {tab('discovery', 'Discovery', discoveredCount)}
-        {tab('history', 'History')}
-        {tab('settings', 'Settings')}
+        {tab('board', 'Board', '1', runningCount)}
+        {tab('discovery', 'Discovery', '2', discoveredCount)}
+        {tab('history', 'History', '3')}
+        {tab('settings', 'Settings', '4')}
         <div className="ml-auto flex items-center gap-3 text-xs text-deck-500">
           {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
           <button
@@ -166,10 +183,6 @@ const App = () => {
               await clearNewActivity(t.id)
               await reload()
             }}
-            onSnooze={async (t, snoozed) => {
-              await setSnoozed(t.id, snoozed)
-              await reload()
-            }}
           />
         )}
         {view === 'history' && <History tasks={tasks} />}
@@ -180,7 +193,14 @@ const App = () => {
         <SessionPanel
           task={panelTask}
           run={getRun(panelTask.id)}
+          me={config.githubUser}
           onReply={(text) => replyRun(panelTask.id, text, runCallbacks(getRun(panelTask.id)?.command ?? 'do-review'))}
+          onDispatch={(command) => dispatchRun(panelTask, command)}
+          onStageChange={(stage) => moveStage(panelTask.id, stage)}
+          onSnooze={async (snoozed) => {
+            await setSnoozed(panelTask.id, snoozed)
+            await reload()
+          }}
           onKill={() => killRun(panelTask.id)}
           onClose={() => setPanelTaskId(null)}
         />

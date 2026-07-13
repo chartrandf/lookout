@@ -10,7 +10,6 @@ type Props = {
   onFollowup: (t: ReviewTask) => void
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
-  onSnooze: (t: ReviewTask, snoozed: boolean) => void
 }
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
@@ -29,17 +28,20 @@ type CardProps = {
   run: Run | undefined
   onReview: () => void
   onFollowup: () => void
-  onOpenSession: () => void
+  onOpen: () => void
   onSeen: () => void
-  onSnooze: (snoozed: boolean) => void
 }
 
 const actionClass =
   'cursor-pointer rounded bg-deck-700 px-1.5 py-0.5 text-xs text-deck-300 hover:bg-deck-600 disabled:cursor-default disabled:opacity-40'
 
-const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen, onSnooze }: CardProps) => (
-  <div className={`rounded-lg border border-deck-700 bg-deck-800/60 p-3 ${t.snoozed ? 'opacity-50' : ''}`}>
-    <PrLink url={t.prUrl} className="block text-sm font-medium leading-snug">
+const Card = ({ t, run, onReview, onFollowup, onOpen, onSeen }: CardProps) => (
+  // biome-ignore lint/a11y/useKeyWithClickEvents: card body is a mouse affordance; actions inside are buttons
+  <div
+    onClick={onOpen}
+    className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 hover:border-deck-600 ${t.snoozed ? 'opacity-50' : ''}`}
+  >
+    <PrLink url={t.prUrl} repo={t.repo} prNumber={t.prNumber} className="block text-sm font-medium leading-snug">
       {t.prTitle}
     </PrLink>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
@@ -78,7 +80,10 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen, onSnooze }:
       {t.hasNewActivity && (
         <button
           type="button"
-          onClick={onSeen}
+          onClick={(e) => {
+            e.stopPropagation()
+            onSeen()
+          }}
           title="New comments/reviews since last look — click to dismiss"
           className="cursor-pointer rounded bg-amber-500/20 px-1 py-0.5 text-amber-300 hover:bg-amber-500/40"
         >
@@ -90,31 +95,34 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen, onSnooze }:
     </div>
     {t.stage !== 'done' && (
       <div className="mt-2 flex gap-1.5">
-        <button type="button" onClick={onReview} disabled={run?.status === 'running'} className={actionClass}>
-          ▶ review
-        </button>
-        <button type="button" onClick={onFollowup} disabled={run?.status === 'running'} className={actionClass}>
-          follow-up
-        </button>
-        {(run || t.sessionIds.length > 0) && (
-          <button type="button" onClick={onOpenSession} className={actionClass}>
-            session
-          </button>
-        )}
         <button
           type="button"
-          onClick={() => onSnooze(!t.snoozed)}
-          title={t.snoozed ? 'Unhide now' : 'Hide until new activity on the PR'}
-          className={`${actionClass} ml-auto`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onReview()
+          }}
+          disabled={run?.status === 'running'}
+          className={actionClass}
         >
-          {t.snoozed ? 'unhide' : '💤 hide'}
+          ▶ review
+        </button>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onFollowup()
+          }}
+          disabled={run?.status === 'running'}
+          className={actionClass}
+        >
+          🔁 follow-up
         </button>
       </div>
     )}
   </div>
 )
 
-export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen, onSnooze }: Props) => {
+export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
   const now = Date.now()
   const active = tasks.filter(
@@ -140,9 +148,9 @@ export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen
         {COLUMNS.map((col) => {
           const items = visible.filter((t) => col.stage.includes(t.stage))
           return (
-            <div key={col.title} className="flex flex-col gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-deck-400">
-                {col.title} <span className="font-normal">({items.length})</span>
+            <div key={col.title} className="flex flex-col gap-2 rounded-lg bg-grass-600/10 p-2">
+              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+                {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
               {items.map((t) => (
                 <Card
@@ -151,9 +159,8 @@ export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen
                   run={runByTask.get(t.id)}
                   onReview={() => onReview(t)}
                   onFollowup={() => onFollowup(t)}
-                  onOpenSession={() => onOpenSession(t)}
+                  onOpen={() => onOpenSession(t)}
                   onSeen={() => onSeen(t)}
-                  onSnooze={(snoozed) => onSnooze(t, snoozed)}
                 />
               ))}
             </div>

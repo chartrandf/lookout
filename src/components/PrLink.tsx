@@ -1,11 +1,14 @@
-import { openUrl } from '@tauri-apps/plugin-opener'
+import { openPrWindow } from '../lib/prwindow'
 
-type Props = { url: string; children: React.ReactNode; className?: string }
+type Props = { url: string; repo: string; prNumber: number; children: React.ReactNode; className?: string }
 
-export const PrLink = ({ url, children, className }: Props) => (
+export const PrLink = ({ url, repo, prNumber, children, className }: Props) => (
   <button
     type="button"
-    onClick={() => openUrl(url)}
+    onClick={(e) => {
+      e.stopPropagation()
+      openPrWindow(url, repo, prNumber)
+    }}
     className={`cursor-pointer text-left hover:underline ${className ?? ''}`}
   >
     {children}

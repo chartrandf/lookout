@@ -52,6 +52,57 @@ export const listCommentedByMe = async (repo: string, me: string): Promise<Set<n
   return new Set(out.map((pr) => pr.number))
 }
 
+export type GhTimelineEvent = {
+  ts: string
+  kind: 'commit' | 'comment' | 'review' | 'review_requested' | 'merged' | 'closed' | 'reopened' | 'force_pushed'
+  actor: string
+  text: string
+  url?: string
+}
+
+// biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
+const toTimelineEvent = (e: any): GhTimelineEvent | null => {
+  switch (e.event) {
+    case 'committed':
+      return {
+        ts: e.author?.date,
+        kind: 'commit',
+        actor: e.author?.name ?? '',
+        text: (e.message ?? '').split('\n')[0],
+        url: e.html_url,
+      }
+    case 'commented':
+      return { ts: e.created_at, kind: 'comment', actor: e.user?.login ?? '', text: 'commented', url: e.html_url }
+    case 'reviewed': {
+      const state = (e.state ?? '').toLowerCase().replace('_', ' ')
+      return { ts: e.submitted_at, kind: 'review', actor: e.user?.login ?? '', text: state, url: e.html_url }
+    }
+    case 'review_requested':
+      return {
+        ts: e.created_at,
+        kind: 'review_requested',
+        actor: e.review_requester?.login ?? '',
+        text: `asked ${e.requested_reviewer?.login ?? 'someone'} for review`,
+      }
+    case 'merged':
+      return { ts: e.created_at, kind: 'merged', actor: e.actor?.login ?? '', text: 'merged the PR' }
+    case 'closed':
+      return { ts: e.created_at, kind: 'closed', actor: e.actor?.login ?? '', text: 'closed the PR' }
+    case 'reopened':
+      return { ts: e.created_at, kind: 'reopened', actor: e.actor?.login ?? '', text: 'reopened the PR' }
+    case 'head_ref_force_pushed':
+      return { ts: e.created_at, kind: 'force_pushed', actor: e.actor?.login ?? '', text: 'force-pushed' }
+    default:
+      return null
+  }
+}
+
+export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<GhTimelineEvent[]> => {
+  const raw = JSON.parse(await gh(['api', `repos/${repo}/issues/${prNumber}/timeline?per_page=100`]))
+  // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
+  return (raw as any[]).map(toTimelineEvent).filter((e): e is GhTimelineEvent => e !== null && Boolean(e.ts))
+}
+
 export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
 
 // Activity = review comments + reviews + issue comments; CI from status check rollup
