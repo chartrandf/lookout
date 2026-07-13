@@ -151,19 +151,24 @@ const App = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
-        {TAB_ORDER.map(tab)}
-        <div className="ml-auto flex items-center gap-3 text-xs text-deck-500">
-          {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={syncing}
-            className="cursor-pointer rounded-md bg-deck-800 px-2.5 py-1 text-deck-300 hover:bg-deck-700 disabled:opacity-50"
-          >
-            {syncing ? 'syncing…' : 'sync now'}
-          </button>
+        {TAB_ORDER.filter((t) => t.view !== 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
+        <div className="ml-auto">
+          {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
         </div>
       </header>
+
+      {/* status bar: always on top, nothing may overlay it */}
+      <div className="fixed bottom-2 right-2 z-30 flex items-center gap-2 rounded-md border border-deck-700 bg-deck-900/95 px-2 py-1 text-xs text-deck-500 shadow-lg">
+        {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={syncing}
+          className="cursor-pointer rounded bg-deck-800 px-2 py-0.5 text-deck-300 hover:bg-deck-700 disabled:opacity-50"
+        >
+          {syncing ? 'syncing…' : 'sync now'}
+        </button>
+      </div>
 
       {error && <div className="mx-4 mt-3 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</div>}
 

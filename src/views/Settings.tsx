@@ -2,7 +2,9 @@ import { homeDir } from '@tauri-apps/api/path'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
+import { avatarUrl } from '../lib/avatar'
 import { repoFromPath } from '../lib/gh'
 import type { Config, ReviewTask, WatchedRepo } from '../types'
 import { History } from './History'
@@ -69,15 +71,22 @@ export const Settings = ({ config, tasks, onSave }: Props) => {
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold">Settings</h2>
-        <p className="text-sm text-deck-400">
-          GitHub user:{' '}
-          <span className="font-mono text-deck-200">{config.githubUser || '(detected on first sync)'}</span> — your own
-          PRs are never listed.
+        <p className="mt-1 flex items-center gap-2 text-sm text-deck-400">
+          {config.githubUser ? (
+            <button
+              type="button"
+              onClick={() => openUrl(`https://github.com/${config.githubUser}`)}
+              title="Open GitHub profile"
+              className="flex cursor-pointer items-center gap-1.5 rounded-full bg-grass-600/20 py-0.5 pl-1 pr-2.5 font-medium text-grass-300 hover:bg-grass-600/35"
+            >
+              <img src={avatarUrl(config.githubUser)} alt={config.githubUser} className="h-5 w-5 rounded-full" />@
+              {config.githubUser}
+            </button>
+          ) : (
+            <span className="italic text-deck-500">(detected on first sync)</span>
+          )}
+          <span>— your own PRs are never listed.</span>
         </p>
-        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-deck-300">
-          <input type="checkbox" checked={autostart} onChange={toggleAutostart} className="cursor-pointer" />
-          Launch at login
-        </label>
       </div>
 
       <div>
@@ -128,6 +137,24 @@ export const Settings = ({ config, tasks, onSave }: Props) => {
           className="cursor-pointer self-start rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
         >
           {adding ? 'detecting repo…' : 'Add repo'}
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
+        <div>
+          <p className="text-sm font-medium text-deck-200">Launch at login</p>
+          <p className="text-xs text-deck-500">Start Review Deck automatically when you log in.</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autostart}
+          onClick={toggleAutostart}
+          className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${autostart ? 'bg-grass-500' : 'bg-deck-600'}`}
+        >
+          <span
+            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${autostart ? 'translate-x-5' : ''}`}
+          />
         </button>
       </div>
 

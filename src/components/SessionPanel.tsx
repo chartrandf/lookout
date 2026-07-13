@@ -77,6 +77,51 @@ const CheckIcon = () => (
   </svg>
 )
 
+const iconProps = {
+  width: 14,
+  height: 14,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const
+
+const MoonIcon = () => (
+  <svg {...iconProps} aria-hidden="true">
+    <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
+  </svg>
+)
+
+const TerminalIcon = () => (
+  <svg {...iconProps} aria-hidden="true">
+    <path d="m4 17 6-6-6-6" />
+    <path d="M12 19h8" />
+  </svg>
+)
+
+const CopyIcon = () => (
+  <svg {...iconProps} aria-hidden="true">
+    <rect width="14" height="14" x="8" y="8" rx="2" />
+    <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+  </svg>
+)
+
+const ExternalIcon = () => (
+  <svg {...iconProps} aria-hidden="true">
+    <path d="M15 3h6v6" />
+    <path d="M10 14 21 3" />
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+  </svg>
+)
+
+const StopIcon = () => (
+  <svg {...iconProps} fill="currentColor" stroke="none" aria-hidden="true">
+    <rect width="14" height="14" x="5" y="5" rx="2" />
+  </svg>
+)
+
 const lineClass: Record<string, string> = {
   text: 'text-deck-200 whitespace-pre-wrap',
   tool: 'text-deck-500 font-mono text-xs',
@@ -222,7 +267,7 @@ export const SessionPanel = ({
               <select
                 value={task.stage}
                 onChange={(e) => onStageChange(e.target.value as Stage)}
-                className="cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-1 text-xs text-deck-200 outline-none"
+                className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
               >
                 {STAGES.map((s) => (
                   <option key={s.value} value={s.value}>
@@ -235,7 +280,7 @@ export const SessionPanel = ({
                   type="button"
                   onClick={() => setMoreOpen((s) => !s)}
                   title="More options"
-                  className="cursor-pointer rounded border border-deck-600 px-2 py-0.5 text-sm text-deck-300 hover:bg-deck-700"
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded border border-deck-600 text-sm text-deck-300 hover:bg-deck-700"
                 >
                   ⋯
                 </button>
@@ -247,9 +292,9 @@ export const SessionPanel = ({
                         onSnooze(!task.snoozed)
                         setMoreOpen(false)
                       }}
-                      className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
                     >
-                      {task.snoozed ? 'unhide' : '💤 hide until new activity'}
+                      <MoonIcon /> {task.snoozed ? 'Unhide' : 'Hide until new activity'}
                     </button>
                     {sessionId && (
                       <button
@@ -258,18 +303,18 @@ export const SessionPanel = ({
                           resumeSession(sessionId)
                           setMoreOpen(false)
                         }}
-                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
                       >
-                        👻 resume session in ghostty
+                        <TerminalIcon /> Resume session in Ghostty
                       </button>
                     )}
                     {sessionId && (
                       <button
                         type="button"
                         onClick={copySessionId}
-                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
                       >
-                        {copied ? 'copied!' : '⧉ copy resume cmd'}
+                        <CopyIcon /> {copied ? 'Copied!' : 'Copy resume command'}
                       </button>
                     )}
                     <button
@@ -278,9 +323,9 @@ export const SessionPanel = ({
                         openUrl(task.prUrl)
                         setMoreOpen(false)
                       }}
-                      className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
                     >
-                      open in browser
+                      <ExternalIcon /> Open in browser
                     </button>
                     {running && (
                       <button
@@ -289,9 +334,9 @@ export const SessionPanel = ({
                           onKill()
                           setMoreOpen(false)
                         }}
-                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-red-300 hover:bg-red-600/20"
+                        className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-red-300 hover:bg-red-600/20"
                       >
-                        kill run
+                        <StopIcon /> Kill run
                       </button>
                     )}
                   </div>
@@ -300,7 +345,7 @@ export const SessionPanel = ({
               <button
                 type="button"
                 onClick={close}
-                className="cursor-pointer rounded px-2 py-0.5 text-xl leading-none text-deck-400 hover:text-deck-100"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-xl leading-none text-deck-400 hover:text-deck-100"
               >
                 ✕
               </button>
