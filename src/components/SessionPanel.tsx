@@ -3,6 +3,7 @@ import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useRef, useState } from 'react'
 import { buildFeed, type FeedEvent } from '../lib/feed'
+import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
 import type { Run } from '../lib/runs'
 import { timeAgo } from '../lib/time'
@@ -108,6 +109,16 @@ export const SessionPanel = ({
     setTimeout(() => setCopied(false), 1500)
   }
 
+  // Ghostty deep link; falls back to copying the resume command when Ghostty is missing
+  const resumeSession = async (id: string) => {
+    if (!task.repoPath) return
+    const launched = await resumeInGhostty(task.repoPath, id)
+    if (!launched) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+  }
+
   return (
     <>
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss; Esc/✕ also close */}
@@ -131,14 +142,24 @@ export const SessionPanel = ({
               {task.repo}#{task.prNumber} · <span className="font-mono">{task.branch}</span>
             </p>
             {sessionId && (
-              <button
-                type="button"
-                onClick={copySessionId}
-                title="Copy `claude --resume` command to retake this session in a terminal"
-                className="mt-0.5 cursor-pointer font-mono text-[10px] text-deck-500 hover:text-grass-300"
-              >
-                {copied ? 'resume cmd copied!' : `session ${sessionId} ⧉`}
-              </button>
+              <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-deck-500">
+                <button
+                  type="button"
+                  onClick={() => resumeSession(sessionId)}
+                  title="Resume this session in Ghostty (copies the command if Ghostty is missing)"
+                  className="cursor-pointer hover:text-grass-300 hover:underline"
+                >
+                  👻 session {sessionId}
+                </button>
+                <button
+                  type="button"
+                  onClick={copySessionId}
+                  title="Copy `claude --resume` command"
+                  className="cursor-pointer hover:text-grass-300"
+                >
+                  {copied ? 'copied!' : '⧉'}
+                </button>
+              </span>
             )}
           </div>
           <select
@@ -251,6 +272,7 @@ export const SessionPanel = ({
                   <span className="mr-1.5">{e.icon}</span>
                   <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
                   {e.filePath && ' ↗'}
+                  {e.sessionId && ' 👻'}
                 </>
               )
               const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
@@ -261,11 +283,16 @@ export const SessionPanel = ({
               return (
                 // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
                 <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
-                  {e.filePath || e.url ? (
+                  {e.filePath || e.url || e.sessionId ? (
                     <button
                       type="button"
+                      title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
                       onClick={() =>
-                        e.filePath ? openReport(e.filePath) : openPrWindow(e.url as string, task.repo, task.prNumber)
+                        e.filePath
+                          ? openReport(e.filePath)
+                          : e.sessionId
+                            ? resumeSession(e.sessionId)
+                            : openPrWindow(e.url as string, task.repo, task.prNumber)
                       }
                       className={`${bubbleClass} cursor-pointer text-left hover:underline`}
                     >

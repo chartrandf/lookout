@@ -10,6 +10,7 @@ export type FeedEvent = {
   mine: boolean // my action -> right side of the chat, others -> left
   url?: string // opens in the PR window
   filePath?: string // opens the local review report
+  sessionId?: string // resumes the claude session
 }
 
 const REVIEW_ICONS: Record<string, string> = {
@@ -69,7 +70,15 @@ export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent
   if (task.repoPath) {
     const sessions = await sessionsForBranch(task.repoPath, task.branch).catch(() => [])
     for (const s of sessions)
-      if (s.ts) events.push({ ts: s.ts, icon: '🤖', actor: 'you', text: `started /${s.command} session`, mine: true })
+      if (s.ts)
+        events.push({
+          ts: s.ts,
+          icon: '🤖',
+          actor: 'you',
+          text: `started /${s.command} session`,
+          mine: true,
+          sessionId: s.sessionId,
+        })
   }
 
   for (const f of task.reviewFiles) {

@@ -23,14 +23,17 @@
       "allow": [
         { "name": "gh", "cmd": "gh", "args": true },
         { "name": "claude", "cmd": "claude", "args": true },
-        { "name": "code", "cmd": "code", "args": true }
+        { "name": "code", "cmd": "code", "args": true },
+        { "name": "open", "cmd": "open", "args": true }
       ]
     },
     {
       "identifier": "shell:allow-spawn",
       "allow": [
         { "name": "gh", "cmd": "gh", "args": true },
-        { "name": "claude", "cmd": "claude", "args": true }
+        { "name": "claude", "cmd": "claude", "args": true },
+        { "name": "code", "cmd": "code", "args": true },
+        { "name": "open", "cmd": "open", "args": true }
       ]
     },
     "shell:allow-kill",
