@@ -73,9 +73,18 @@ export const startRun = async (
 ) => {
   const existing = runs.get(taskId)
   if (existing && existing.status === 'running') return
-  const run: Run = { taskId, command, repoPath, sessionId: null, lines: [], status: 'running', child: null }
+  const prompt = `/${command} ${branch}`
+  const run: Run = {
+    taskId,
+    command,
+    repoPath,
+    sessionId: null,
+    lines: [{ kind: 'user', text: prompt }],
+    status: 'running',
+    child: null,
+  }
   runs.set(taskId, run)
-  await dispatch(run, `/${command} ${branch}`, callbacks)
+  await dispatch(run, prompt, callbacks)
 }
 
 export const replyRun = async (taskId: string, text: string, callbacks: Callbacks = {}, fallbackSessionId?: string) => {

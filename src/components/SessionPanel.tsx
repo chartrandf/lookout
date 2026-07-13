@@ -319,6 +319,14 @@ export const SessionPanel = ({
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
             </span>
             claude is working — /{run?.command} in progress…
+            <button
+              type="button"
+              onClick={onKill}
+              title="Stop this run (the session stays resumable)"
+              className="ml-auto cursor-pointer rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 text-xs text-red-200 hover:bg-red-500/40"
+            >
+              ■ stop
+            </button>
           </div>
         )}
 
@@ -331,7 +339,10 @@ export const SessionPanel = ({
                   onClick={() => setShowRun((s) => !s)}
                   className="flex flex-1 cursor-pointer items-center justify-between"
                 >
-                  claude session output
+                  <span>
+                    claude session output
+                    {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
+                  </span>
                   <span>{showRun ? '▾' : '▸'}</span>
                 </button>
                 {!running && (
