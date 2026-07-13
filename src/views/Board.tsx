@@ -1,7 +1,14 @@
 import { PrLink } from '../components/PrLink'
+import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
 
-type Props = { tasks: ReviewTask[] }
+type Props = {
+  tasks: ReviewTask[]
+  runs: Run[]
+  onReview: (t: ReviewTask) => void
+  onFollowup: (t: ReviewTask) => void
+  onOpenSession: (t: ReviewTask) => void
+}
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
   { stage: ['watching'], title: 'Watching' },
@@ -14,7 +21,18 @@ const COLUMNS: { stage: Stage[]; title: string }[] = [
 
 const DONE_TTL_MS = 24 * 60 * 60 * 1000
 
-const Card = ({ t }: { t: ReviewTask }) => (
+type CardProps = {
+  t: ReviewTask
+  run: Run | undefined
+  onReview: () => void
+  onFollowup: () => void
+  onOpenSession: () => void
+}
+
+const actionClass =
+  'cursor-pointer rounded bg-zinc-700 px-1.5 py-0.5 text-xs text-zinc-300 hover:bg-zinc-600 disabled:cursor-default disabled:opacity-40'
+
+const Card = ({ t, run, onReview, onFollowup, onOpenSession }: CardProps) => (
   <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3">
     <PrLink url={t.prUrl} className="block text-sm font-medium leading-snug">
       {t.prTitle}
@@ -30,6 +48,12 @@ const Card = ({ t }: { t: ReviewTask }) => (
         >
           {t.prState}
         </span>
+      )}
+      {run?.status === 'running' && (
+        <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
+      )}
+      {run?.status === 'awaiting-input' && (
+        <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-emerald-300">awaiting input</span>
       )}
       {t.sessionIds.length > 0 && (
         <span className="rounded bg-sky-500/20 px-1 py-0.5 text-sky-300" title={t.sessionIds.join('\n')}>
@@ -47,14 +71,30 @@ const Card = ({ t }: { t: ReviewTask }) => (
         </span>
       )}
     </div>
+    {t.stage !== 'done' && (
+      <div className="mt-2 flex gap-1.5">
+        <button type="button" onClick={onReview} disabled={run?.status === 'running'} className={actionClass}>
+          ▶ review
+        </button>
+        <button type="button" onClick={onFollowup} disabled={run?.status === 'running'} className={actionClass}>
+          follow-up
+        </button>
+        {(run || t.sessionIds.length > 0) && (
+          <button type="button" onClick={onOpenSession} className={actionClass}>
+            session
+          </button>
+        )}
+      </div>
+    )}
   </div>
 )
 
-export const Board = ({ tasks }: Props) => {
+export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession }: Props) => {
   const now = Date.now()
   const visible = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
   )
+  const runByTask = new Map(runs.map((r) => [r.taskId, r]))
 
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
@@ -66,7 +106,14 @@ export const Board = ({ tasks }: Props) => {
               {col.title} <span className="font-normal">({items.length})</span>
             </h3>
             {items.map((t) => (
-              <Card key={t.id} t={t} />
+              <Card
+                key={t.id}
+                t={t}
+                run={runByTask.get(t.id)}
+                onReview={() => onReview(t)}
+                onFollowup={() => onFollowup(t)}
+                onOpenSession={() => onOpenSession(t)}
+              />
             ))}
           </div>
         )

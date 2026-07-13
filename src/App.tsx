@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { SessionPanel } from './components/SessionPanel'
 import { getConfig, setRepos } from './lib/config'
-import { allTasks, setStage } from './lib/db'
+import { addSessionId, allTasks, setFollowupSummary, setStage } from './lib/db'
+import { getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
@@ -11,6 +13,11 @@ const POLL_MS = 10 * 60 * 1000
 
 type View = 'discovery' | 'board' | 'settings'
 
+const parseFollowupSummary = (text: string) => {
+  const m = text.match(/(\d+)\s*addressed\D*?(\d+)\s*partial\D*?(\d+)\s*pending/i)
+  return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
+}
+
 const App = () => {
   const [view, setView] = useState<View>('discovery')
   const [config, setConfig] = useState<Config>({ githubUser: '', repos: [] })
@@ -19,6 +26,11 @@ const App = () => {
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIgnored, setShowIgnored] = useState(false)
+  const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
+
+  const runs = useSyncExternalStore(subscribeRuns, getRuns)
+
+  const reload = useCallback(async () => setTasks(await allTasks()), [])
 
   const refresh = useCallback(async () => {
     setSyncing(true)
@@ -36,15 +48,15 @@ const App = () => {
 
   useEffect(() => {
     getConfig().then(setConfig)
-    allTasks().then(setTasks)
+    reload()
     refresh()
     const interval = setInterval(refresh, POLL_MS)
     return () => clearInterval(interval)
-  }, [refresh])
+  }, [refresh, reload])
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
-    setTasks(await allTasks())
+    await reload()
   }
 
   const saveRepos = async (repos: WatchedRepo[]) => {
@@ -53,7 +65,35 @@ const App = () => {
     refresh()
   }
 
+  const runCallbacks = (command: 'do-review' | 'do-followup') => ({
+    onSession: async (taskId: string, sessionId: string) => {
+      await addSessionId(taskId, sessionId)
+      await reload()
+    },
+    onResult: async (taskId: string, result: string) => {
+      if (command === 'do-followup') {
+        const summary = parseFollowupSummary(result)
+        if (summary) await setFollowupSummary(taskId, summary)
+        await setStage(taskId, 'followup')
+      } else {
+        await setStage(taskId, 'reviewed')
+      }
+      await reload()
+    },
+  })
+
+  const dispatchRun = async (t: ReviewTask, command: 'do-review' | 'do-followup') => {
+    if (!t.repoPath) return
+    if (command === 'do-review') await setStage(t.id, 'reviewing')
+    await reload()
+    setPanelTaskId(t.id)
+    await startRun(t.id, command, t.branch, t.repoPath, runCallbacks(command))
+  }
+
+  const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
+
   const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
+  const runningCount = runs.filter((r) => r.status === 'running').length
 
   const tab = (v: View, label: string, badge?: number) => (
     <button
@@ -71,7 +111,7 @@ const App = () => {
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/95 px-4 py-2.5">
         <h1 className="mr-3 text-sm font-bold tracking-tight">Review Deck</h1>
         {tab('discovery', 'Discovery', discoveredCount)}
-        {tab('board', 'Board')}
+        {tab('board', 'Board', runningCount)}
         {tab('settings', 'Settings')}
         <div className="ml-auto flex items-center gap-3 text-xs text-zinc-500">
           {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
@@ -92,6 +132,10 @@ const App = () => {
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
+            onReview={(id) => {
+              const t = tasks.find((x) => x.id === id)
+              if (t) dispatchRun(t, 'do-review')
+            }}
             onWatch={(id) => moveStage(id, 'watching')}
             onIgnore={(id) => moveStage(id, 'ignored')}
             onUnignore={(id) => moveStage(id, 'discovered')}
@@ -99,9 +143,27 @@ const App = () => {
             onToggleIgnored={() => setShowIgnored((s) => !s)}
           />
         )}
-        {view === 'board' && <Board tasks={tasks} />}
+        {view === 'board' && (
+          <Board
+            tasks={tasks}
+            runs={runs}
+            onReview={(t) => dispatchRun(t, 'do-review')}
+            onFollowup={(t) => dispatchRun(t, 'do-followup')}
+            onOpenSession={(t) => setPanelTaskId(t.id)}
+          />
+        )}
         {view === 'settings' && <Settings config={config} onSave={saveRepos} />}
       </main>
+
+      {panelTask && (
+        <SessionPanel
+          task={panelTask}
+          run={getRun(panelTask.id)}
+          onReply={(text) => replyRun(panelTask.id, text, runCallbacks(getRun(panelTask.id)?.command ?? 'do-review'))}
+          onKill={() => killRun(panelTask.id)}
+          onClose={() => setPanelTaskId(null)}
+        />
+      )}
     </div>
   )
 }

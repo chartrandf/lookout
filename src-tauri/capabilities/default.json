@@ -33,6 +33,7 @@
       ]
     },
     "shell:allow-kill",
-    "shell:allow-stdin-write"
+    "shell:allow-stdin-write",
+    "clipboard-manager:allow-write-text"
   ]
 }

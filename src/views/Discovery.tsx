@@ -3,6 +3,7 @@ import type { ReviewTask } from '../types'
 
 type Props = {
   tasks: ReviewTask[]
+  onReview: (id: string) => void
   onWatch: (id: string) => void
   onIgnore: (id: string) => void
   showIgnored: boolean
@@ -10,7 +11,7 @@ type Props = {
   onUnignore: (id: string) => void
 }
 
-export const Discovery = ({ tasks, onWatch, onIgnore, showIgnored, onToggleIgnored, onUnignore }: Props) => {
+export const Discovery = ({ tasks, onReview, onWatch, onIgnore, showIgnored, onToggleIgnored, onUnignore }: Props) => {
   const discovered = tasks
     .filter((t) => t.stage === 'discovered' && t.prState === 'open')
     .sort((a, b) => Number(b.reviewRequested) - Number(a.reviewRequested))
@@ -54,9 +55,9 @@ export const Discovery = ({ tasks, onWatch, onIgnore, showIgnored, onToggleIgnor
             <div className="flex shrink-0 gap-2">
               <button
                 type="button"
-                title="Add to board + start review (Phase 2)"
-                disabled
-                className="rounded-md bg-emerald-600/40 px-3 py-1.5 text-sm text-emerald-100/50"
+                title="Add to board + start /do-review now"
+                onClick={() => onReview(t.id)}
+                className="cursor-pointer rounded-md bg-emerald-600 px-3 py-1.5 text-sm hover:bg-emerald-500"
               >
                 Review
               </button>

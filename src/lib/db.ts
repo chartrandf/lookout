@@ -103,6 +103,32 @@ export const setPrState = async (id: string, prState: string) => {
   ])
 }
 
+export const addSessionId = async (id: string, sessionId: string) => {
+  const d = await getDb()
+  const rows = await d.select<Row[]>('SELECT * FROM tasks WHERE id = $1', [id])
+  if (!rows.length) return
+  const ids: string[] = JSON.parse(rows[0].session_ids)
+  if (ids.includes(sessionId)) return
+  ids.push(sessionId)
+  await d.execute('UPDATE tasks SET session_ids = $1, updated_at = $2 WHERE id = $3', [
+    JSON.stringify(ids),
+    new Date().toISOString(),
+    id,
+  ])
+}
+
+export const setFollowupSummary = async (
+  id: string,
+  summary: { addressed: number; partial: number; pending: number },
+) => {
+  const d = await getDb()
+  await d.execute('UPDATE tasks SET followup_summary = $1, updated_at = $2 WHERE id = $3', [
+    JSON.stringify(summary),
+    new Date().toISOString(),
+    id,
+  ])
+}
+
 export const setLinks = async (id: string, sessionIds: string[], reviewFiles: string[]) => {
   const d = await getDb()
   await d.execute('UPDATE tasks SET session_ids = $1, review_files = $2 WHERE id = $3', [
