@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { SessionPanel } from './components/SessionPanel'
 import { getConfig, setRepos } from './lib/config'
 import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setSnoozed, setStage } from './lib/db'
-import { getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
+import { closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount } from './lib/tray'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
@@ -92,6 +92,7 @@ const App = () => {
         const summary = parseFollowupSummary(result)
         if (summary) await setFollowupSummary(taskId, summary)
         await setStage(taskId, 'followup')
+        closeRun(taskId) // follow-up is informational: no reply expected
       } else {
         await setStage(taskId, 'reviewed')
       }
@@ -194,7 +195,15 @@ const App = () => {
           task={panelTask}
           run={getRun(panelTask.id)}
           me={config.githubUser}
-          onReply={(text) => replyRun(panelTask.id, text, runCallbacks(getRun(panelTask.id)?.command ?? 'do-review'))}
+          onReply={(text) =>
+            replyRun(
+              panelTask.id,
+              text,
+              runCallbacks(getRun(panelTask.id)?.command ?? 'do-review'),
+              panelTask.sessionIds.at(-1),
+            )
+          }
+          onDismissRun={() => killRun(panelTask.id)}
           onDispatch={(command) => dispatchRun(panelTask, command)}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}
           onSnooze={async (snoozed) => {

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { PrLink } from '../components/PrLink'
 import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
 
@@ -41,9 +40,7 @@ const Card = ({ t, run, onReview, onFollowup, onOpen, onSeen }: CardProps) => (
     onClick={onOpen}
     className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 hover:border-deck-600 ${t.snoozed ? 'opacity-50' : ''}`}
   >
-    <PrLink url={t.prUrl} repo={t.repo} prNumber={t.prNumber} className="block text-sm font-medium leading-snug">
-      {t.prTitle}
-    </PrLink>
+    <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
       <span>
         {t.repo.split('/')[1]}#{t.prNumber}

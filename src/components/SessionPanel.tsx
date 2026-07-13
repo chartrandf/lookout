@@ -18,6 +18,7 @@ type Props = {
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
+  onDismissRun: () => void
   onClose: () => void
 }
 
@@ -48,6 +49,7 @@ export const SessionPanel = ({
   onStageChange,
   onSnooze,
   onKill,
+  onDismissRun,
   onClose,
 }: Props) => {
   const [input, setInput] = useState('')
@@ -74,14 +76,6 @@ export const SessionPanel = ({
     }
   }
 
-  const copyResume = async () => {
-    const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
-    if (!sessionId || !task.repoPath) return
-    await writeText(`cd ${task.repoPath} && claude --resume ${sessionId}`)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
   const send = () => {
     if (!input.trim()) return
     onReply(input.trim())
@@ -103,6 +97,16 @@ export const SessionPanel = ({
   }, [onClose])
 
   const running = run?.status === 'running'
+  const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
+  const canReply = !!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId
+  const latestReport = task.reviewFiles.at(-1)
+
+  const copySessionId = async () => {
+    if (!sessionId || !task.repoPath) return
+    await writeText(`cd ${task.repoPath} && claude --resume ${sessionId}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   return (
     <>
@@ -126,6 +130,16 @@ export const SessionPanel = ({
             <p className="mt-0.5 text-xs text-deck-500">
               {task.repo}#{task.prNumber} · <span className="font-mono">{task.branch}</span>
             </p>
+            {sessionId && (
+              <button
+                type="button"
+                onClick={copySessionId}
+                title="Copy `claude --resume` command to retake this session in a terminal"
+                className="mt-0.5 cursor-pointer font-mono text-[10px] text-deck-500 hover:text-grass-300"
+              >
+                {copied ? 'resume cmd copied!' : `session ${sessionId} ⧉`}
+              </button>
+            )}
           </div>
           <select
             value={task.stage}
@@ -164,6 +178,16 @@ export const SessionPanel = ({
           >
             🔁 do-followup
           </button>
+          {latestReport && (
+            <button
+              type="button"
+              onClick={() => openReport(latestReport)}
+              className="cursor-pointer rounded-md border border-deck-600 px-3 py-1.5 text-sm text-deck-300 hover:bg-deck-700"
+              title="Open the latest review report"
+            >
+              📄 report
+            </button>
+          )}
           {running && <span className="animate-pulse self-center text-xs text-amber-300">running…</span>}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>
@@ -173,14 +197,26 @@ export const SessionPanel = ({
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {run && run.lines.length > 0 && (
             <div className="mb-4 rounded-lg border border-deck-700 bg-deck-800/50">
-              <button
-                type="button"
-                onClick={() => setShowRun((s) => !s)}
-                className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400"
-              >
-                claude session output
-                <span>{showRun ? '▾' : '▸'}</span>
-              </button>
+              <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
+                <button
+                  type="button"
+                  onClick={() => setShowRun((s) => !s)}
+                  className="flex flex-1 cursor-pointer items-center justify-between"
+                >
+                  claude session output
+                  <span>{showRun ? '▾' : '▸'}</span>
+                </button>
+                {!running && (
+                  <button
+                    type="button"
+                    onClick={onDismissRun}
+                    title="Dismiss this session output"
+                    className="cursor-pointer normal-case text-deck-500 hover:text-deck-200"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               {showRun && (
                 <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
                   {run.lines.map((l, i) => (
@@ -251,24 +287,20 @@ export const SessionPanel = ({
         </div>
 
         <div className="border-t border-deck-800 p-3">
-          {run && (
+          {run && run.status !== 'closed' && (
             <div className="mb-2 flex gap-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && send()}
-                disabled={running || !run.sessionId}
-                placeholder={
-                  run.status === 'awaiting-input'
-                    ? 'e.g. "1,3" to push comments, "all", or free text…'
-                    : 'waiting for session…'
-                }
+                disabled={!canReply}
+                placeholder={canReply ? 'e.g. "1,3" to push comments, "all", or free text…' : 'session running…'}
                 className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
               />
               <button
                 type="button"
                 onClick={send}
-                disabled={running || !run.sessionId}
+                disabled={!canReply}
                 className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
               >
                 Send
@@ -294,7 +326,7 @@ export const SessionPanel = ({
               {(run?.sessionId || task.sessionIds.length > 0) && (
                 <button
                   type="button"
-                  onClick={copyResume}
+                  onClick={copySessionId}
                   className="cursor-pointer rounded bg-deck-800 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
                 >
                   {copied ? 'copied!' : 'copy resume cmd'}
@@ -333,6 +365,24 @@ export const SessionPanel = ({
               </button>
             </div>
             <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 text-xs text-deck-200">{report.content}</pre>
+            {canReply && (
+              <div className="flex gap-2 border-t border-deck-800 p-3">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && send()}
+                  placeholder='send comments from here — e.g. "1,3" or "all"'
+                  className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
+                />
+                <button
+                  type="button"
+                  onClick={send}
+                  className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500"
+                >
+                  Send
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

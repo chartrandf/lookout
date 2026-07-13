@@ -78,11 +78,23 @@ export const startRun = async (
   await dispatch(run, `/${command} ${branch}`, callbacks)
 }
 
-export const replyRun = async (taskId: string, text: string, callbacks: Callbacks = {}) => {
+export const replyRun = async (taskId: string, text: string, callbacks: Callbacks = {}, fallbackSessionId?: string) => {
   const run = runs.get(taskId)
-  if (!run?.sessionId || run.status === 'running') return
+  if (!run || run.status === 'running') return
+  const sessionId = run.sessionId ?? fallbackSessionId
+  if (!sessionId) return
+  run.sessionId = sessionId
   run.lines.push({ kind: 'user', text })
-  await dispatch(run, text, callbacks, run.sessionId)
+  await dispatch(run, text, callbacks, sessionId)
+}
+
+// Mark a finished run as closed (no further input expected)
+export const closeRun = (taskId: string) => {
+  const run = runs.get(taskId)
+  if (run && run.status !== 'running') {
+    run.status = 'closed'
+    notify()
+  }
 }
 
 export const killRun = async (taskId: string) => {

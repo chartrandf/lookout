@@ -51,7 +51,10 @@ export const spawnClaude = async (
   ]
   const cmd = Command.create('claude', args, { cwd })
   cmd.stdout.on('data', (line: string) => parseLine(line, onEvent))
-  cmd.stderr.on('data', (line: string) => onEvent({ type: 'stderr', text: line }))
+  cmd.stderr.on('data', (line: string) => {
+    if (line.includes('no stdin data received')) return // harmless CLI notice, not an error
+    onEvent({ type: 'stderr', text: line })
+  })
   cmd.on('close', (payload: { code: number | null }) => onEvent({ type: 'exit', code: payload.code }))
   cmd.on('error', (err: string) => {
     onEvent({ type: 'stderr', text: err })
