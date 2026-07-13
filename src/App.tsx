@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { SessionPanel } from './components/SessionPanel'
 import { getConfig, setRepos } from './lib/config'
-import { addSessionId, allTasks, setFollowupSummary, setStage } from './lib/db'
+import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setStage } from './lib/db'
 import { getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
+import { History } from './views/History'
 import { Settings } from './views/Settings'
 
 const POLL_MS = 10 * 60 * 1000
 
-type View = 'discovery' | 'board' | 'settings'
+type View = 'discovery' | 'board' | 'history' | 'settings'
 
 const parseFollowupSummary = (text: string) => {
   const m = text.match(/(\d+)\s*addressed\D*?(\d+)\s*partial\D*?(\d+)\s*pending/i)
@@ -112,6 +113,7 @@ const App = () => {
         <h1 className="mr-3 text-sm font-bold tracking-tight">Review Deck</h1>
         {tab('discovery', 'Discovery', discoveredCount)}
         {tab('board', 'Board', runningCount)}
+        {tab('history', 'History')}
         {tab('settings', 'Settings')}
         <div className="ml-auto flex items-center gap-3 text-xs text-zinc-500">
           {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
@@ -150,8 +152,13 @@ const App = () => {
             onReview={(t) => dispatchRun(t, 'do-review')}
             onFollowup={(t) => dispatchRun(t, 'do-followup')}
             onOpenSession={(t) => setPanelTaskId(t.id)}
+            onSeen={async (t) => {
+              await clearNewActivity(t.id)
+              await reload()
+            }}
           />
         )}
+        {view === 'history' && <History tasks={tasks} />}
         {view === 'settings' && <Settings config={config} onSave={saveRepos} />}
       </main>
 

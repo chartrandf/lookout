@@ -23,6 +23,9 @@ export type ReviewTask = {
   sessionIds: string[]
   reviewFiles: string[]
   followupSummary: FollowupSummary | null
+  activityCount: number | null
+  ciState: 'pass' | 'fail' | 'pending' | null
+  hasNewActivity: boolean
   doneAt: string | null
   updatedAt: string
 }

@@ -23,6 +23,9 @@ type Row = {
   session_ids: string
   review_files: string
   followup_summary: string | null
+  activity_count: number | null
+  ci_state: string | null
+  new_activity: number
   done_at: string | null
   updated_at: string
 }
@@ -42,6 +45,9 @@ const toTask = (r: Row): ReviewTask => ({
   sessionIds: JSON.parse(r.session_ids),
   reviewFiles: JSON.parse(r.review_files),
   followupSummary: r.followup_summary ? JSON.parse(r.followup_summary) : null,
+  activityCount: r.activity_count,
+  ciState: r.ci_state as ReviewTask['ciState'],
+  hasNewActivity: r.new_activity === 1,
   doneAt: r.done_at,
   updatedAt: r.updated_at,
 })
@@ -101,6 +107,19 @@ export const setPrState = async (id: string, prState: string) => {
     new Date().toISOString(),
     id,
   ])
+}
+
+export const setActivity = async (id: string, count: number, ciState: string | null, isNew: boolean) => {
+  const d = await getDb()
+  await d.execute(
+    'UPDATE tasks SET activity_count = $1, ci_state = $2, new_activity = MAX(new_activity, $3) WHERE id = $4',
+    [count, ciState, isNew ? 1 : 0, id],
+  )
+}
+
+export const clearNewActivity = async (id: string) => {
+  const d = await getDb()
+  await d.execute('UPDATE tasks SET new_activity = 0 WHERE id = $1', [id])
 }
 
 export const addSessionId = async (id: string, sessionId: string) => {

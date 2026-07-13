@@ -1,9 +1,13 @@
 import type { ReviewTask } from '../types'
 import { getConfig, setGithubUser } from './config'
-import { allTasks, setLinks, setPrState, setStage, upsertPr } from './db'
-import { fetchLogin, fetchPrState, listOpenPrs } from './gh'
+import { allTasks, setActivity, setLinks, setPrState, setStage, upsertPr } from './db'
+import { fetchLogin, fetchPrActivity, fetchPrState, listOpenPrs } from './gh'
+import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { scanRepoSessions } from './sessions'
+
+// Stages whose PRs we actively watch for new comments / CI
+const ACTIVE_STAGES = new Set(['watching', 'inbox', 'reviewing', 'reviewed', 'followup'])
 
 // One full sync pass: poll gh, upsert PRs, link sessions/review files, advance stages, auto-clear merged.
 export const syncAll = async (): Promise<ReviewTask[]> => {
@@ -14,6 +18,8 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     await setGithubUser(me)
   }
 
+  const known = new Map((await allTasks()).map((t) => [t.id, t]))
+  const firstSync = known.size === 0 // fresh DB: don't blast a notification per existing PR
   const openIds = new Set<string>()
   const polledRepos = new Set<string>()
   for (const { repo, path } of config.repos) {
@@ -49,6 +55,13 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []
       const reviewFiles = reviewsByBranch.get(pr.headRefName) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
+      if (!known.has(id) && !firstSync) {
+        const requested = pr.reviewRequests.some((r) => r.login === me)
+        await notify(
+          requested ? 'Review requested' : 'New PR',
+          `${repo}#${pr.number} — ${pr.title} (${pr.author.login})`,
+        )
+      }
     }
   }
 
@@ -70,6 +83,21 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     if (active && t.reviewFiles.length > 0) await setStage(t.id, 'reviewed')
     else if ((t.stage === 'watching' || t.stage === 'inbox') && t.sessionIds.length > 0)
       await setStage(t.id, 'reviewing')
+
+    // watch boarded PRs for new comments / CI failures
+    if (ACTIVE_STAGES.has(t.stage) && polledRepos.has(t.repo) && openIds.has(t.id)) {
+      try {
+        const { count, ciState } = await fetchPrActivity(t.repo, t.prNumber)
+        const baseline = t.activityCount === null // first fetch: set silently
+        const isNew = !baseline && count > (t.activityCount ?? 0)
+        await setActivity(t.id, count, ciState, isNew)
+        if (isNew) await notify('New PR activity', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
+        if (ciState === 'fail' && t.ciState !== 'fail' && !baseline)
+          await notify('CI failed', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
+      } catch (e) {
+        console.error(`activity poll failed for ${t.id}:`, e)
+      }
+    }
   }
 
   return allTasks()

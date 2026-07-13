@@ -37,3 +37,22 @@ export const fetchPrState = async (repo: string, prNumber: number): Promise<'ope
   const out = JSON.parse(await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'state']))
   return out.state.toLowerCase() as 'open' | 'merged' | 'closed'
 }
+
+export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
+
+// Activity = review comments + reviews + issue comments; CI from status check rollup
+export const fetchPrActivity = async (repo: string, prNumber: number): Promise<PrActivity> => {
+  const out = JSON.parse(
+    await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,statusCheckRollup']),
+  )
+  const checks: { conclusion?: string; status?: string; state?: string }[] = out.statusCheckRollup ?? []
+  let ciState: PrActivity['ciState'] = null
+  if (checks.length) {
+    const states = checks.map((c) => (c.conclusion || c.state || c.status || '').toUpperCase())
+    if (states.some((s) => s === 'FAILURE' || s === 'ERROR')) ciState = 'fail'
+    else if (states.some((s) => s === '' || s === 'PENDING' || s === 'IN_PROGRESS' || s === 'QUEUED'))
+      ciState = 'pending'
+    else ciState = 'pass'
+  }
+  return { count: (out.comments?.length ?? 0) + (out.reviews?.length ?? 0), ciState }
+}

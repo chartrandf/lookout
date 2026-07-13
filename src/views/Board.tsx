@@ -8,6 +8,7 @@ type Props = {
   onReview: (t: ReviewTask) => void
   onFollowup: (t: ReviewTask) => void
   onOpenSession: (t: ReviewTask) => void
+  onSeen: (t: ReviewTask) => void
 }
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
@@ -27,12 +28,13 @@ type CardProps = {
   onReview: () => void
   onFollowup: () => void
   onOpenSession: () => void
+  onSeen: () => void
 }
 
 const actionClass =
   'cursor-pointer rounded bg-zinc-700 px-1.5 py-0.5 text-xs text-zinc-300 hover:bg-zinc-600 disabled:cursor-default disabled:opacity-40'
 
-const Card = ({ t, run, onReview, onFollowup, onOpenSession }: CardProps) => (
+const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps) => (
   <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3">
     <PrLink url={t.prUrl} className="block text-sm font-medium leading-snug">
       {t.prTitle}
@@ -70,6 +72,18 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession }: CardProps) => (
           🚨{t.followupSummary.pending} ⚠️{t.followupSummary.partial} ✅{t.followupSummary.addressed}
         </span>
       )}
+      {t.hasNewActivity && (
+        <button
+          type="button"
+          onClick={onSeen}
+          title="New comments/reviews since last look — click to dismiss"
+          className="cursor-pointer rounded bg-amber-500/20 px-1 py-0.5 text-amber-300 hover:bg-amber-500/40"
+        >
+          💬 new
+        </button>
+      )}
+      {t.ciState === 'fail' && <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>}
+      {t.ciState === 'pending' && <span className="rounded bg-zinc-700 px-1 py-0.5 text-zinc-400">CI …</span>}
     </div>
     {t.stage !== 'done' && (
       <div className="mt-2 flex gap-1.5">
@@ -89,7 +103,7 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession }: CardProps) => (
   </div>
 )
 
-export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession }: Props) => {
+export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen }: Props) => {
   const now = Date.now()
   const visible = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
@@ -113,6 +127,7 @@ export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession }: Prop
                 onReview={() => onReview(t)}
                 onFollowup={() => onFollowup(t)}
                 onOpenSession={() => onOpenSession(t)}
+                onSeen={() => onSeen(t)}
               />
             ))}
           </div>
