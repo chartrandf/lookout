@@ -4,6 +4,7 @@ import { getConfig, setRepos } from './lib/config'
 import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setStage } from './lib/db'
 import { getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
+import { initTray, setTrayCount } from './lib/tray'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
@@ -48,6 +49,7 @@ const App = () => {
   }, [])
 
   useEffect(() => {
+    initTray()
     getConfig().then(setConfig)
     reload()
     refresh()
@@ -95,6 +97,14 @@ const App = () => {
 
   const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
   const runningCount = runs.filter((r) => r.status === 'running').length
+  const attentionCount =
+    discoveredCount +
+    runs.filter((r) => r.status === 'awaiting-input').length +
+    tasks.filter((t) => t.hasNewActivity).length
+
+  useEffect(() => {
+    setTrayCount(attentionCount)
+  }, [attentionCount])
 
   const tab = (v: View, label: string, badge?: number) => (
     <button

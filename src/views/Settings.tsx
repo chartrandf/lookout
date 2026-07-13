@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
+import { useEffect, useState } from 'react'
 import type { Config, WatchedRepo } from '../types'
 
 type Props = {
@@ -9,6 +10,23 @@ type Props = {
 export const Settings = ({ config, onSave }: Props) => {
   const [repo, setRepo] = useState('')
   const [path, setPath] = useState('')
+  const [autostart, setAutostart] = useState(false)
+
+  useEffect(() => {
+    isEnabled()
+      .then(setAutostart)
+      .catch(() => {})
+  }, [])
+
+  const toggleAutostart = async () => {
+    try {
+      if (autostart) await disable()
+      else await enable()
+      setAutostart(await isEnabled())
+    } catch {
+      // autostart unavailable in dev builds
+    }
+  }
 
   const add = () => {
     if (!repo.includes('/') || !path.startsWith('/')) return
@@ -26,6 +44,10 @@ export const Settings = ({ config, onSave }: Props) => {
           <span className="font-mono text-zinc-200">{config.githubUser || '(detected on first sync)'}</span> — your own
           PRs are never listed.
         </p>
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+          <input type="checkbox" checked={autostart} onChange={toggleAutostart} className="cursor-pointer" />
+          Launch at login
+        </label>
       </div>
 
       <div>
