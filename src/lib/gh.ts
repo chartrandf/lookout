@@ -1,10 +1,14 @@
 import { Command } from '@tauri-apps/plugin-shell'
 
-const gh = async (args: string[]): Promise<string> => {
-  const out = await Command.create('gh', args).execute()
+const gh = async (args: string[], cwd?: string): Promise<string> => {
+  const out = await Command.create('gh', args, cwd ? { cwd } : undefined).execute()
   if (out.code !== 0) throw new Error(`gh ${args.join(' ')} failed: ${out.stderr}`)
   return out.stdout
 }
+
+// owner/repo derived from the clone's git origin remote
+export const repoFromPath = async (path: string): Promise<string> =>
+  (await gh(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], path)).trim()
 
 export const fetchLogin = async (): Promise<string> => (await gh(['api', 'user', '--jq', '.login'])).trim()
 
