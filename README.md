@@ -15,8 +15,11 @@ Requirements: Rust toolchain, `gh` (authenticated), `claude` CLI.
 
 ## Usage
 
-1. **Settings** — add watched repos (`owner/repo` + local clone path). Your GitHub login is auto-detected; your own PRs are never listed.
-2. **Discovery** — new open PRs land here. **Watch** (add to board), **Ignore** (hide forever), **Review** (add + dispatch review — Phase 2).
-3. **Board** — Watching / Needs Review / In Review / Reviewed / Follow-up / Done. Merged or closed PRs auto-move to Done and drop off after 24 h.
+1. **Settings** — add local clone paths; `owner/repo` is detected from each clone's git origin. Your GitHub login is auto-detected; your own PRs are never listed.
+2. **Discovery** — new open PRs land here. **Review** (add to board + dispatch `/do-review`), **Watch** (add to board), **Ignore** (hide forever). PRs you already reviewed or commented on skip Discovery.
+3. **Board** — Watching / Needs Review / In Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
+4. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
 
-Plan: `AI_TASKS/2026-07-13-review-overview-app-plan.md`
+## Font
+
+Bundles [Leckerli One](https://fonts.google.com/specimen/Leckerli+One) (SIL Open Font License 1.1).
