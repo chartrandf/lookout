@@ -18,6 +18,7 @@ export type GhPr = {
   url: string
   headRefName: string
   author: { login: string }
+  createdAt: string
   reviewRequests: { login?: string }[]
   latestReviews: { author: { login: string }; state: string }[]
 }
@@ -34,7 +35,7 @@ export const listOpenPrs = async (repo: string): Promise<GhPr[]> =>
       '--limit',
       '100',
       '--json',
-      'number,title,url,headRefName,author,reviewRequests,latestReviews',
+      'number,title,url,headRefName,author,createdAt,reviewRequests,latestReviews',
     ]),
   )
 

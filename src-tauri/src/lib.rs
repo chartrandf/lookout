@@ -29,6 +29,12 @@ pub fn run() {
                             sql: include_str!("../migrations/002_activity.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 3,
+                            description: "pr created at",
+                            sql: include_str!("../migrations/003_created_at.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

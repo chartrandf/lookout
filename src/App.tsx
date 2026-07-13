@@ -21,7 +21,7 @@ const parseFollowupSummary = (text: string) => {
 }
 
 const App = () => {
-  const [view, setView] = useState<View>('discovery')
+  const [view, setView] = useState<View>('board')
   const [config, setConfig] = useState<Config>({ githubUser: '', repos: [] })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [syncing, setSyncing] = useState(false)
@@ -121,8 +121,8 @@ const App = () => {
     <div className="min-h-screen bg-deck-900 text-deck-100">
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-deck-800 bg-deck-900/95 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
-        {tab('discovery', 'Discovery', discoveredCount)}
         {tab('board', 'Board', runningCount)}
+        {tab('discovery', 'Discovery', discoveredCount)}
         {tab('history', 'History')}
         {tab('settings', 'Settings')}
         <div className="ml-auto flex items-center gap-3 text-xs text-deck-500">

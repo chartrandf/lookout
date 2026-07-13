@@ -50,6 +50,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         prTitle: pr.title,
         prUrl: pr.url,
         prAuthor: pr.author.login,
+        prCreatedAt: pr.createdAt,
         reviewRequested: pr.reviewRequests.some((r) => r.login === me),
       })
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []

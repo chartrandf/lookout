@@ -18,6 +18,7 @@ export type ReviewTask = {
   prUrl: string
   prState: PrState
   prAuthor: string
+  prCreatedAt: string | null
   stage: Stage
   reviewRequested: boolean
   sessionIds: string[]
