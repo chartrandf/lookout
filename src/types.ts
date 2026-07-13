@@ -1,0 +1,38 @@
+export type Stage = 'discovered' | 'watching' | 'ignored' | 'inbox' | 'reviewing' | 'reviewed' | 'followup' | 'done'
+
+export type PrState = 'open' | 'merged' | 'closed'
+
+export type FollowupSummary = {
+  addressed: number
+  partial: number
+  pending: number
+}
+
+export type ReviewTask = {
+  id: string // owner/repo#number
+  repo: string
+  repoPath: string | null
+  branch: string
+  prNumber: number
+  prTitle: string
+  prUrl: string
+  prState: PrState
+  prAuthor: string
+  stage: Stage
+  reviewRequested: boolean
+  sessionIds: string[]
+  reviewFiles: string[]
+  followupSummary: FollowupSummary | null
+  doneAt: string | null
+  updatedAt: string
+}
+
+export type WatchedRepo = {
+  repo: string // owner/repo
+  path: string // local clone path
+}
+
+export type Config = {
+  githubUser: string
+  repos: WatchedRepo[]
+}
