@@ -8,5 +8,13 @@ export const openPrWindow = async (url: string, repo: string, prNumber: number) 
     await existing.setFocus()
     return
   }
-  new WebviewWindow(label, { url, title: `${repo}#${prNumber}`, width: 1280, height: 900 })
+  new WebviewWindow(label, {
+    url,
+    title: `${repo}#${prNumber}`,
+    width: 1280,
+    height: 900,
+    // macOS glass titlebar looks broken over remote pages; overlay = traffic lights only
+    titleBarStyle: 'overlay',
+    hiddenTitle: true,
+  })
 }
