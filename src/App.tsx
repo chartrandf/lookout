@@ -177,6 +177,7 @@ const App = () => {
           <Board
             tasks={tasks}
             runs={runs}
+            onMoveStage={(t, stage) => moveStage(t.id, stage)}
             onOpenSession={(t) => setPanelTaskId(t.id)}
             onSeen={async (t) => {
               await clearNewActivity(t.id)

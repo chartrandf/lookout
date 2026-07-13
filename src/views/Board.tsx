@@ -7,6 +7,7 @@ type Props = {
   runs: Run[]
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
+  onMoveStage: (t: ReviewTask, stage: Stage) => void
 }
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
@@ -18,6 +19,9 @@ const COLUMNS: { stage: Stage[]; title: string }[] = [
   { stage: ['done'], title: 'Done' },
 ]
 
+// Manual drags may go any direction; only event-driven sync is forward-only (never demotes)
+const columnIndex = (stage: Stage) => COLUMNS.findIndex((c) => c.stage.includes(stage))
+
 const DONE_TTL_MS = 24 * 60 * 60 * 1000
 
 type CardProps = {
@@ -25,12 +29,20 @@ type CardProps = {
   run: Run | undefined
   onOpen: () => void
   onSeen: () => void
+  onDragStart: () => void
+  onDragEnd: () => void
 }
 
-const Card = ({ t, run, onOpen, onSeen }: CardProps) => (
+const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
   // biome-ignore lint/a11y/useKeyWithClickEvents: card body is a mouse affordance; actions inside are buttons
   <div
     onClick={onOpen}
+    draggable
+    onDragStart={(e) => {
+      e.dataTransfer.effectAllowed = 'move'
+      onDragStart()
+    }}
+    onDragEnd={onDragEnd}
     className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''}`}
   >
     <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
@@ -85,8 +97,10 @@ const Card = ({ t, run, onOpen, onSeen }: CardProps) => (
   </div>
 )
 
-export const Board = ({ tasks, runs, onOpenSession, onSeen }: Props) => {
+export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
+  const [dragging, setDragging] = useState<ReviewTask | null>(null)
+  const [dropTarget, setDropTarget] = useState<number | null>(null)
   const now = Date.now()
   const active = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
@@ -108,10 +122,33 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen }: Props) => {
         </button>
       )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        {COLUMNS.map((col) => {
+        {COLUMNS.map((col, colIdx) => {
           const items = visible.filter((t) => col.stage.includes(t.stage))
+          const canDrop = dragging !== null && colIdx !== columnIndex(dragging.stage)
           return (
-            <div key={col.title} className="flex flex-col gap-2 rounded-lg bg-grass-600/10 p-2">
+            // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
+            <div
+              key={col.title}
+              onDragOver={(e) => {
+                if (!canDrop) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDropTarget(colIdx)
+              }}
+              onDragLeave={() => setDropTarget((cur) => (cur === colIdx ? null : cur))}
+              onDrop={() => {
+                if (dragging && canDrop) onMoveStage(dragging, col.stage[0])
+                setDragging(null)
+                setDropTarget(null)
+              }}
+              className={`flex flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+                dropTarget === colIdx && canDrop
+                  ? 'bg-grass-600/30 ring-1 ring-grass-500'
+                  : dragging && canDrop
+                    ? 'bg-grass-600/20'
+                    : `bg-grass-600/10 ${dragging ? 'opacity-50' : ''}`
+              }`}
+            >
               <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
                 {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
@@ -122,6 +159,11 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen }: Props) => {
                   run={runByTask.get(t.id)}
                   onOpen={() => onOpenSession(t)}
                   onSeen={() => onSeen(t)}
+                  onDragStart={() => setDragging(t)}
+                  onDragEnd={() => {
+                    setDragging(null)
+                    setDropTarget(null)
+                  }}
                 />
               ))}
             </div>
