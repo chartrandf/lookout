@@ -55,7 +55,13 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []
       const reviewFiles = reviewsByBranch.get(pr.headRefName) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
-      if (!known.has(id) && !firstSync) {
+
+      // already reviewed on GitHub -> skip Discovery, board it in the right column
+      const myReview = pr.latestReviews.find((r) => r.author.login === me)
+      if (myReview && (known.get(id)?.stage ?? 'discovered') === 'discovered')
+        await setStage(id, myReview.state === 'CHANGES_REQUESTED' ? 'followup' : 'reviewed')
+
+      if (!known.has(id) && !firstSync && !myReview) {
         const requested = pr.reviewRequests.some((r) => r.login === me)
         await notify(
           requested ? 'Review requested' : 'New PR',
