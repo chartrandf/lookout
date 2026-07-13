@@ -26,9 +26,9 @@ export const initTray = async () => {
 
   const menu = await Menu.new({
     items: [
-      { id: 'open', text: 'Open Review Deck', action: showMainWindow },
+      { id: 'open', text: 'Open Lookout', action: showMainWindow },
       await PredefinedMenuItem.new({ item: 'Separator' }),
-      await PredefinedMenuItem.new({ item: 'Quit', text: 'Quit Review Deck' }),
+      await PredefinedMenuItem.new({ item: 'Quit', text: 'Quit Lookout' }),
     ],
   })
 
@@ -36,7 +36,7 @@ export const initTray = async () => {
     id: 'main-tray',
     icon: (await defaultWindowIcon()) ?? undefined,
     iconAsTemplate: true,
-    tooltip: 'Review Deck',
+    tooltip: 'Lookout',
     menu,
     showMenuOnLeftClick: true,
   })

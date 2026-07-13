@@ -15,7 +15,7 @@ pub fn run() {
         .plugin(
             tauri_plugin_sql::Builder::new()
                 .add_migrations(
-                    "sqlite:reviewdeck.db",
+                    "sqlite:lookout.db",
                     vec![
                         tauri_plugin_sql::Migration {
                             version: 1,

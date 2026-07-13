@@ -1,4 +1,6 @@
-# Review Deck
+# Lookout
+
+**Your GitHub lookout.**
 
 > ⚠️ **Work in progress.** The review flow is not complete, and this has only been tested against the author's personal Claude Code slash commands — it may not work out of the box for you. Configure the dispatched prompts in **Settings → Claude commands** (defaults use Claude Code's built-in `/review`; placeholders `<branch_name>` and `<pr_id>` are supported).
 

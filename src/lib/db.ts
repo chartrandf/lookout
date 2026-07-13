@@ -4,7 +4,7 @@ import type { ReviewTask, Stage } from '../types'
 let db: Database | null = null
 
 const getDb = async () => {
-  if (!db) db = await Database.load('sqlite:reviewdeck.db')
+  if (!db) db = await Database.load('sqlite:lookout.db')
   return db
 }
 

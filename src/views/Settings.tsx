@@ -190,7 +190,7 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
       <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
         <div>
           <p className="text-sm font-medium text-deck-200">Launch at login</p>
-          <p className="text-xs text-deck-500">Start Review Deck automatically when you log in.</p>
+          <p className="text-xs text-deck-500">Start Lookout automatically when you log in.</p>
         </div>
         <button
           type="button"

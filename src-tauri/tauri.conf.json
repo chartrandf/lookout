@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "reviewer-overview",
+  "productName": "Lookout",
   "version": "0.1.0",
-  "identifier": "com.reviewdeck.app",
+  "identifier": "com.lookout.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Review Deck",
+        "title": "Lookout",
         "width": 1280,
         "height": 800,
         "dragDropEnabled": false

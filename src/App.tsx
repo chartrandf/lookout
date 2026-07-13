@@ -154,7 +154,7 @@ const App = () => {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
-        <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
+        <h1 className="font-script mr-3 text-xl text-white">Lookout</h1>
         {TAB_ORDER.filter((t) => t.view !== 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
         <div className="ml-auto">
           {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
