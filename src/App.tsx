@@ -111,7 +111,8 @@ const App = () => {
   const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
 
   const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
-  const runningCount = runs.filter((r) => r.status === 'running').length
+  // board badge = sessions done and waiting on my feedback (not in-progress runs)
+  const awaitingCount = runs.filter((r) => r.status === 'awaiting-input').length
   const attentionCount =
     discoveredCount +
     runs.filter((r) => r.status === 'awaiting-input').length +
@@ -139,7 +140,7 @@ const App = () => {
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
-        {tab('board', 'Board', '1', runningCount)}
+        {tab('board', 'Board', '1', awaitingCount)}
         {tab('discovery', 'Discovery', '2', discoveredCount)}
         {tab('history', 'History', '3')}
         {tab('settings', 'Settings', '4')}
