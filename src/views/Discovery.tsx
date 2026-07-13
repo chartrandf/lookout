@@ -40,7 +40,13 @@ export const Discovery = ({ tasks, onReview, onWatch, onIgnore, showIgnored, onT
         </button>
       </div>
 
-      {discovered.length === 0 && <p className="text-sm text-deck-500">Nothing new. All caught up 🎉</p>}
+      {discovered.length === 0 && (
+        <div className="flex flex-col items-center gap-3 py-24 text-center">
+          <span className="text-6xl">🎉</span>
+          <p className="font-script text-3xl text-grass-300">All caught up!</p>
+          <p className="text-sm text-deck-400">No new pull requests waiting for you. Go grab a coffee ☕</p>
+        </div>
+      )}
 
       {repos.map((repo) => (
         <section key={repo}>

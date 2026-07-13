@@ -28,6 +28,7 @@ export type ReviewTask = {
   ciState: 'pass' | 'fail' | 'pending' | null
   hasNewActivity: boolean
   snoozed: boolean
+  sortOrder: number | null
   doneAt: string | null
   updatedAt: string
 }

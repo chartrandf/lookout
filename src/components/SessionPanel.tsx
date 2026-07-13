@@ -36,6 +36,47 @@ const STAGES: { value: Stage; label: string }[] = [
   { value: 'ignored', label: 'Ignored' },
 ]
 
+const PlayIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.9l11.02-6.86a1.05 1.05 0 0 0 0-1.8L9.56 4.24A1.05 1.05 0 0 0 8 5.14Z" />
+  </svg>
+)
+
+const RepeatIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m17 2 4 4-4 4" />
+    <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
+    <path d="m7 22-4-4 4-4" />
+    <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+  </svg>
+)
+
+const CheckIcon = () => (
+  <svg
+    width="14"
+    height="14"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m4 12.5 5.5 5.5L20 6.5" />
+  </svg>
+)
+
 const lineClass: Record<string, string> = {
   text: 'text-deck-200 whitespace-pre-wrap',
   tool: 'text-deck-500 font-mono text-xs',
@@ -131,15 +172,17 @@ export const SessionPanel = ({
     setTimeout(() => setCopiedBranch(false), 1500)
   }
 
-  // follow-up all green (nothing pending/partial) -> offer one-click approval
+  // follow-up all green (nothing pending/partial) -> offer one-click approval, unless already approved
   const allGreen = !!task.followupSummary && task.followupSummary.pending === 0 && task.followupSummary.partial === 0
+  const alreadyApproved = feed?.some((e) => e.mine && e.text === 'review: approved') ?? true // hidden until feed loads
+  const canApprove = allGreen && !alreadyApproved
 
   const approve = async () => {
     setApproving(true)
     try {
       await approvePr(task.repo, task.prNumber)
       setApproved(true)
-      buildFeed(task, me).then(setFeed)
+      onStageChange('done') // approved = my part is over; merging is the author's business
     } finally {
       setApproving(false)
     }
@@ -286,7 +329,9 @@ export const SessionPanel = ({
             disabled={running}
             className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
           >
-            ▶ do-review
+            <span className="flex items-center gap-1.5">
+              <PlayIcon /> do-review
+            </span>
           </button>
           <button
             type="button"
@@ -294,17 +339,21 @@ export const SessionPanel = ({
             disabled={running}
             className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
           >
-            🔁 do-followup
+            <span className="flex items-center gap-1.5">
+              <RepeatIcon /> do-followup
+            </span>
           </button>
-          {allGreen && (
+          {(canApprove || approved) && (
             <button
               type="button"
               onClick={approve}
               disabled={approving || approved}
-              title="Follow-up is all green — approve the PR on GitHub"
+              title="Follow-up is all green — approve the PR on GitHub and move it to Done"
               className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
             >
-              {approved ? '✅ approved' : approving ? 'approving…' : '✅ approve'}
+              <span className="flex items-center gap-1.5">
+                <CheckIcon /> {approved ? 'approved' : approving ? 'approving…' : 'approve'}
+              </span>
             </button>
           )}
           {run?.status === 'awaiting-input' && (

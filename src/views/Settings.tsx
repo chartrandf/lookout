@@ -4,14 +4,16 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { useEffect, useState } from 'react'
 import { repoFromPath } from '../lib/gh'
-import type { Config, WatchedRepo } from '../types'
+import type { Config, ReviewTask, WatchedRepo } from '../types'
+import { History } from './History'
 
 type Props = {
   config: Config
+  tasks: ReviewTask[]
   onSave: (repos: WatchedRepo[]) => void
 }
 
-export const Settings = ({ config, onSave }: Props) => {
+export const Settings = ({ config, tasks, onSave }: Props) => {
   const [path, setPath] = useState('')
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
@@ -127,6 +129,10 @@ export const Settings = ({ config, onSave }: Props) => {
         >
           {adding ? 'detecting repo…' : 'Add repo'}
         </button>
+      </div>
+
+      <div className="mt-6 border-t border-deck-800 pt-4">
+        <History tasks={tasks} />
       </div>
     </div>
   )

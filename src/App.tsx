@@ -1,19 +1,25 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { SessionPanel } from './components/SessionPanel'
 import { getConfig, setRepos } from './lib/config'
-import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setSnoozed, setStage } from './lib/db'
+import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setOrders, setSnoozed, setStage } from './lib/db'
 import { closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount } from './lib/tray'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
-import { History } from './views/History'
 import { Settings } from './views/Settings'
 
 const POLL_MS = 10 * 60 * 1000
 
-type View = 'discovery' | 'board' | 'history' | 'settings'
+type View = 'discovery' | 'board' | 'settings'
+
+// Single source of truth for tab order: shortcuts (⌘1..⌘n) derive from the index
+const TAB_ORDER: { view: View; label: string }[] = [
+  { view: 'board', label: 'Board' },
+  { view: 'discovery', label: 'Discovery' },
+  { view: 'settings', label: 'Settings' },
+]
 
 const parseFollowupSummary = (text: string) => {
   const m = text.match(/(\d+)\s*addressed\D*?(\d+)\s*partial\D*?(\d+)\s*pending/i)
@@ -57,14 +63,13 @@ const App = () => {
     return () => clearInterval(interval)
   }, [refresh, reload])
 
-  // ⌘1..⌘4 switch tabs (in tab order)
+  // ⌘1..⌘n switch tabs, indexes follow TAB_ORDER
   useEffect(() => {
-    const VIEWS: View[] = ['board', 'discovery', 'history', 'settings']
     const onKey = (e: KeyboardEvent) => {
       const idx = Number(e.key) - 1
-      if (e.metaKey && !e.shiftKey && !e.altKey && VIEWS[idx]) {
+      if (e.metaKey && !e.shiftKey && !e.altKey && TAB_ORDER[idx]) {
         e.preventDefault()
-        setView(VIEWS[idx])
+        setView(TAB_ORDER[idx].view)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -122,28 +127,31 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
-  const tab = (v: View, label: string, shortcut: string, badge?: number) => (
-    <button
-      type="button"
-      onClick={() => setView(v)}
-      className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
-    >
-      {label}
-      {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
-      <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
-        ⌘{shortcut}
-      </span>
-    </button>
-  )
+  const badges: Partial<Record<View, number>> = { board: awaitingCount, discovery: discoveredCount }
+
+  const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
+    const badge = badges[v]
+    return (
+      <button
+        key={v}
+        type="button"
+        onClick={() => setView(v)}
+        className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
+      >
+        {label}
+        {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
+        <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
+          ⌘{index + 1}
+        </span>
+      </button>
+    )
+  }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Review Deck</h1>
-        {tab('board', 'Board', '1', awaitingCount)}
-        {tab('discovery', 'Discovery', '2', discoveredCount)}
-        {tab('history', 'History', '3')}
-        {tab('settings', 'Settings', '4')}
+        {TAB_ORDER.map(tab)}
         <div className="ml-auto flex items-center gap-3 text-xs text-deck-500">
           {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
           <button
@@ -178,7 +186,11 @@ const App = () => {
           <Board
             tasks={tasks}
             runs={runs}
-            onMoveStage={(t, stage) => moveStage(t.id, stage)}
+            onReorder={async (t, stage, orderedIds) => {
+              if (t.stage !== stage) await setStage(t.id, stage)
+              await setOrders(orderedIds)
+              await reload()
+            }}
             onOpenSession={(t) => setPanelTaskId(t.id)}
             onSeen={async (t) => {
               await clearNewActivity(t.id)
@@ -186,8 +198,7 @@ const App = () => {
             }}
           />
         )}
-        {view === 'history' && <History tasks={tasks} />}
-        {view === 'settings' && <Settings config={config} onSave={saveRepos} />}
+        {view === 'settings' && <Settings config={config} tasks={tasks} onSave={saveRepos} />}
       </main>
 
       {panelTask && (

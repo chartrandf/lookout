@@ -8,7 +8,7 @@ type Props = {
   runs: Run[]
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
-  onMoveStage: (t: ReviewTask, stage: Stage) => void
+  onReorder: (t: ReviewTask, stage: Stage, orderedIds: string[]) => void
 }
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
@@ -20,9 +20,6 @@ const COLUMNS: { stage: Stage[]; title: string }[] = [
   { stage: ['done'], title: 'Done' },
 ]
 
-// Manual drags may go any direction; only event-driven sync is forward-only (never demotes)
-const columnIndex = (stage: Stage) => COLUMNS.findIndex((c) => c.stage.includes(stage))
-
 const DONE_TTL_MS = 24 * 60 * 60 * 1000
 
 type CardProps = {
@@ -32,9 +29,10 @@ type CardProps = {
   onSeen: () => void
   onDragStart: () => void
   onDragEnd: () => void
+  onDropBefore: () => void
 }
 
-const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
+const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd, onDropBefore }: CardProps) => (
   // biome-ignore lint/a11y/useKeyWithClickEvents: card body is a mouse affordance; actions inside are buttons
   <div
     onClick={onOpen}
@@ -46,6 +44,16 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
       onDragStart()
     }}
     onDragEnd={onDragEnd}
+    onDragOver={(e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      e.dataTransfer.dropEffect = 'move'
+    }}
+    onDrop={(e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      onDropBefore()
+    }}
     className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : ''}`}
   >
     <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
@@ -104,7 +112,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
   </div>
 )
 
-export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props) => {
+export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [dragging, setDragging] = useState<ReviewTask | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
@@ -116,6 +124,22 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props
   const visible = active.filter((t) => showSnoozed || !t.snoozed || t.stage === 'done')
   const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
+
+  // drop the dragged card into a column, before `before` (or at the end)
+  const drop = (colItems: ReviewTask[], stage: Stage, before: ReviewTask | null) => {
+    if (!dragging) return
+    const rest = colItems.filter((x) => x.id !== dragging.id)
+    const idx = before ? rest.findIndex((x) => x.id === before.id) : rest.length
+    const at = idx < 0 ? rest.length : idx
+    const ordered = [...rest.slice(0, at), dragging, ...rest.slice(at)]
+    onReorder(
+      dragging,
+      stage,
+      ordered.map((x) => x.id),
+    )
+    setDragging(null)
+    setDropTarget(null)
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -130,8 +154,10 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props
       )}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {COLUMNS.map((col, colIdx) => {
-          const items = visible.filter((t) => col.stage.includes(t.stage))
-          const canDrop = dragging !== null && colIdx !== columnIndex(dragging.stage)
+          const items = visible
+            .filter((t) => col.stage.includes(t.stage))
+            .sort((a, b) => (a.sortOrder ?? 1e9) - (b.sortOrder ?? 1e9) || b.updatedAt.localeCompare(a.updatedAt))
+          const canDrop = dragging !== null // any column: other = move stage, same = reorder
           return (
             // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
             <div
@@ -145,16 +171,14 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props
               onDragLeave={() => setDropTarget((cur) => (cur === colIdx ? null : cur))}
               onDrop={(e) => {
                 e.preventDefault()
-                if (dragging && canDrop) onMoveStage(dragging, col.stage[0])
-                setDragging(null)
-                setDropTarget(null)
+                drop(items, col.stage[0], null)
               }}
               className={`flex flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
                 dropTarget === colIdx && canDrop
                   ? 'bg-grass-600/30 ring-1 ring-grass-500'
-                  : dragging && canDrop
+                  : dragging
                     ? 'bg-grass-600/20'
-                    : `bg-grass-600/10 ${dragging ? 'opacity-50' : ''}`
+                    : 'bg-grass-600/10'
               }`}
             >
               <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
@@ -172,6 +196,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props
                     setDragging(null)
                     setDropTarget(null)
                   }}
+                  onDropBefore={() => drop(items, col.stage[0], t)}
                 />
               ))}
             </div>
