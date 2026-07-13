@@ -12,9 +12,9 @@ type Props = {
 }
 
 const lineClass: Record<string, string> = {
-  text: 'text-zinc-200 whitespace-pre-wrap',
-  tool: 'text-zinc-500 font-mono text-xs',
-  user: 'text-sky-300 font-medium',
+  text: 'text-deck-200 whitespace-pre-wrap',
+  tool: 'text-deck-500 font-mono text-xs',
+  user: 'text-grass-300 font-medium',
   error: 'text-red-400 font-mono text-xs',
 }
 
@@ -43,14 +43,14 @@ export const SessionPanel = ({ task, run, onReply, onKill, onClose }: Props) => 
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 z-20 flex w-[560px] flex-col border-l border-zinc-700 bg-zinc-900 shadow-2xl">
-      <div className="flex items-center gap-2 border-b border-zinc-800 px-4 py-2.5">
+    <div className="fixed inset-y-0 right-0 z-20 flex w-[560px] flex-col border-l border-deck-700 bg-deck-900 shadow-2xl">
+      <div className="flex items-center gap-2 border-b border-deck-800 px-4 py-2.5">
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{task.prTitle}</p>
-          <p className="text-xs text-zinc-500">
+          <p className="text-xs text-deck-500">
             {task.repo}#{task.prNumber} · {run ? run.command : 'no active run'}
             {run?.status === 'running' && <span className="ml-2 text-amber-400">running…</span>}
-            {run?.status === 'awaiting-input' && <span className="ml-2 text-emerald-400">awaiting input</span>}
+            {run?.status === 'awaiting-input' && <span className="ml-2 text-grass-400">awaiting input</span>}
             {run?.status === 'error' && <span className="ml-2 text-red-400">error</span>}
           </p>
         </div>
@@ -58,7 +58,7 @@ export const SessionPanel = ({ task, run, onReply, onKill, onClose }: Props) => 
           <button
             type="button"
             onClick={copyResume}
-            className="cursor-pointer rounded bg-zinc-800 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-700"
+            className="cursor-pointer rounded bg-deck-800 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
           >
             {copied ? 'copied!' : 'copy resume cmd'}
           </button>
@@ -75,14 +75,14 @@ export const SessionPanel = ({ task, run, onReply, onKill, onClose }: Props) => 
         <button
           type="button"
           onClick={onClose}
-          className="cursor-pointer rounded px-2 py-1 text-zinc-400 hover:text-zinc-100"
+          className="cursor-pointer rounded px-2 py-1 text-deck-400 hover:text-deck-100"
         >
           ✕
         </button>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-        {!run && <p className="text-sm text-zinc-500">No run in this app session. Dispatch a review or follow-up.</p>}
+        {!run && <p className="text-sm text-deck-500">No run in this app session. Dispatch a review or follow-up.</p>}
         <div className="flex flex-col gap-2 text-sm">
           {run?.lines.map((l, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
@@ -91,10 +91,10 @@ export const SessionPanel = ({ task, run, onReply, onKill, onClose }: Props) => 
             </p>
           ))}
         </div>
-        {run?.status === 'running' && <p className="mt-2 animate-pulse text-xs text-zinc-500">▍</p>}
+        {run?.status === 'running' && <p className="mt-2 animate-pulse text-xs text-deck-500">▍</p>}
       </div>
 
-      <div className="border-t border-zinc-800 p-3">
+      <div className="border-t border-deck-800 p-3">
         <div className="flex gap-2">
           <input
             value={input}
@@ -106,13 +106,13 @@ export const SessionPanel = ({ task, run, onReply, onKill, onClose }: Props) => 
                 ? 'e.g. "1,3" to push comments, "all", or free text…'
                 : 'waiting for session…'
             }
-            className="flex-1 rounded border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-sky-500 disabled:opacity-50"
+            className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
           />
           <button
             type="button"
             onClick={send}
             disabled={!run || run.status === 'running' || !run.sessionId}
-            className="cursor-pointer rounded-md bg-sky-600 px-3 py-1.5 text-sm hover:bg-sky-500 disabled:opacity-50"
+            className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
           >
             Send
           </button>

@@ -24,15 +24,15 @@ export const History = ({ tasks }: Props) => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="search title, repo, branch, author…"
-          className="w-72 rounded border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-sky-500"
+          className="w-72 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
         />
       </div>
 
-      {items.length === 0 && <p className="text-sm text-zinc-500">No past reviews yet.</p>}
+      {items.length === 0 && <p className="text-sm text-deck-500">No past reviews yet.</p>}
 
       <ul className="flex flex-col gap-2">
         {items.map((t) => (
-          <li key={t.id} className="rounded-lg border border-zinc-800 bg-zinc-800/40 p-3">
+          <li key={t.id} className="rounded-lg border border-deck-800 bg-deck-800/40 p-3">
             <div className="flex items-center gap-2">
               <PrLink url={t.prUrl} className="min-w-0 flex-1 truncate text-sm font-medium">
                 {t.prTitle}
@@ -43,13 +43,13 @@ export const History = ({ tasks }: Props) => {
                     ? 'bg-purple-500/20 text-purple-300'
                     : t.prState === 'closed'
                       ? 'bg-red-500/20 text-red-300'
-                      : 'bg-emerald-500/20 text-emerald-300'
+                      : 'bg-grass-500/20 text-grass-300'
                 }`}
               >
                 {t.prState}
               </span>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-deck-500">
               <span>
                 {t.repo}#{t.prNumber}
               </span>
@@ -65,7 +65,7 @@ export const History = ({ tasks }: Props) => {
                     type="button"
                     onClick={() => openInVsCode(f)}
                     title={f}
-                    className="cursor-pointer self-start truncate font-mono text-xs text-sky-400 hover:underline"
+                    className="cursor-pointer self-start truncate font-mono text-xs text-grass-400 hover:underline"
                   >
                     {f.split('/').at(-1)} ↗
                   </button>

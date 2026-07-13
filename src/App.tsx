@@ -110,7 +110,7 @@ const App = () => {
     <button
       type="button"
       onClick={() => setView(v)}
-      className={`cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+      className={`cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
     >
       {label}
       {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
@@ -118,20 +118,20 @@ const App = () => {
   )
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100">
-      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/95 px-4 py-2.5">
-        <h1 className="mr-3 text-sm font-bold tracking-tight">Review Deck</h1>
+    <div className="min-h-screen bg-deck-900 text-deck-100">
+      <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-deck-800 bg-deck-900/95 px-4 py-2.5">
+        <h1 className="font-script mr-3 text-xl font-bold text-grass-400">Review Deck</h1>
         {tab('discovery', 'Discovery', discoveredCount)}
         {tab('board', 'Board', runningCount)}
         {tab('history', 'History')}
         {tab('settings', 'Settings')}
-        <div className="ml-auto flex items-center gap-3 text-xs text-zinc-500">
+        <div className="ml-auto flex items-center gap-3 text-xs text-deck-500">
           {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
           <button
             type="button"
             onClick={refresh}
             disabled={syncing}
-            className="cursor-pointer rounded-md bg-zinc-800 px-2.5 py-1 text-zinc-300 hover:bg-zinc-700 disabled:opacity-50"
+            className="cursor-pointer rounded-md bg-deck-800 px-2.5 py-1 text-deck-300 hover:bg-deck-700 disabled:opacity-50"
           >
             {syncing ? 'syncing…' : 'sync now'}
           </button>

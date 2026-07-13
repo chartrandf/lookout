@@ -56,27 +56,27 @@ export const Settings = ({ config, onSave }: Props) => {
     <div className="flex max-w-2xl flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold">Settings</h2>
-        <p className="text-sm text-zinc-400">
+        <p className="text-sm text-deck-400">
           GitHub user:{' '}
-          <span className="font-mono text-zinc-200">{config.githubUser || '(detected on first sync)'}</span> — your own
+          <span className="font-mono text-deck-200">{config.githubUser || '(detected on first sync)'}</span> — your own
           PRs are never listed.
         </p>
-        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-zinc-300">
+        <label className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-deck-300">
           <input type="checkbox" checked={autostart} onChange={toggleAutostart} className="cursor-pointer" />
           Launch at login
         </label>
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-zinc-300">Watched repositories</h3>
+        <h3 className="mb-2 text-sm font-semibold text-deck-300">Watched repositories</h3>
         <ul className="flex flex-col gap-1">
           {config.repos.map((r) => (
             <li
               key={r.path}
-              className="flex items-center gap-2 rounded border border-zinc-700 bg-zinc-800/60 p-2 text-sm"
+              className="flex items-center gap-2 rounded border border-deck-700 bg-deck-800/60 p-2 text-sm"
             >
               <span className="font-medium">{r.repo}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-xs text-zinc-500">{r.path}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-deck-500">{r.path}</span>
               <button
                 type="button"
                 onClick={() => onSave(config.repos.filter((x) => x.path !== r.path))}
@@ -86,24 +86,24 @@ export const Settings = ({ config, onSave }: Props) => {
               </button>
             </li>
           ))}
-          {config.repos.length === 0 && <li className="text-sm text-zinc-500">No repos watched yet.</li>}
+          {config.repos.length === 0 && <li className="text-sm text-deck-500">No repos watched yet.</li>}
         </ul>
       </div>
 
-      <div className="flex flex-col gap-2 rounded-lg border border-zinc-700 p-3">
+      <div className="flex flex-col gap-2 rounded-lg border border-deck-700 p-3">
         <input
           value={path}
           onChange={(e) => setPath(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && add()}
           placeholder="local clone path (e.g. /Users/you/Projects/my-repo)"
-          className="rounded border border-zinc-600 bg-zinc-800 px-2 py-1.5 text-sm outline-none focus:border-sky-500"
+          className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
         />
         {addError && <p className="text-xs text-red-400">{addError}</p>}
         <button
           type="button"
           onClick={add}
           disabled={adding || !path.trim()}
-          className="cursor-pointer self-start rounded-md bg-sky-600 px-3 py-1.5 text-sm hover:bg-sky-500 disabled:opacity-50"
+          className="cursor-pointer self-start rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
         >
           {adding ? 'detecting repo…' : 'Add repo'}
         </button>

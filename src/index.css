@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+/* Palette: deep forest green + white + vivid green badges */
+@theme {
+  --color-deck-100: #f4f8f5;
+  --color-deck-200: #e2ece6;
+  --color-deck-300: #c3d6cb;
+  --color-deck-400: #9db8aa;
+  --color-deck-500: #7d9c8b;
+  --color-deck-600: #2a5540;
+  --color-deck-700: #1e402d;
+  --color-deck-800: #132a1e;
+  --color-deck-900: #0b1d14;
+  --color-deck-950: #081711;
+
+  --color-grass-100: #e7f8ee;
+  --color-grass-300: #8fe3b4;
+  --color-grass-400: #4ecf87;
+  --color-grass-500: #2bbd6e;
+  --color-grass-600: #1fa35c;
+  --color-grass-700: #187f48;
+}
+
+.font-script {
+  font-family: "Snell Roundhand", "Savoye LET", "Brush Script MT", cursive;
+}

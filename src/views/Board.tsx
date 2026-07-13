@@ -32,18 +32,18 @@ type CardProps = {
 }
 
 const actionClass =
-  'cursor-pointer rounded bg-zinc-700 px-1.5 py-0.5 text-xs text-zinc-300 hover:bg-zinc-600 disabled:cursor-default disabled:opacity-40'
+  'cursor-pointer rounded bg-deck-700 px-1.5 py-0.5 text-xs text-deck-300 hover:bg-deck-600 disabled:cursor-default disabled:opacity-40'
 
 const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps) => (
-  <div className="rounded-lg border border-zinc-700 bg-zinc-800/60 p-3">
+  <div className="rounded-lg border border-deck-700 bg-deck-800/60 p-3">
     <PrLink url={t.prUrl} className="block text-sm font-medium leading-snug">
       {t.prTitle}
     </PrLink>
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-400">
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
       <span>
         {t.repo.split('/')[1]}#{t.prNumber}
       </span>
-      <span className="rounded bg-zinc-700 px-1 py-0.5 font-mono">{t.branch}</span>
+      <span className="rounded bg-deck-700 px-1 py-0.5 font-mono">{t.branch}</span>
       {t.prState !== 'open' && (
         <span
           className={`rounded px-1 py-0.5 ${t.prState === 'merged' ? 'bg-purple-500/20 text-purple-300' : 'bg-red-500/20 text-red-300'}`}
@@ -55,20 +55,20 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps
         <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
       )}
       {run?.status === 'awaiting-input' && (
-        <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-emerald-300">awaiting input</span>
+        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">awaiting input</span>
       )}
       {t.sessionIds.length > 0 && (
-        <span className="rounded bg-sky-500/20 px-1 py-0.5 text-sky-300" title={t.sessionIds.join('\n')}>
+        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.sessionIds.join('\n')}>
           {t.sessionIds.length} session{t.sessionIds.length > 1 ? 's' : ''}
         </span>
       )}
       {t.reviewFiles.length > 0 && (
-        <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-emerald-300" title={t.reviewFiles.join('\n')}>
+        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.reviewFiles.join('\n')}>
           {t.reviewFiles.length} review{t.reviewFiles.length > 1 ? 's' : ''}
         </span>
       )}
       {t.followupSummary && (
-        <span className="rounded bg-zinc-700 px-1 py-0.5">
+        <span className="rounded bg-deck-700 px-1 py-0.5">
           🚨{t.followupSummary.pending} ⚠️{t.followupSummary.partial} ✅{t.followupSummary.addressed}
         </span>
       )}
@@ -83,7 +83,7 @@ const Card = ({ t, run, onReview, onFollowup, onOpenSession, onSeen }: CardProps
         </button>
       )}
       {t.ciState === 'fail' && <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>}
-      {t.ciState === 'pending' && <span className="rounded bg-zinc-700 px-1 py-0.5 text-zinc-400">CI …</span>}
+      {t.ciState === 'pending' && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">CI …</span>}
     </div>
     {t.stage !== 'done' && (
       <div className="mt-2 flex gap-1.5">
@@ -116,7 +116,7 @@ export const Board = ({ tasks, runs, onReview, onFollowup, onOpenSession, onSeen
         const items = visible.filter((t) => col.stage.includes(t.stage))
         return (
           <div key={col.title} className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-deck-400">
               {col.title} <span className="font-normal">({items.length})</span>
             </h3>
             {items.map((t) => (
