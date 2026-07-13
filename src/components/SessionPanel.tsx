@@ -4,6 +4,7 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
 import { buildFeed, type FeedEvent } from '../lib/feed'
+import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
 import type { Run } from '../lib/runs'
@@ -56,6 +57,9 @@ export const SessionPanel = ({
 }: Props) => {
   const [input, setInput] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copiedBranch, setCopiedBranch] = useState(false)
+  const [approving, setApproving] = useState(false)
+  const [approved, setApproved] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
   const [report, setReport] = useState<{ path: string; content: string } | null>(null)
@@ -121,6 +125,26 @@ export const SessionPanel = ({
     setTimeout(() => setCopied(false), 1500)
   }
 
+  const copyBranch = async () => {
+    await writeText(task.branch)
+    setCopiedBranch(true)
+    setTimeout(() => setCopiedBranch(false), 1500)
+  }
+
+  // follow-up all green (nothing pending/partial) -> offer one-click approval
+  const allGreen = !!task.followupSummary && task.followupSummary.pending === 0 && task.followupSummary.partial === 0
+
+  const approve = async () => {
+    setApproving(true)
+    try {
+      await approvePr(task.repo, task.prNumber)
+      setApproved(true)
+      buildFeed(task, me).then(setFeed)
+    } finally {
+      setApproving(false)
+    }
+  }
+
   // Ghostty deep link; falls back to copying the resume command when Ghostty is missing
   const resumeSession = async (id: string) => {
     if (!task.repoPath) return
@@ -141,58 +165,118 @@ export const SessionPanel = ({
       <div
         className={`fixed inset-y-0 right-0 z-20 flex w-[45vw] min-w-[440px] max-w-[860px] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        <div className="flex items-start gap-2 border-b border-deck-800 px-4 py-3">
-          <div className="min-w-0 flex-1">
+        <div className="border-b border-deck-800 px-4 py-3">
+          <div className="flex items-center gap-2">
             <PrLink
               url={task.prUrl}
               repo={task.repo}
               prNumber={task.prNumber}
-              className="block text-sm font-semibold text-grass-300"
+              className="shrink-0 text-xs text-deck-400 hover:text-grass-300"
             >
-              {task.prTitle}
+              {task.repo}#{task.prNumber} ↗
             </PrLink>
-            <p className="mt-0.5 text-xs text-deck-500">
-              {task.repo}#{task.prNumber} · <span className="font-mono">{task.branch}</span>
-            </p>
-            {sessionId && (
-              <span className="mt-0.5 flex items-center gap-1.5 font-mono text-[10px] text-deck-500">
+            <div className="ml-auto flex items-center gap-1.5">
+              <select
+                value={task.stage}
+                onChange={(e) => onStageChange(e.target.value as Stage)}
+                className="cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-1 text-xs text-deck-200 outline-none"
+              >
+                {STAGES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <div className="relative">
                 <button
                   type="button"
-                  onClick={() => resumeSession(sessionId)}
-                  title="Resume this session in Ghostty (copies the command if Ghostty is missing)"
-                  className="cursor-pointer hover:text-grass-300 hover:underline"
+                  onClick={() => setMoreOpen((s) => !s)}
+                  title="More options"
+                  className="cursor-pointer rounded border border-deck-600 px-2 py-0.5 text-sm text-deck-300 hover:bg-deck-700"
                 >
-                  👻 session {sessionId}
+                  ⋯
                 </button>
-                <button
-                  type="button"
-                  onClick={copySessionId}
-                  title="Copy `claude --resume` command"
-                  className="cursor-pointer hover:text-grass-300"
-                >
-                  {copied ? 'copied!' : '⧉'}
-                </button>
-              </span>
-            )}
+                {moreOpen && (
+                  <div className="absolute right-0 top-full z-40 mt-1 flex w-60 flex-col rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSnooze(!task.snoozed)
+                        setMoreOpen(false)
+                      }}
+                      className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                    >
+                      {task.snoozed ? 'unhide' : '💤 hide until new activity'}
+                    </button>
+                    {sessionId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resumeSession(sessionId)
+                          setMoreOpen(false)
+                        }}
+                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                      >
+                        👻 resume session in ghostty
+                      </button>
+                    )}
+                    {sessionId && (
+                      <button
+                        type="button"
+                        onClick={copySessionId}
+                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                      >
+                        {copied ? 'copied!' : '⧉ copy resume cmd'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        openUrl(task.prUrl)
+                        setMoreOpen(false)
+                      }}
+                      className="cursor-pointer px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                    >
+                      open in browser
+                    </button>
+                    {running && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onKill()
+                          setMoreOpen(false)
+                        }}
+                        className="cursor-pointer px-3 py-1.5 text-left text-xs text-red-300 hover:bg-red-600/20"
+                      >
+                        kill run
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                className="cursor-pointer rounded px-2 py-0.5 text-xl leading-none text-deck-400 hover:text-deck-100"
+              >
+                ✕
+              </button>
+            </div>
           </div>
-          <select
-            value={task.stage}
-            onChange={(e) => onStageChange(e.target.value as Stage)}
-            className="cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-1 text-xs text-deck-200 outline-none"
-          >
-            {STAGES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={close}
-            className="cursor-pointer rounded px-2 py-1 text-deck-400 hover:text-deck-100"
-          >
-            ✕
-          </button>
+          <h2 className="mt-1.5 text-lg font-semibold leading-snug text-white">{task.prTitle}</h2>
+          <div className="mt-2 flex items-center gap-1.5 text-xs">
+            <code className="truncate rounded border border-deck-700 bg-deck-800 px-1.5 py-0.5 font-mono text-deck-300">
+              {task.branch}
+            </code>
+            <button
+              type="button"
+              onClick={copyBranch}
+              title="Copy branch name"
+              className="cursor-pointer text-deck-500 hover:text-grass-300"
+            >
+              {copiedBranch ? 'copied!' : '⧉'}
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-2 border-b border-deck-800 px-4 py-2">
@@ -212,6 +296,17 @@ export const SessionPanel = ({
           >
             🔁 do-followup
           </button>
+          {allGreen && (
+            <button
+              type="button"
+              onClick={approve}
+              disabled={approving || approved}
+              title="Follow-up is all green — approve the PR on GitHub"
+              className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
+            >
+              {approved ? '✅ approved' : approving ? 'approving…' : '✅ approve'}
+            </button>
+          )}
           {running && <span className="animate-pulse self-center text-xs text-amber-300">running…</span>}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>
@@ -316,9 +411,9 @@ export const SessionPanel = ({
           </ul>
         </div>
 
-        <div className="border-t border-deck-800 p-3">
-          {run && run.status !== 'closed' && (
-            <div className="mb-2 flex gap-2">
+        {run && run.status !== 'closed' && (
+          <div className="border-t border-deck-800 p-3">
+            <div className="flex gap-2">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -336,51 +431,8 @@ export const SessionPanel = ({
                 Send
               </button>
             </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setMoreOpen((s) => !s)}
-            className="cursor-pointer text-xs text-deck-400 hover:text-deck-200"
-          >
-            More options… {moreOpen ? '▾' : '▸'}
-          </button>
-          {moreOpen && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => onSnooze(!task.snoozed)}
-                className="cursor-pointer rounded bg-deck-800 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
-              >
-                {task.snoozed ? 'unhide' : '💤 hide until new activity'}
-              </button>
-              {(run?.sessionId || task.sessionIds.length > 0) && (
-                <button
-                  type="button"
-                  onClick={copySessionId}
-                  className="cursor-pointer rounded bg-deck-800 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
-                >
-                  {copied ? 'copied!' : 'copy resume cmd'}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => openUrl(task.prUrl)}
-                className="cursor-pointer rounded bg-deck-800 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
-              >
-                open in browser
-              </button>
-              {running && (
-                <button
-                  type="button"
-                  onClick={onKill}
-                  className="cursor-pointer rounded bg-red-600/30 px-2 py-1 text-xs text-red-300 hover:bg-red-600/50"
-                >
-                  kill run
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {report && (
           <div className="absolute inset-0 z-30 flex flex-col bg-deck-900">

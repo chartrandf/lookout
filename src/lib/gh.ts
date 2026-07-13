@@ -103,6 +103,10 @@ export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<G
   return (raw as any[]).map(toTimelineEvent).filter((e): e is GhTimelineEvent => e !== null && Boolean(e.ts))
 }
 
+export const approvePr = async (repo: string, prNumber: number) => {
+  await gh(['pr', 'review', String(prNumber), '--repo', repo, '--approve'])
+}
+
 export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
 
 // Activity = review comments + reviews + issue comments; CI from status check rollup
