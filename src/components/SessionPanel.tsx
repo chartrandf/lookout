@@ -1,6 +1,7 @@
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
 import { buildFeed, type FeedEvent } from '../lib/feed'
 import { resumeInGhostty } from '../lib/ghostty'
@@ -112,7 +113,6 @@ export const SessionPanel = ({
   const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
   const canReply = !!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId
-  const latestReport = task.reviewFiles.at(-1)
 
   const copySessionId = async () => {
     if (!sessionId || !task.repoPath) return
@@ -133,7 +133,6 @@ export const SessionPanel = ({
 
   return (
     <>
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss; Esc/✕ also close */}
       <div
         onClick={close}
         className={`fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`}
@@ -213,16 +212,6 @@ export const SessionPanel = ({
           >
             🔁 do-followup
           </button>
-          {latestReport && (
-            <button
-              type="button"
-              onClick={() => openReport(latestReport)}
-              className="cursor-pointer rounded-md border border-deck-600 px-3 py-1.5 text-sm text-deck-300 hover:bg-deck-700"
-              title="Open the latest review report"
-            >
-              📄 report
-            </button>
-          )}
           {running && <span className="animate-pulse self-center text-xs text-amber-300">running…</span>}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>
@@ -396,16 +385,21 @@ export const SessionPanel = ({
         {report && (
           <div className="absolute inset-0 z-30 flex flex-col bg-deck-900">
             <div className="flex items-center gap-2 border-b border-deck-800 px-4 py-2.5">
-              <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.path.split('/').at(-1)}</p>
               <button
                 type="button"
                 onClick={() => setReport(null)}
-                className="cursor-pointer rounded px-2 py-1 text-deck-400 hover:text-deck-100"
+                title="Back to the PR panel"
+                className="cursor-pointer rounded px-2 py-1 text-deck-300 hover:bg-deck-800 hover:text-deck-100"
               >
-                ✕
+                ← back
               </button>
+              <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.path.split('/').at(-1)}</p>
             </div>
-            <pre className="flex-1 overflow-auto whitespace-pre-wrap p-4 text-xs text-deck-200">{report.content}</pre>
+            <div
+              className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
+              dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
+            />
             {canReply && (
               <div className="flex gap-2 border-t border-deck-800 p-3">
                 <input

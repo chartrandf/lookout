@@ -58,7 +58,9 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         reviewRequested: pr.reviewRequests.some((r) => r.login === me),
       })
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []
-      const reviewFiles = reviewsByBranch.get(pr.headRefName) ?? []
+      // /do-review flattens "/" in branch names when building the report filename
+      const reviewFiles =
+        reviewsByBranch.get(pr.headRefName) ?? reviewsByBranch.get(pr.headRefName.replace(/\//g, '-')) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
       const prev = known.get(id)
       fresh.set(id, {

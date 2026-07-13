@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 /* Palette: deep forest green + white + vivid green badges */
 @theme {
