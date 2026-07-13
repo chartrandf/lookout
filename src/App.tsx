@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { SessionPanel } from './components/SessionPanel'
-import { getConfig, setRepos } from './lib/config'
+import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
 import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setOrders, setSnoozed, setStage } from './lib/db'
 import { closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
@@ -28,7 +28,7 @@ const parseFollowupSummary = (text: string) => {
 
 const App = () => {
   const [view, setView] = useState<View>('board')
-  const [config, setConfig] = useState<Config>({ githubUser: '', repos: [] })
+  const [config, setConfig] = useState<Config>({ githubUser: '', repos: [], commands: DEFAULT_COMMANDS })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
@@ -110,7 +110,11 @@ const App = () => {
     if (command === 'do-review') await setStage(t.id, 'reviewing')
     await reload()
     setPanelTaskId(t.id)
-    await startRun(t.id, command, t.branch, t.repoPath, runCallbacks(command))
+    const { commands } = await getConfig()
+    const prompt = (command === 'do-review' ? commands.review : commands.followup)
+      .replaceAll('<branch_name>', t.branch)
+      .replaceAll('<pr_id>', String(t.prNumber))
+    await startRun(t.id, command, prompt, t.repoPath, runCallbacks(command))
   }
 
   const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
@@ -203,7 +207,17 @@ const App = () => {
             }}
           />
         )}
-        {view === 'settings' && <Settings config={config} tasks={tasks} onSave={saveRepos} />}
+        {view === 'settings' && (
+          <Settings
+            config={config}
+            tasks={tasks}
+            onSave={saveRepos}
+            onSaveCommands={async (commands) => {
+              await setCommands(commands)
+              setConfig(await getConfig())
+            }}
+          />
+        )}
       </main>
 
       {panelTask && (

@@ -1,6 +1,8 @@
 # Review Deck
 
-Desktop overview of all your Claude Code review sessions: discover open PRs across hand-picked repos, dispatch `/do-review` / `/do-followup`, track follow-ups, auto-clear merged PRs.
+> ⚠️ **Work in progress.** The review flow is not complete, and this has only been tested against the author's personal Claude Code slash commands — it may not work out of the box for you. Configure the dispatched prompts in **Settings → Claude commands** (defaults use Claude Code's built-in `/review`; placeholders `<branch_name>` and `<pr_id>` are supported).
+
+Desktop overview of all your Claude Code review sessions: discover open PRs across hand-picked repos, dispatch review/follow-up sessions, track follow-ups, auto-clear merged PRs.
 
 Tauri v2 + React + TypeScript + Tailwind. No server — the app polls `gh`, scans `~/.claude/projects/` sessions and each repo's `AI_TASKS/code-review/` exports.
 
@@ -23,3 +25,7 @@ Requirements: Rust toolchain, `gh` (authenticated), `claude` CLI.
 ## Font
 
 Bundles [Leckerli One](https://fonts.google.com/specimen/Leckerli+One) (SIL Open Font License 1.1).
+
+## License
+
+[MIT](LICENSE)

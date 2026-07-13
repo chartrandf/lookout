@@ -5,18 +5,25 @@ import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
 import { avatarUrl } from '../lib/avatar'
+import { DEFAULT_COMMANDS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
-import type { Config, ReviewTask, WatchedRepo } from '../types'
+import type { Commands, Config, ReviewTask, WatchedRepo } from '../types'
 import { History } from './History'
 
 type Props = {
   config: Config
   tasks: ReviewTask[]
   onSave: (repos: WatchedRepo[]) => void
+  onSaveCommands: (commands: Commands) => void
 }
 
-export const Settings = ({ config, tasks, onSave }: Props) => {
+export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
   const [path, setPath] = useState('')
+  const [commands, setCommandsState] = useState<Commands>(config.commands)
+
+  useEffect(() => {
+    setCommandsState(config.commands)
+  }, [config.commands])
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [autostart, setAutostart] = useState(false)
@@ -137,6 +144,46 @@ export const Settings = ({ config, tasks, onSave }: Props) => {
           className="cursor-pointer self-start rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
         >
           {adding ? 'detecting repo…' : 'Add repo'}
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-3 rounded-lg border border-deck-700 p-3">
+        <div>
+          <h3 className="text-sm font-semibold text-deck-300">Claude commands</h3>
+          <p className="text-xs text-deck-500">
+            Prompt sent to <code className="text-deck-400">claude -p</code> per action. Placeholders:{' '}
+            <code className="text-grass-400">&lt;branch_name&gt;</code>,{' '}
+            <code className="text-grass-400">&lt;pr_id&gt;</code>.
+          </p>
+        </div>
+        <label className="flex flex-col gap-1 text-xs text-deck-400">
+          Review
+          <input
+            value={commands.review}
+            onChange={(e) => setCommandsState((c) => ({ ...c, review: e.target.value }))}
+            onBlur={() => onSaveCommands(commands)}
+            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-deck-400">
+          Follow-up
+          <textarea
+            value={commands.followup}
+            onChange={(e) => setCommandsState((c) => ({ ...c, followup: e.target.value }))}
+            onBlur={() => onSaveCommands(commands)}
+            rows={3}
+            className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            setCommandsState(DEFAULT_COMMANDS)
+            onSaveCommands(DEFAULT_COMMANDS)
+          }}
+          className="cursor-pointer self-start text-xs text-deck-400 hover:text-deck-200"
+        >
+          Reset to defaults
         </button>
       </div>
 

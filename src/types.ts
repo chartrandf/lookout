@@ -38,7 +38,13 @@ export type WatchedRepo = {
   path: string // local clone path
 }
 
+export type Commands = {
+  review: string
+  followup: string
+}
+
 export type Config = {
   githubUser: string
   repos: WatchedRepo[]
+  commands: Commands
 }

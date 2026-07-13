@@ -67,13 +67,12 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
 export const startRun = async (
   taskId: string,
   command: Run['command'],
-  branch: string,
+  prompt: string,
   repoPath: string,
   callbacks: Callbacks = {},
 ) => {
   const existing = runs.get(taskId)
   if (existing && existing.status === 'running') return
-  const prompt = `/${command} ${branch}`
   const run: Run = {
     taskId,
     command,
