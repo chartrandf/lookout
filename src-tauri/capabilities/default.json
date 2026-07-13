@@ -37,6 +37,7 @@
     "shell:allow-stdin-write",
     "clipboard-manager:allow-write-text",
     "notification:default",
+    "dialog:allow-open",
     "autostart:allow-enable",
     "autostart:allow-disable",
     "autostart:allow-is-enabled",

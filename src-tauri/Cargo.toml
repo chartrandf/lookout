@@ -29,4 +29,5 @@ tauri-plugin-sql = { version = "2.4.0", features = ["sqlite"] }
 tauri-plugin-clipboard-manager = "2.3.2"
 tauri-plugin-notification = "2.3.3"
 tauri-plugin-autostart = "2.5.1"
+tauri-plugin-dialog = "2.7.1"
 

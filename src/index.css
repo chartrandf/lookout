@@ -21,6 +21,13 @@
   --color-grass-700: #187f48;
 }
 
+@font-face {
+  font-family: "Leckerli One";
+  font-style: normal;
+  font-weight: 400;
+  src: url("./assets/fonts/leckerli-one.woff2") format("woff2");
+}
+
 .font-script {
-  font-family: "Snell Roundhand", "Savoye LET", "Brush Script MT", cursive;
+  font-family: "Leckerli One", cursive;
 }

@@ -1,4 +1,6 @@
+import { homeDir } from '@tauri-apps/api/path'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
+import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { useEffect, useState } from 'react'
 import { repoFromPath } from '../lib/gh'
@@ -29,6 +31,15 @@ export const Settings = ({ config, onSave }: Props) => {
     } catch {
       // autostart unavailable in dev builds
     }
+  }
+
+  const browse = async () => {
+    const folder = await open({
+      directory: true,
+      multiple: false,
+      defaultPath: `${await homeDir()}Projects`,
+    })
+    if (typeof folder === 'string') setPath(folder)
   }
 
   // Only the local path is entered; owner/repo is resolved from the clone's git origin.
@@ -91,13 +102,22 @@ export const Settings = ({ config, onSave }: Props) => {
       </div>
 
       <div className="flex flex-col gap-2 rounded-lg border border-deck-700 p-3">
-        <input
-          value={path}
-          onChange={(e) => setPath(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-          placeholder="local clone path (e.g. /Users/you/Projects/my-repo)"
-          className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
-        />
+        <div className="flex gap-2">
+          <input
+            value={path}
+            onChange={(e) => setPath(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && add()}
+            placeholder="local clone path (e.g. /Users/you/Projects/my-repo)"
+            className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
+          />
+          <button
+            type="button"
+            onClick={browse}
+            className="cursor-pointer rounded-md border border-deck-600 px-3 py-1.5 text-sm text-deck-300 hover:bg-deck-700"
+          >
+            Browse…
+          </button>
+        </div>
         {addError && <p className="text-xs text-red-400">{addError}</p>}
         <button
           type="button"
