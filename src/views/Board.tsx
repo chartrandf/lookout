@@ -40,6 +40,8 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
     onClick={onOpen}
     draggable
     onDragStart={(e) => {
+      // WebKit requires setData for the drag to actually start
+      e.dataTransfer.setData('text/plain', t.id)
       e.dataTransfer.effectAllowed = 'move'
       onDragStart()
     }}
@@ -141,7 +143,8 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onMoveStage }: Props
                 setDropTarget(colIdx)
               }}
               onDragLeave={() => setDropTarget((cur) => (cur === colIdx ? null : cur))}
-              onDrop={() => {
+              onDrop={(e) => {
+                e.preventDefault()
                 if (dragging && canDrop) onMoveStage(dragging, col.stage[0])
                 setDragging(null)
                 setDropTarget(null)
