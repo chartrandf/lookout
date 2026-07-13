@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { avatarUrl } from '../lib/avatar'
 import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
 
@@ -46,10 +47,14 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
     className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''}`}
   >
     <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
-      <span>
+    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-deck-400">
+      <img src={avatarUrl(t.prAuthor)} alt={t.prAuthor} className="h-4 w-4 rounded-full" />
+      <span className="truncate font-medium text-deck-300">{t.prAuthor}</span>
+      <span className="ml-auto shrink-0">
         {t.repo.split('/')[1]}#{t.prNumber}
       </span>
+    </div>
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
       {t.prState !== 'open' && (
         <span
           className={`rounded px-1 py-0.5 ${t.prState === 'merged' ? 'bg-purple-500/20 text-purple-300' : 'bg-red-500/20 text-red-300'}`}

@@ -20,6 +20,8 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
   const firstSync = known.size === 0 // fresh DB: don't blast a notification per existing PR
+  // artifacts first seen this pass: only these advance a stage (a manually demoted card stays put)
+  const fresh = new Map<string, { session: boolean; report: boolean }>()
   const openIds = new Set<string>()
   const polledRepos = new Set<string>()
   for (const { repo, path } of config.repos) {
@@ -58,6 +60,11 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []
       const reviewFiles = reviewsByBranch.get(pr.headRefName) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
+      const prev = known.get(id)
+      fresh.set(id, {
+        session: sessionIds.some((s) => !prev?.sessionIds.includes(s)),
+        report: reviewFiles.some((f) => !prev?.reviewFiles.includes(f)),
+      })
 
       // already reviewed or commented on GitHub -> skip Discovery, board it in the right column
       const myReview = pr.latestReviews.find((r) => r.author.login === me)
@@ -88,10 +95,10 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         continue
       }
     }
-    // auto-advance triaged tasks when review artifacts appear
+    // auto-advance triaged tasks when NEW review artifacts appear (forward-only; respects manual demotion)
     const active = t.stage === 'watching' || t.stage === 'inbox' || t.stage === 'reviewing'
-    if (active && t.reviewFiles.length > 0) await setStage(t.id, 'reviewed')
-    else if ((t.stage === 'watching' || t.stage === 'inbox') && t.sessionIds.length > 0)
+    if (active && fresh.get(t.id)?.report) await setStage(t.id, 'reviewed')
+    else if ((t.stage === 'watching' || t.stage === 'inbox') && fresh.get(t.id)?.session)
       await setStage(t.id, 'reviewing')
 
     // watch boarded PRs for new comments / CI failures

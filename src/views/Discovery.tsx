@@ -1,4 +1,5 @@
 import { PrLink } from '../components/PrLink'
+import { avatarUrl } from '../lib/avatar'
 import { timeAgo } from '../lib/time'
 import type { ReviewTask } from '../types'
 
@@ -11,8 +12,6 @@ type Props = {
   onToggleIgnored: () => void
   onUnignore: (id: string) => void
 }
-
-const avatarUrl = (login: string) => `https://github.com/${login}.png?size=48`
 
 export const Discovery = ({ tasks, onReview, onWatch, onIgnore, showIgnored, onToggleIgnored, onUnignore }: Props) => {
   const discovered = tasks
