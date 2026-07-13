@@ -30,11 +30,9 @@ const KIND_ICONS = {
 }
 
 // filename: YYYY-MM-DD-HH-MM-<branch>.md -> local time ISO
+// (branches with "/" nest the file, so match the stamp anywhere after code-review/)
 const reviewFileTs = (path: string): string | null => {
-  const m = path
-    .split('/')
-    .at(-1)
-    ?.match(/^(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-/)
+  const m = path.match(/code-review\/(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-/) ?? null
   if (!m) return null
   return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString()
 }

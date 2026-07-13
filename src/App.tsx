@@ -177,8 +177,6 @@ const App = () => {
           <Board
             tasks={tasks}
             runs={runs}
-            onReview={(t) => dispatchRun(t, 'do-review')}
-            onFollowup={(t) => dispatchRun(t, 'do-followup')}
             onOpenSession={(t) => setPanelTaskId(t.id)}
             onSeen={async (t) => {
               await clearNewActivity(t.id)

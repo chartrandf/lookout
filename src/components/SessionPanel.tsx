@@ -59,7 +59,18 @@ export const SessionPanel = ({
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
   const [report, setReport] = useState<{ path: string; content: string } | null>(null)
   const [showRun, setShowRun] = useState(true)
+  const [shown, setShown] = useState(false) // drives slide-in/out + backdrop fade
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+
+  const close = () => {
+    setShown(false)
+    setTimeout(onClose, 220) // let the slide-out finish
+  }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: rebuild feed when switching task
   useEffect(() => {
@@ -84,18 +95,19 @@ export const SessionPanel = ({
   }
 
   // Esc closes the panel (or the report overlay first)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for this listener
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       setReport((r) => {
         if (r) return null
-        onClose()
+        close()
         return r
       })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
@@ -123,11 +135,13 @@ export const SessionPanel = ({
     <>
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: backdrop dismiss; Esc/✕ also close */}
       <div
-        onClick={onClose}
-        className="fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm"
+        onClick={close}
+        className={`fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`}
         aria-hidden="true"
       />
-      <div className="fixed inset-y-0 right-0 z-20 flex w-[35vw] min-w-[420px] max-w-[640px] flex-col border-l border-deck-700 bg-deck-900 shadow-2xl">
+      <div
+        className={`fixed inset-y-0 right-0 z-20 flex w-[45vw] min-w-[440px] max-w-[860px] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
+      >
         <div className="flex items-start gap-2 border-b border-deck-800 px-4 py-3">
           <div className="min-w-0 flex-1">
             <PrLink
@@ -175,7 +189,7 @@ export const SessionPanel = ({
           </select>
           <button
             type="button"
-            onClick={onClose}
+            onClick={close}
             className="cursor-pointer rounded px-2 py-1 text-deck-400 hover:text-deck-100"
           >
             ✕
