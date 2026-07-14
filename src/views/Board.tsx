@@ -29,10 +29,9 @@ type CardProps = {
   onSeen: () => void
   onDragStart: () => void
   onDragEnd: () => void
-  onDropBefore: () => void
 }
 
-const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd, onDropBefore }: CardProps) => (
+const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
   // biome-ignore lint/a11y/useKeyWithClickEvents: card body is a mouse affordance; actions inside are buttons
   <div
     onClick={onOpen}
@@ -44,17 +43,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd, onDropBefore }: 
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    onDragOver={(e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      e.dataTransfer.dropEffect = 'move'
-    }}
-    onDrop={(e) => {
-      e.preventDefault()
-      e.stopPropagation()
-      onDropBefore()
-    }}
-    className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' ? 'card-awaiting' : t.hasNewActivity ? 'card-new' : ''}`}
+    className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' || t.hasNewActivity ? 'card-awaiting' : ''}`}
   >
     <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-deck-400">
@@ -116,6 +105,8 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [dragging, setDragging] = useState<ReviewTask | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
+  // insertion indicator: line above card `before`, or at the column end when before is null
+  const [dropLine, setDropLine] = useState<{ col: number; before: string | null } | null>(null)
   const now = Date.now()
   const active = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
@@ -124,6 +115,17 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   const visible = active.filter((t) => showSnoozed || !t.snoozed || t.stage === 'done')
   const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
+
+  // hide the insertion line when dropping there wouldn't move the card
+  // (over itself, over the card right after it, or at the end while already last)
+  const isNoMove = (colItems: ReviewTask[], before: ReviewTask | null) => {
+    if (!dragging) return true
+    const idx = colItems.findIndex((x) => x.id === dragging.id)
+    if (idx < 0) return false // coming from another column: always a real move
+    if (before === null) return idx === colItems.length - 1
+    const beforeIdx = colItems.findIndex((x) => x.id === before.id)
+    return beforeIdx === idx || beforeIdx === idx + 1
+  }
 
   // drop the dragged card into a column, before `before` (or at the end)
   const drop = (colItems: ReviewTask[], stage: Stage, before: ReviewTask | null) => {
@@ -139,6 +141,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
     )
     setDragging(null)
     setDropTarget(null)
+    setDropLine(null)
   }
 
   return (
@@ -167,8 +170,13 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 setDropTarget(colIdx)
+                // cards stopPropagation on dragOver, so reaching here means empty space -> drop at end
+                setDropLine({ col: colIdx, before: null })
               }}
-              onDragLeave={() => setDropTarget((cur) => (cur === colIdx ? null : cur))}
+              onDragLeave={() => {
+                setDropTarget((cur) => (cur === colIdx ? null : cur))
+                setDropLine((cur) => (cur?.col === colIdx ? null : cur))
+              }}
               onDrop={(e) => {
                 e.preventDefault()
                 drop(items, col.stage[0], null)
@@ -185,20 +193,47 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
                 {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
               {items.map((t) => (
-                <Card
+                // wrapper (line + card) is the drop target: hovering the line itself stays stable
+                // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
+                <div
                   key={t.id}
-                  t={t}
-                  run={runByTask.get(t.id)}
-                  onOpen={() => onOpenSession(t)}
-                  onSeen={() => onSeen(t)}
-                  onDragStart={() => setDragging(t)}
-                  onDragEnd={() => {
-                    setDragging(null)
-                    setDropTarget(null)
+                  className="flex flex-col gap-2"
+                  onDragOver={(e) => {
+                    if (!dragging) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    e.dataTransfer.dropEffect = 'move'
+                    setDropTarget(colIdx)
+                    setDropLine((cur) =>
+                      cur?.col === colIdx && cur.before === t.id ? cur : { col: colIdx, before: t.id },
+                    )
                   }}
-                  onDropBefore={() => drop(items, col.stage[0], t)}
-                />
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    drop(items, col.stage[0], t)
+                  }}
+                >
+                  {dropLine?.col === colIdx && dropLine.before === t.id && !isNoMove(items, t) && (
+                    <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
+                  )}
+                  <Card
+                    t={t}
+                    run={runByTask.get(t.id)}
+                    onOpen={() => onOpenSession(t)}
+                    onSeen={() => onSeen(t)}
+                    onDragStart={() => setDragging(t)}
+                    onDragEnd={() => {
+                      setDragging(null)
+                      setDropTarget(null)
+                      setDropLine(null)
+                    }}
+                  />
+                </div>
               ))}
+              {dropLine?.col === colIdx && dropLine.before === null && !isNoMove(items, null) && (
+                <div className="h-0.5 rounded-full bg-grass-400" />
+              )}
             </div>
           )
         })}
