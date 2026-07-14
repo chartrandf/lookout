@@ -98,6 +98,30 @@ export const replyRun = async (taskId: string, text: string, callbacks: Callback
   await dispatch(run, text, callbacks, sessionId)
 }
 
+// Reply into a past session with no live run (e.g. after app restart): recreate the run and resume
+export const resumeRun = async (
+  taskId: string,
+  command: Run['command'],
+  repoPath: string,
+  text: string,
+  sessionId: string,
+  callbacks: Callbacks = {},
+) => {
+  const existing = runs.get(taskId)
+  if (existing && existing.status === 'running') return
+  const run: Run = {
+    taskId,
+    command,
+    repoPath,
+    sessionId,
+    lines: [{ kind: 'user', text }],
+    status: 'running',
+    child: null,
+  }
+  runs.set(taskId, run)
+  await dispatch(run, text, callbacks, sessionId)
+}
+
 // Mark a finished run as closed (no further input expected)
 export const closeRun = (taskId: string) => {
   const run = runs.get(taskId)

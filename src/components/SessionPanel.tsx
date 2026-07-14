@@ -230,8 +230,12 @@ export const SessionPanel = ({
     setFeed(null)
     setReport(null)
     buildFeed(task, me).then(setFeed)
-    scrollRef.current?.scrollTo({ top: 0 })
   }, [task.id])
+
+  // chronological feed: keep the newest events in view, next to the reply input
+  useEffect(() => {
+    if (feed) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [feed])
 
   // refresh history when a run finishes or a new report gets linked (no manual ↻ needed)
   const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
@@ -271,7 +275,11 @@ export const SessionPanel = ({
 
   const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
-  const canReply = !!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId
+  // latest event is a review report -> always offer the input to reply into the review session
+  const latestIsReport = !!feed?.at(-1)?.filePath
+  const canResume = !run && latestIsReport && !!sessionId && !!task.repoPath
+  const canReply = canResume || (!!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId)
+  const showReply = (!!run && run.status !== 'closed') || canResume
 
   const copySessionId = async () => {
     if (!sessionId || !task.repoPath) return
@@ -594,7 +602,7 @@ export const SessionPanel = ({
           </ul>
         </div>
 
-        {run && run.status !== 'closed' && (
+        {showReply && (
           <div className="border-t border-deck-800 p-3">
             <ReplyBox
               value={input}
@@ -626,7 +634,7 @@ export const SessionPanel = ({
               // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
               dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
             />
-            {run && run.status !== 'closed' && (
+            {showReply && (
               <div className="border-t border-deck-800 p-3">
                 <ReplyBox
                   value={input}

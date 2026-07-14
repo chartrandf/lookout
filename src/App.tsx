@@ -13,7 +13,7 @@ import {
   setStage,
 } from './lib/db'
 import { scanReviewFiles } from './lib/reviews'
-import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
+import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount } from './lib/tray'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
@@ -262,14 +262,14 @@ const App = () => {
           task={panelTask}
           run={getRun(panelTask.id)}
           me={config.githubUser}
-          onReply={(text) =>
-            replyRun(
-              panelTask.id,
-              text,
-              runCallbacks(getRun(panelTask.id)?.command ?? 'do-review'),
-              panelTask.sessionIds.at(-1),
-            )
-          }
+          onReply={(text) => {
+            const sessionId = panelTask.sessionIds.at(-1)
+            const run = getRun(panelTask.id)
+            if (run) replyRun(panelTask.id, text, runCallbacks(run.command ?? 'do-review'), sessionId)
+            // no live run (app restarted, run dismissed): resume the review session directly
+            else if (panelTask.repoPath && sessionId)
+              resumeRun(panelTask.id, 'do-review', panelTask.repoPath, text, sessionId, runCallbacks('do-review'))
+          }}
           onDismissRun={() => killRun(panelTask.id)}
           onCancel={() => cancelRun(panelTask.id)}
           onDispatch={(command) => dispatchRun(panelTask, command)}
