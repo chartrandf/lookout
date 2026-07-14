@@ -2,8 +2,18 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
 import { SessionPanel } from './components/SessionPanel'
 import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
-import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setOrders, setSnoozed, setStage } from './lib/db'
-import { closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
+import {
+  addSessionId,
+  allTasks,
+  clearNewActivity,
+  setFollowupSummary,
+  setLinks,
+  setOrders,
+  setSnoozed,
+  setStage,
+} from './lib/db'
+import { scanReviewFiles } from './lib/reviews'
+import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount } from './lib/tray'
 import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
@@ -88,6 +98,16 @@ const App = () => {
     refresh()
   }
 
+  // link the report a just-finished /do-review wrote, without waiting for the next full sync
+  const linkReviewReport = async (taskId: string) => {
+    const t = (await allTasks()).find((x) => x.id === taskId)
+    if (!t?.repoPath) return
+    const byBranch = await scanReviewFiles(t.repoPath).catch(() => new Map<string, string[]>())
+    // /do-review flattens "/" in branch names when building the report filename
+    const files = byBranch.get(t.branch) ?? byBranch.get(t.branch.replace(/\//g, '-')) ?? []
+    if (files.length) await setLinks(t.id, t.sessionIds, files)
+  }
+
   const runCallbacks = (command: 'do-review' | 'do-followup') => ({
     onSession: async (taskId: string, sessionId: string) => {
       await addSessionId(taskId, sessionId)
@@ -101,6 +121,7 @@ const App = () => {
         closeRun(taskId) // follow-up is informational: no reply expected
       } else {
         await setStage(taskId, 'reviewed')
+        await linkReviewReport(taskId)
       }
       await reload()
     },
@@ -180,8 +201,8 @@ const App = () => {
         {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
       </header>
 
-      {/* status bar: always on top, nothing may overlay it */}
-      <div className="fixed bottom-2 right-2 z-30 flex items-center gap-2 rounded-md border border-deck-700 bg-deck-900/95 px-2 py-1 text-xs text-deck-500 shadow-lg">
+      {/* status bar: above the board, but under the card side panel (z-20) */}
+      <div className="fixed bottom-2 right-2 z-10 flex items-center gap-2 rounded-md border border-deck-700 bg-deck-900/95 px-2 py-1 text-xs text-deck-500 shadow-lg">
         {lastSync && <span>synced {lastSync.toLocaleTimeString()}</span>}
         <button
           type="button"
@@ -250,6 +271,7 @@ const App = () => {
             )
           }
           onDismissRun={() => killRun(panelTask.id)}
+          onCancel={() => cancelRun(panelTask.id)}
           onDispatch={(command) => dispatchRun(panelTask, command)}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}
           onSnooze={async (snoozed) => {

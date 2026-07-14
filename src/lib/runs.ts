@@ -52,6 +52,8 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
       else if (e.type === 'stderr') run.lines.push({ kind: 'error', text: e.text })
       else if (e.type === 'result') {
         run.status = 'awaiting-input'
+        // the final summary usually duplicates the last text block — only push when it doesn't
+        if (e.text && run.lines.at(-1)?.text !== e.text) run.lines.push({ kind: 'text', text: e.text })
         callbacks.onResult?.(run.taskId, e.text)
       } else if (e.type === 'exit') {
         run.child = null
@@ -103,6 +105,17 @@ export const closeRun = (taskId: string) => {
     run.status = 'closed'
     notify()
   }
+}
+
+// Abort the in-flight turn but keep the run + session resumable (misclick -> cancel -> resend)
+export const cancelRun = async (taskId: string) => {
+  const run = runs.get(taskId)
+  if (run?.status !== 'running') return
+  run.status = 'awaiting-input' // before kill: the exit handler leaves non-running statuses alone
+  run.lines.push({ kind: 'error', text: '■ cancelled — session still resumable' })
+  if (run.child) await run.child.kill()
+  run.child = null
+  notify()
 }
 
 export const killRun = async (taskId: string) => {

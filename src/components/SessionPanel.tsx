@@ -21,8 +21,69 @@ type Props = {
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
+  onCancel: () => void
   onDismissRun: () => void
   onClose: () => void
+}
+
+type ReplyBoxProps = {
+  value: string
+  onChange: (v: string) => void
+  onSend: () => void
+  onCancel: () => void
+  canReply: boolean
+  running: boolean
+  placeholder: string
+}
+
+// Auto-growing reply field: Enter sends, Shift+Enter adds a line, cancel aborts a running turn
+const ReplyBox = ({ value, onChange, onSend, onCancel, canReply, running, placeholder }: ReplyBoxProps) => {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure on every value change
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [value])
+  return (
+    <div className="flex items-end gap-2">
+      <textarea
+        ref={ref}
+        rows={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            onSend()
+          }
+        }}
+        disabled={!canReply}
+        placeholder={running ? 'claude is working… cancel to send something else' : placeholder}
+        className="max-h-40 flex-1 resize-none overflow-y-auto rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
+      />
+      {running ? (
+        <button
+          type="button"
+          onClick={onCancel}
+          title="Cancel this turn — the session stays resumable, then send a new message"
+          className="cursor-pointer rounded-md border border-red-400/40 bg-red-500/20 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/40"
+        >
+          ■ cancel
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={!canReply}
+          className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
+        >
+          Send
+        </button>
+      )}
+    </div>
+  )
 }
 
 const STAGES: { value: Stage; label: string }[] = [
@@ -138,6 +199,7 @@ export const SessionPanel = ({
   onStageChange,
   onSnooze,
   onKill,
+  onCancel,
   onDismissRun,
   onClose,
 }: Props) => {
@@ -170,6 +232,13 @@ export const SessionPanel = ({
     buildFeed(task, me).then(setFeed)
     scrollRef.current?.scrollTo({ top: 0 })
   }, [task.id])
+
+  // refresh history when a run finishes or a new report gets linked (no manual ↻ needed)
+  const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh triggers only
+  useEffect(() => {
+    if (runIdle) buildFeed(task, me).then(setFeed)
+  }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
     try {
@@ -527,24 +596,15 @@ export const SessionPanel = ({
 
         {run && run.status !== 'closed' && (
           <div className="border-t border-deck-800 p-3">
-            <div className="flex gap-2">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && send()}
-                disabled={!canReply}
-                placeholder={canReply ? 'e.g. "1,3" to push comments, "all", or free text…' : 'session running…'}
-                className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
-              />
-              <button
-                type="button"
-                onClick={send}
-                disabled={!canReply}
-                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
-              >
-                Send
-              </button>
-            </div>
+            <ReplyBox
+              value={input}
+              onChange={setInput}
+              onSend={send}
+              onCancel={onCancel}
+              canReply={canReply}
+              running={running}
+              placeholder='e.g. "1,3" to push comments, "all", or free text…'
+            />
           </div>
         )}
 
@@ -566,22 +626,17 @@ export const SessionPanel = ({
               // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
               dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
             />
-            {canReply && (
-              <div className="flex gap-2 border-t border-deck-800 p-3">
-                <input
+            {run && run.status !== 'closed' && (
+              <div className="border-t border-deck-800 p-3">
+                <ReplyBox
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && send()}
+                  onChange={setInput}
+                  onSend={send}
+                  onCancel={onCancel}
+                  canReply={canReply}
+                  running={running}
                   placeholder='send comments from here — e.g. "1,3" or "all"'
-                  className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
                 />
-                <button
-                  type="button"
-                  onClick={send}
-                  className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500"
-                >
-                  Send
-                </button>
               </div>
             )}
           </div>
