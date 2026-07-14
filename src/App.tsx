@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { GlobalSearch } from './components/GlobalSearch'
 import { SessionPanel } from './components/SessionPanel'
 import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
 import { addSessionId, allTasks, clearNewActivity, setFollowupSummary, setOrders, setSnoozed, setStage } from './lib/db'
@@ -117,6 +118,16 @@ const App = () => {
     await startRun(t.id, command, prompt, t.repoPath, runCallbacks(command))
   }
 
+  const startReview = (id: string) => {
+    const t = tasks.find((x) => x.id === id)
+    if (t) dispatchRun(t, 'do-review')
+  }
+
+  const openCard = (t: ReviewTask) => {
+    setView('board')
+    setPanelTaskId(t.id)
+  }
+
   const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
 
   const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
@@ -156,9 +167,17 @@ const App = () => {
       <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
         <h1 className="font-script mr-3 text-xl text-white">Lookout</h1>
         {TAB_ORDER.filter((t) => t.view !== 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
-        <div className="ml-auto">
-          {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
+        <div className="flex min-w-0 flex-1 justify-center px-4">
+          <GlobalSearch
+            tasks={tasks}
+            onOpen={openCard}
+            onReview={startReview}
+            onWatch={(id) => moveStage(id, 'watching')}
+            onIgnore={(id) => moveStage(id, 'ignored')}
+            onUnignore={(id) => moveStage(id, 'discovered')}
+          />
         </div>
+        {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
       </header>
 
       {/* status bar: always on top, nothing may overlay it */}
@@ -180,10 +199,7 @@ const App = () => {
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
-            onReview={(id) => {
-              const t = tasks.find((x) => x.id === id)
-              if (t) dispatchRun(t, 'do-review')
-            }}
+            onReview={startReview}
             onWatch={(id) => moveStage(id, 'watching')}
             onIgnore={(id) => moveStage(id, 'ignored')}
             onUnignore={(id) => moveStage(id, 'discovered')}
