@@ -528,51 +528,54 @@ export const SessionPanel = ({
           </div>
         )}
 
+        {/* terminal stays pinned above the chat: only history events scroll */}
+        {run && run.lines.length > 0 && (
+          <div className="shrink-0 border-b border-deck-800 p-4 pb-3">
+            <div className="rounded-lg border border-deck-700 bg-deck-800/50">
+              <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
+                <button
+                  type="button"
+                  onClick={() => setShowRun((s) => !s)}
+                  className="flex flex-1 cursor-pointer items-center justify-between"
+                >
+                  <span>
+                    claude session output
+                    {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
+                  </span>
+                  <span>{showRun ? '▾' : '▸'}</span>
+                </button>
+                {!running && (
+                  <button
+                    type="button"
+                    onClick={onDismissRun}
+                    title="Dismiss this session output"
+                    className="cursor-pointer normal-case text-deck-500 hover:text-deck-200"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+              {showRun && (
+                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
+                  {run.lines.map((l, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+                    <p key={i} className={lineClass[l.kind]}>
+                      <Linkify
+                        text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                        onOpen={(url) => openPrWindow(url, task.repo, task.prNumber)}
+                      />
+                    </p>
+                  ))}
+                  {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto bg-deck-950 p-4">
           {/* mt-auto anchors the chat to the bottom until it overflows, like a real chat */}
           <div className="mt-auto">
-            {run && run.lines.length > 0 && (
-              <div className="mb-4 rounded-lg border border-deck-700 bg-deck-800/50">
-                <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
-                  <button
-                    type="button"
-                    onClick={() => setShowRun((s) => !s)}
-                    className="flex flex-1 cursor-pointer items-center justify-between"
-                  >
-                    <span>
-                      claude session output
-                      {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
-                    </span>
-                    <span>{showRun ? '▾' : '▸'}</span>
-                  </button>
-                  {!running && (
-                    <button
-                      type="button"
-                      onClick={onDismissRun}
-                      title="Dismiss this session output"
-                      className="cursor-pointer normal-case text-deck-500 hover:text-deck-200"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-                {showRun && (
-                  <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
-                    {run.lines.map((l, i) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                      <p key={i} className={lineClass[l.kind]}>
-                        <Linkify
-                          text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
-                          onOpen={(url) => openPrWindow(url, task.repo, task.prNumber)}
-                        />
-                      </p>
-                    ))}
-                    {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
-                  </div>
-                )}
-              </div>
-            )}
-
             <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
               history
               <button
