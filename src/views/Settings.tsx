@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react'
 import { avatarUrl } from '../lib/avatar'
 import { DEFAULT_COMMANDS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
+import { notify } from '../lib/notify'
 import type { Commands, Config, ReviewTask, WatchedRepo } from '../types'
 import { History } from './History'
 
@@ -204,6 +205,22 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
           />
         </button>
       </div>
+
+      {import.meta.env.DEV && (
+        <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
+          <div>
+            <p className="text-sm font-medium text-deck-200">Test notification</p>
+            <p className="text-xs text-deck-500">Dev only — fire an OS notification to verify permissions.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => notify('Test notification', 'If you see this, OS notifications work.')}
+            className="cursor-pointer rounded-md border border-deck-600 px-3 py-1.5 text-sm text-deck-300 hover:bg-deck-700"
+          >
+            Send test
+          </button>
+        </div>
+      )}
 
       <div className="mt-6 border-t border-deck-800 pt-4">
         <History tasks={tasks} />

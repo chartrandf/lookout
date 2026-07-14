@@ -47,6 +47,18 @@ pub fn run() {
                             sql: include_str!("../migrations/005_sort_order.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 6,
+                            description: "notification center",
+                            sql: include_str!("../migrations/006_notifications.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 7,
+                            description: "notification archive",
+                            sql: include_str!("../migrations/007_notif_archive.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

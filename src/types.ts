@@ -33,6 +33,15 @@ export type ReviewTask = {
   updatedAt: string
 }
 
+export type AppNotification = {
+  id: number
+  taskId: string
+  title: string
+  body: string
+  read: boolean
+  createdAt: string
+}
+
 export type WatchedRepo = {
   repo: string // owner/repo
   path: string // local clone path

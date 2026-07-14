@@ -1,0 +1,1 @@
+ALTER TABLE notifications ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
