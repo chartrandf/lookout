@@ -13,9 +13,11 @@ type Props = {
 
 const COLUMNS: { stage: Stage[]; title: string }[] = [
   { stage: ['watching'], title: 'Watching' },
-  { stage: ['inbox'], title: 'Needs Review' },
-  { stage: ['reviewing'], title: 'In Review' },
+  // assigned to me, no comment sent yet (claude may be reviewing)
+  { stage: ['inbox', 'reviewing'], title: 'Needs Review' },
+  // review sent: ball is in the author's camp
   { stage: ['reviewed'], title: 'Reviewed' },
+  // waiting on my re-review / approval
   { stage: ['followup'], title: 'Follow-up' },
   { stage: ['done'], title: 'Done' },
 ]
@@ -155,7 +157,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
           {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
         </button>
       )}
-      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {COLUMNS.map((col, colIdx) => {
           const items = visible
             .filter((t) => col.stage.includes(t.stage))
