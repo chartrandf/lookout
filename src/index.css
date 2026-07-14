@@ -33,6 +33,14 @@
   font-family: "Leckerli One", cursive;
 }
 
+/* GitHub-style inline code in rendered markdown (fenced blocks keep their own styling) */
+.prose code:not(pre code) {
+  background-color: var(--color-deck-700);
+  border-radius: 5px;
+  padding: 0.15em 0.4em;
+  font-weight: 600;
+}
+
 /* whole-card glow while a claude run is active */
 @keyframes running-glow {
   0%,
