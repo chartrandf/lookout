@@ -27,7 +27,7 @@ type View = 'discovery' | 'board' | 'settings'
 
 // Single source of truth for tab order: shortcuts (⌘1..⌘n) derive from the index
 const TAB_ORDER: { view: View; label: string }[] = [
-  { view: 'board', label: 'Board' },
+  { view: 'board', label: 'Reviews' },
   { view: 'discovery', label: 'Discovery' },
   { view: 'settings', label: 'Settings' },
 ]
