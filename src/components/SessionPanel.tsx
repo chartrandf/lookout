@@ -183,6 +183,34 @@ const StopIcon = () => (
   </svg>
 )
 
+// URLs in session output: click to open in the in-app browser window
+// (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
+const URL_SPLIT = /(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]])/g
+
+const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string) => void }) => (
+  <>
+    {text.split(URL_SPLIT).map((part, i) =>
+      i % 2 === 1 ? (
+        <a
+          // biome-ignore lint/suspicious/noArrayIndexKey: static text snapshot
+          key={i}
+          href={part}
+          title="Open in app browser"
+          onClick={(e) => {
+            e.preventDefault()
+            onOpen(part)
+          }}
+          className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-grass-300"
+        >
+          {part}
+        </a>
+      ) : (
+        part
+      ),
+    )}
+  </>
+)
+
 const lineClass: Record<string, string> = {
   text: 'text-deck-200 whitespace-pre-wrap',
   tool: 'text-deck-500 font-mono text-xs',
@@ -534,7 +562,10 @@ export const SessionPanel = ({
                     {run.lines.map((l, i) => (
                       // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
                       <p key={i} className={lineClass[l.kind]}>
-                        {l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                        <Linkify
+                          text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                          onOpen={(url) => openPrWindow(url, task.repo, task.prNumber)}
+                        />
                       </p>
                     ))}
                     {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
