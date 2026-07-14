@@ -303,11 +303,10 @@ export const SessionPanel = ({
 
   const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
-  // latest event is a review report -> always offer the input to reply into the review session
-  const latestIsReport = !!feed?.at(-1)?.filePath
-  const canResume = !run && latestIsReport && !!sessionId && !!task.repoPath
-  const canReply = canResume || (!!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId)
-  const showReply = (!!run && run.status !== 'closed') || canResume
+  // generic chat: as soon as the card has a session, the input talks to the latest one
+  // (live run -> reply into it; none -> resume the last session)
+  const showReply = (!!run && run.status !== 'closed') || (!!sessionId && !!task.repoPath)
+  const canReply = !running && !!sessionId && (!!run || !!task.repoPath)
 
   const copySessionId = async () => {
     if (!sessionId || !task.repoPath) return
@@ -645,7 +644,7 @@ export const SessionPanel = ({
               onCancel={onCancel}
               canReply={canReply}
               running={running}
-              placeholder='e.g. "1,3" to push comments, "all", or free text…'
+              placeholder="Message the latest claude session…"
             />
           </div>
         )}
