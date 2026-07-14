@@ -629,6 +629,12 @@ export const SessionPanel = ({
                       className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
                       title={new Date(e.ts).toLocaleString()}
                     >
+                      {/* ✓✓ = that claude session has concluded (not running anymore) */}
+                      {e.sessionId && !(run?.sessionId === e.sessionId && run.status === 'running') && (
+                        <span className="mr-1 text-grass-400" title="session completed">
+                          ✓✓
+                        </span>
+                      )}
                       {timeAgo(e.ts)}
                     </span>
                   </li>

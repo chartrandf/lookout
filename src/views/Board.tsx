@@ -145,17 +145,17 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex h-full flex-col gap-3">
       {snoozedCount > 0 && (
         <button
           type="button"
           onClick={() => setShowSnoozed((s) => !s)}
-          className="cursor-pointer self-end text-xs text-deck-400 hover:text-deck-200"
+          className="shrink-0 cursor-pointer self-end text-xs text-deck-400 hover:text-deck-200"
         >
           {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
         </button>
       )}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         {COLUMNS.map((col, colIdx) => {
           const items = visible
             .filter((t) => col.stage.includes(t.stage))
@@ -181,7 +181,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
                 e.preventDefault()
                 drop(items, col.stage[0], null)
               }}
-              className={`flex flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+              className={`flex min-h-0 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
                 dropTarget === colIdx && canDrop
                   ? 'bg-grass-600/30 ring-1 ring-grass-500'
                   : dragging
@@ -189,51 +189,53 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
                     : 'bg-grass-600/10'
               }`}
             >
-              <h3 className="px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+              <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
                 {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
-              {items.map((t) => (
-                // wrapper (line + card) is the drop target: hovering the line itself stays stable
-                // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
-                <div
-                  key={t.id}
-                  className="flex flex-col gap-2"
-                  onDragOver={(e) => {
-                    if (!dragging) return
-                    e.preventDefault()
-                    e.stopPropagation()
-                    e.dataTransfer.dropEffect = 'move'
-                    setDropTarget(colIdx)
-                    setDropLine((cur) =>
-                      cur?.col === colIdx && cur.before === t.id ? cur : { col: colIdx, before: t.id },
-                    )
-                  }}
-                  onDrop={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    drop(items, col.stage[0], t)
-                  }}
-                >
-                  {dropLine?.col === colIdx && dropLine.before === t.id && !isNoMove(items, t) && (
-                    <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
-                  )}
-                  <Card
-                    t={t}
-                    run={runByTask.get(t.id)}
-                    onOpen={() => onOpenSession(t)}
-                    onSeen={() => onSeen(t)}
-                    onDragStart={() => setDragging(t)}
-                    onDragEnd={() => {
-                      setDragging(null)
-                      setDropTarget(null)
-                      setDropLine(null)
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+                {items.map((t) => (
+                  // wrapper (line + card) is the drop target: hovering the line itself stays stable
+                  // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
+                  <div
+                    key={t.id}
+                    className="flex flex-col gap-2"
+                    onDragOver={(e) => {
+                      if (!dragging) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.dataTransfer.dropEffect = 'move'
+                      setDropTarget(colIdx)
+                      setDropLine((cur) =>
+                        cur?.col === colIdx && cur.before === t.id ? cur : { col: colIdx, before: t.id },
+                      )
                     }}
-                  />
-                </div>
-              ))}
-              {dropLine?.col === colIdx && dropLine.before === null && !isNoMove(items, null) && (
-                <div className="h-0.5 rounded-full bg-grass-400" />
-              )}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      drop(items, col.stage[0], t)
+                    }}
+                  >
+                    {dropLine?.col === colIdx && dropLine.before === t.id && !isNoMove(items, t) && (
+                      <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
+                    )}
+                    <Card
+                      t={t}
+                      run={runByTask.get(t.id)}
+                      onOpen={() => onOpenSession(t)}
+                      onSeen={() => onSeen(t)}
+                      onDragStart={() => setDragging(t)}
+                      onDragEnd={() => {
+                        setDragging(null)
+                        setDropTarget(null)
+                        setDropLine(null)
+                      }}
+                    />
+                  </div>
+                ))}
+                {dropLine?.col === colIdx && dropLine.before === null && !isNoMove(items, null) && (
+                  <div className="h-0.5 shrink-0 rounded-full bg-grass-400" />
+                )}
+              </div>
             </div>
           )
         })}
