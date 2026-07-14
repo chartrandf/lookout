@@ -321,10 +321,10 @@ export const SessionPanel = ({
     setTimeout(() => setCopiedBranch(false), 1500)
   }
 
-  // follow-up all green (nothing pending/partial) -> offer one-click approval, unless already approved
+  // one-click approval: follow-up all green (nothing pending/partial), or card already in reviewed
   const allGreen = !!task.followupSummary && task.followupSummary.pending === 0 && task.followupSummary.partial === 0
   const alreadyApproved = feed?.some((e) => e.mine && e.text === 'review: approved') ?? true // hidden until feed loads
-  const canApprove = allGreen && !alreadyApproved
+  const canApprove = (allGreen || task.stage === 'reviewed') && !alreadyApproved
 
   const approve = async () => {
     setApproving(true)
@@ -497,7 +497,7 @@ export const SessionPanel = ({
               type="button"
               onClick={approve}
               disabled={approving || approved}
-              title="Follow-up is all green — approve the PR on GitHub and move it to Done"
+              title="Approve the PR on GitHub and move it to Done"
               className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
             >
               <span className="flex items-center gap-1.5">
