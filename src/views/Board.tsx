@@ -56,49 +56,53 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
       </span>
     </div>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">
-      {t.prState !== 'open' && (
+      {(t.prState !== 'open' || t.stage === 'done') && (
         <span
-          className={`rounded px-1 py-0.5 ${t.prState === 'merged' ? 'bg-purple-500/20 text-purple-300' : 'bg-red-500/20 text-red-300'}`}
+          className={`rounded px-1 py-0.5 ${t.prState === 'merged' ? 'bg-purple-500/20 text-purple-300' : t.prState === 'open' ? 'bg-grass-500/20 text-grass-300' : 'bg-red-500/20 text-red-300'}`}
         >
           {t.prState}
         </span>
       )}
-      {run?.status === 'running' && (
-        <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
+      {t.stage !== 'done' && (
+        <>
+          {run?.status === 'running' && (
+            <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
+          )}
+          {run?.status === 'awaiting-input' && (
+            <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">awaiting input</span>
+          )}
+          {t.sessionIds.length > 0 && (
+            <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.sessionIds.join('\n')}>
+              {t.sessionIds.length} session{t.sessionIds.length > 1 ? 's' : ''}
+            </span>
+          )}
+          {t.reviewFiles.length > 0 && (
+            <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.reviewFiles.join('\n')}>
+              {t.reviewFiles.length} review{t.reviewFiles.length > 1 ? 's' : ''}
+            </span>
+          )}
+          {t.followupSummary && (
+            <span className="rounded bg-deck-700 px-1 py-0.5">
+              🚨{t.followupSummary.pending} ⚠️{t.followupSummary.partial} ✅{t.followupSummary.addressed}
+            </span>
+          )}
+          {t.hasNewActivity && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onSeen()
+              }}
+              title="New comments/reviews since last look — click to dismiss"
+              className="cursor-pointer rounded bg-amber-500/20 px-1 py-0.5 text-amber-300 hover:bg-amber-500/40"
+            >
+              💬 new
+            </button>
+          )}
+          {t.ciState === 'fail' && <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>}
+          {t.ciState === 'pending' && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">CI …</span>}
+        </>
       )}
-      {run?.status === 'awaiting-input' && (
-        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">awaiting input</span>
-      )}
-      {t.sessionIds.length > 0 && (
-        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.sessionIds.join('\n')}>
-          {t.sessionIds.length} session{t.sessionIds.length > 1 ? 's' : ''}
-        </span>
-      )}
-      {t.reviewFiles.length > 0 && (
-        <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.reviewFiles.join('\n')}>
-          {t.reviewFiles.length} review{t.reviewFiles.length > 1 ? 's' : ''}
-        </span>
-      )}
-      {t.followupSummary && (
-        <span className="rounded bg-deck-700 px-1 py-0.5">
-          🚨{t.followupSummary.pending} ⚠️{t.followupSummary.partial} ✅{t.followupSummary.addressed}
-        </span>
-      )}
-      {t.hasNewActivity && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onSeen()
-          }}
-          title="New comments/reviews since last look — click to dismiss"
-          className="cursor-pointer rounded bg-amber-500/20 px-1 py-0.5 text-amber-300 hover:bg-amber-500/40"
-        >
-          💬 new
-        </button>
-      )}
-      {t.ciState === 'fail' && <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>}
-      {t.ciState === 'pending' && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">CI …</span>}
     </div>
   </div>
 )

@@ -116,6 +116,7 @@ const App = () => {
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
+    if (stage === 'done') closeRun(id) // done = my part is over, no reply expected
     await reload()
   }
 
@@ -220,7 +221,13 @@ const App = () => {
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
-        {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
+        {badge ? (
+          <span
+            className={`ml-1.5 rounded-full px-1.5 text-xs ${v === 'discovery' ? 'bg-deck-700 text-deck-300' : 'bg-amber-500 text-black'}`}
+          >
+            {badge}
+          </span>
+        ) : null}
         <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
           ⌘{index + 1}
         </span>
