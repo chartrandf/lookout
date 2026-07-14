@@ -573,10 +573,10 @@ export const SessionPanel = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto bg-deck-950 p-4">
+        <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto bg-deck-950 px-4 pb-4">
           {/* mt-auto anchors the chat to the bottom until it overflows, like a real chat */}
           <div className="mt-auto">
-            <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
+            <h4 className="sticky top-0 z-10 -mx-4 flex items-center justify-between bg-deck-950 px-4 pt-4 pb-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
               history
               <button
                 type="button"

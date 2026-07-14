@@ -1,5 +1,5 @@
 import Database from '@tauri-apps/plugin-sql'
-import type { ReviewTask, Stage } from '../types'
+import type { AppNotification, ReviewTask, Stage } from '../types'
 
 let db: Database | null = null
 
@@ -169,6 +169,56 @@ export const setFollowupSummary = async (
     new Date().toISOString(),
     id,
   ])
+}
+
+type NotificationRow = {
+  id: number
+  task_id: string
+  title: string
+  body: string
+  read: number
+  created_at: string
+}
+
+export const allNotifications = async (): Promise<AppNotification[]> => {
+  const d = await getDb()
+  const rows = await d.select<NotificationRow[]>(
+    'SELECT * FROM notifications WHERE archived = 0 ORDER BY id DESC LIMIT 100',
+  )
+  return rows.map((r) => ({
+    id: r.id,
+    taskId: r.task_id,
+    title: r.title,
+    body: r.body,
+    read: r.read === 1,
+    createdAt: r.created_at,
+  }))
+}
+
+export const addNotification = async (taskId: string, title: string, body: string): Promise<number> => {
+  const d = await getDb()
+  const res = await d.execute('INSERT INTO notifications (task_id, title, body, created_at) VALUES ($1, $2, $3, $4)', [
+    taskId,
+    title,
+    body,
+    new Date().toISOString(),
+  ])
+  return res.lastInsertId ?? 0
+}
+
+export const markNotificationRead = async (id: number) => {
+  const d = await getDb()
+  await d.execute('UPDATE notifications SET read = 1 WHERE id = $1', [id])
+}
+
+export const markAllNotificationsRead = async () => {
+  const d = await getDb()
+  await d.execute('UPDATE notifications SET read = 1 WHERE read = 0')
+}
+
+export const archiveReadNotifications = async () => {
+  const d = await getDb()
+  await d.execute('UPDATE notifications SET archived = 1 WHERE read = 1')
 }
 
 export const setLinks = async (id: string, sessionIds: string[], reviewFiles: string[]) => {

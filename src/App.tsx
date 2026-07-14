@@ -1,22 +1,29 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
+import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
 import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
 import {
+  addNotification,
   addSessionId,
+  allNotifications,
   allTasks,
+  archiveReadNotifications,
   clearNewActivity,
+  markAllNotificationsRead,
+  markNotificationRead,
   setFollowupSummary,
   setLinks,
   setOrders,
   setSnoozed,
   setStage,
 } from './lib/db'
+import { notify, onNotificationClick } from './lib/notify'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
-import { initTray, setTrayCount } from './lib/tray'
-import type { Config, ReviewTask, Stage, WatchedRepo } from './types'
+import { initTray, setTrayCount, showMainWindow } from './lib/tray'
+import type { AppNotification, Config, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
 import { Settings } from './views/Settings'
@@ -46,10 +53,13 @@ const App = () => {
   const [error, setError] = useState<string | null>(null)
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
 
   const reload = useCallback(async () => setTasks(await allTasks()), [])
+
+  const reloadNotifications = useCallback(async () => setNotifications(await allNotifications()), [])
 
   const refresh = useCallback(async () => {
     setSyncing(true)
@@ -69,10 +79,27 @@ const App = () => {
     initTray()
     getConfig().then(setConfig)
     reload()
+    reloadNotifications()
     refresh()
     const interval = setInterval(refresh, POLL_MS)
     return () => clearInterval(interval)
-  }, [refresh, reload])
+  }, [refresh, reload, reloadNotifications])
+
+  // OS notification click: mark read + open the card panel (plugin only delivers clicks on mobile today)
+  useEffect(() => {
+    const listener = onNotificationClick(async ({ notificationId, taskId }) => {
+      if (notificationId) await markNotificationRead(notificationId)
+      await reloadNotifications()
+      await showMainWindow()
+      if (taskId) {
+        setView('board')
+        setPanelTaskId(taskId)
+      }
+    }).catch(() => null)
+    return () => {
+      listener.then((l) => l?.unregister())
+    }
+  }, [reloadNotifications])
 
   // ⌘1..⌘n switch tabs, indexes follow TAB_ORDER
   useEffect(() => {
@@ -89,6 +116,7 @@ const App = () => {
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
+    if (stage === 'done') closeRun(id) // done = my part is over, no reply expected
     await reload()
   }
 
@@ -108,6 +136,16 @@ const App = () => {
     if (files.length) await setLinks(t.id, t.sessionIds, files)
   }
 
+  const notifySessionDone = async (taskId: string, command: 'do-review' | 'do-followup') => {
+    const t = (await allTasks()).find((x) => x.id === taskId)
+    if (!t) return
+    const title = `${command === 'do-followup' ? 'Follow up' : 'Review'} done (${t.repo})`
+    const body = `${t.prTitle} by ${t.prAuthor}`
+    const id = await addNotification(t.id, title, body)
+    notify(title, body, { notificationId: id, taskId: t.id })
+    await reloadNotifications()
+  }
+
   const runCallbacks = (command: 'do-review' | 'do-followup') => ({
     onSession: async (taskId: string, sessionId: string) => {
       await addSessionId(taskId, sessionId)
@@ -123,6 +161,7 @@ const App = () => {
         await setStage(taskId, 'reviewed')
         await linkReviewReport(taskId)
       }
+      await notifySessionDone(taskId, command)
       await reload()
     },
   })
@@ -147,6 +186,13 @@ const App = () => {
   const openCard = (t: ReviewTask) => {
     setView('board')
     setPanelTaskId(t.id)
+  }
+
+  const openNotification = async (n: AppNotification) => {
+    await markNotificationRead(n.id)
+    await reloadNotifications()
+    const t = tasks.find((x) => x.id === n.taskId)
+    if (t) openCard(t)
   }
 
   const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
@@ -175,7 +221,13 @@ const App = () => {
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
-        {badge ? <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 text-xs text-black">{badge}</span> : null}
+        {badge ? (
+          <span
+            className={`ml-1.5 rounded-full px-1.5 text-xs ${v === 'discovery' ? 'bg-deck-700 text-deck-300' : 'bg-amber-500 text-black'}`}
+          >
+            {badge}
+          </span>
+        ) : null}
         <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
           ⌘{index + 1}
         </span>
@@ -199,6 +251,18 @@ const App = () => {
           />
         </div>
         {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
+        <NotificationBell
+          notifications={notifications}
+          onOpen={openNotification}
+          onMarkAllRead={async () => {
+            await markAllNotificationsRead()
+            await reloadNotifications()
+          }}
+          onArchiveRead={async () => {
+            await archiveReadNotifications()
+            await reloadNotifications()
+          }}
+        />
       </header>
 
       {/* status bar: above the board, but under the card side panel (z-20) */}
