@@ -100,5 +100,5 @@ export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent
   }
 
   const asc = events.sort((a, b) => a.ts.localeCompare(b.ts))
-  return groupCommits(asc).reverse() // recent first
+  return groupCommits(asc) // chronological: newest last, next to the reply input
 }

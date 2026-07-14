@@ -2,7 +2,7 @@
 
 **Your GitHub lookout.**
 
-> ⚠️ **Work in progress.** The review flow is not complete, and this has only been tested against the author's personal Claude Code slash commands — it may not work out of the box for you. Configure the dispatched prompts in **Settings → Claude commands** (defaults use Claude Code's built-in `/review`; placeholders `<branch_name>` and `<pr_id>` are supported).
+> ⚠️ **Opinionated.** This app encodes the author's personal review flow (discover → dispatch a Claude review → push comments → follow up → approve) and has only been tested against their personal Claude Code slash commands — it may not fit yours out of the box. Configure the dispatched prompts in **Settings → Claude commands** (defaults use Claude Code's built-in `/review`; placeholders `<branch_name>` and `<pr_id>` are supported).
 
 Desktop overview of all your Claude Code review sessions: discover open PRs across hand-picked repos, dispatch review/follow-up sessions, track follow-ups, auto-clear merged PRs.
 
@@ -21,7 +21,7 @@ Requirements: Rust toolchain, `gh` (authenticated), `claude` CLI.
 
 1. **Settings** — add local clone paths; `owner/repo` is detected from each clone's git origin. Your GitHub login is auto-detected; your own PRs are never listed.
 2. **Discovery** — new open PRs land here. **Review** (add to board + dispatch `/do-review`), **Watch** (add to board), **Ignore** (hide forever). PRs you already reviewed or commented on skip Discovery.
-3. **Board** — Watching / Needs Review / In Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
+3. **Reviews** — Watching / Needs Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
 4. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
 
 ## Font

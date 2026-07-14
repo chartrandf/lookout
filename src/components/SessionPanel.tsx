@@ -21,8 +21,69 @@ type Props = {
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
+  onCancel: () => void
   onDismissRun: () => void
   onClose: () => void
+}
+
+type ReplyBoxProps = {
+  value: string
+  onChange: (v: string) => void
+  onSend: () => void
+  onCancel: () => void
+  canReply: boolean
+  running: boolean
+  placeholder: string
+}
+
+// Auto-growing reply field: Enter sends, Shift+Enter adds a line, cancel aborts a running turn
+const ReplyBox = ({ value, onChange, onSend, onCancel, canReply, running, placeholder }: ReplyBoxProps) => {
+  const ref = useRef<HTMLTextAreaElement>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure on every value change
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [value])
+  return (
+    <div className="flex items-end gap-2">
+      <textarea
+        ref={ref}
+        rows={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault()
+            onSend()
+          }
+        }}
+        disabled={!canReply}
+        placeholder={running ? 'claude is working… cancel to send something else' : placeholder}
+        className="max-h-40 flex-1 resize-none overflow-y-auto rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
+      />
+      {running ? (
+        <button
+          type="button"
+          onClick={onCancel}
+          title="Cancel this turn — the session stays resumable, then send a new message"
+          className="cursor-pointer rounded-md border border-red-400/40 bg-red-500/20 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/40"
+        >
+          ■ cancel
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onSend}
+          disabled={!canReply}
+          className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
+        >
+          Send
+        </button>
+      )}
+    </div>
+  )
 }
 
 const STAGES: { value: Stage; label: string }[] = [
@@ -122,6 +183,34 @@ const StopIcon = () => (
   </svg>
 )
 
+// URLs in session output: click to open in the in-app browser window
+// (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
+const URL_SPLIT = /(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]])/g
+
+const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string) => void }) => (
+  <>
+    {text.split(URL_SPLIT).map((part, i) =>
+      i % 2 === 1 ? (
+        <a
+          // biome-ignore lint/suspicious/noArrayIndexKey: static text snapshot
+          key={i}
+          href={part}
+          title="Open in app browser"
+          onClick={(e) => {
+            e.preventDefault()
+            onOpen(part)
+          }}
+          className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-grass-300"
+        >
+          {part}
+        </a>
+      ) : (
+        part
+      ),
+    )}
+  </>
+)
+
 const lineClass: Record<string, string> = {
   text: 'text-deck-200 whitespace-pre-wrap',
   tool: 'text-deck-500 font-mono text-xs',
@@ -138,6 +227,7 @@ export const SessionPanel = ({
   onStageChange,
   onSnooze,
   onKill,
+  onCancel,
   onDismissRun,
   onClose,
 }: Props) => {
@@ -168,8 +258,19 @@ export const SessionPanel = ({
     setFeed(null)
     setReport(null)
     buildFeed(task, me).then(setFeed)
-    scrollRef.current?.scrollTo({ top: 0 })
   }, [task.id])
+
+  // chronological feed: keep the newest events in view, next to the reply input
+  useEffect(() => {
+    if (feed) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
+  }, [feed])
+
+  // refresh history when a run finishes or a new report gets linked (no manual ↻ needed)
+  const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh triggers only
+  useEffect(() => {
+    if (runIdle) buildFeed(task, me).then(setFeed)
+  }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
     try {
@@ -202,7 +303,10 @@ export const SessionPanel = ({
 
   const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
-  const canReply = !!run && run.status !== 'running' && run.status !== 'closed' && !!sessionId
+  // generic chat: as soon as the card has a session, the input talks to the latest one
+  // (live run -> reply into it; none -> resume the last session)
+  const showReply = (!!run && run.status !== 'closed') || (!!sessionId && !!task.repoPath)
+  const canReply = !running && !!sessionId && (!!run || !!task.repoPath)
 
   const copySessionId = async () => {
     if (!sessionId || !task.repoPath) return
@@ -217,10 +321,10 @@ export const SessionPanel = ({
     setTimeout(() => setCopiedBranch(false), 1500)
   }
 
-  // follow-up all green (nothing pending/partial) -> offer one-click approval, unless already approved
+  // one-click approval: follow-up all green (nothing pending/partial), or card already in reviewed
   const allGreen = !!task.followupSummary && task.followupSummary.pending === 0 && task.followupSummary.partial === 0
   const alreadyApproved = feed?.some((e) => e.mine && e.text === 'review: approved') ?? true // hidden until feed loads
-  const canApprove = allGreen && !alreadyApproved
+  const canApprove = (allGreen || task.stage === 'reviewed') && !alreadyApproved
 
   const approve = async () => {
     setApproving(true)
@@ -393,7 +497,7 @@ export const SessionPanel = ({
               type="button"
               onClick={approve}
               disabled={approving || approved}
-              title="Follow-up is all green — approve the PR on GitHub and move it to Done"
+              title="Approve the PR on GitHub and move it to Done"
               className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
             >
               <span className="flex items-center gap-1.5">
@@ -424,9 +528,10 @@ export const SessionPanel = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-          {run && run.lines.length > 0 && (
-            <div className="mb-4 rounded-lg border border-deck-700 bg-deck-800/50">
+        {/* terminal stays pinned above the chat: only history events scroll */}
+        {run && run.lines.length > 0 && (
+          <div className="shrink-0 border-b border-deck-800 p-4 pb-3">
+            <div className="rounded-lg border border-deck-700 bg-deck-800/50">
               <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
                 <button
                   type="button"
@@ -455,96 +560,101 @@ export const SessionPanel = ({
                   {run.lines.map((l, i) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
                     <p key={i} className={lineClass[l.kind]}>
-                      {l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                      <Linkify
+                        text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                        onOpen={(url) => openPrWindow(url, task.repo, task.prNumber)}
+                      />
                     </p>
                   ))}
                   {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
                 </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
-            history
-            <button
-              type="button"
-              onClick={() => buildFeed(task, me).then(setFeed)}
-              className="cursor-pointer text-deck-500 hover:text-deck-200"
-              title="Refresh history"
-            >
-              ↻
-            </button>
-          </h4>
-          {!feed && <p className="text-sm text-deck-500">loading history…</p>}
-          {feed?.length === 0 && <p className="text-sm text-deck-500">No events yet.</p>}
-          <ul className="flex flex-col gap-2">
-            {feed?.map((e, i) => {
-              const body = (
-                <>
-                  <span className="mr-1.5">{e.icon}</span>
-                  <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
-                  {e.filePath && ' ↗'}
-                  {e.sessionId && ' 👻'}
-                </>
-              )
-              const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
-                e.mine
-                  ? 'rounded-br-sm bg-grass-600/25 text-grass-100'
-                  : 'rounded-bl-sm border border-deck-700 bg-deck-800 text-deck-200'
-              }`
-              return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
-                <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
-                  {e.filePath || e.url || e.sessionId ? (
-                    <button
-                      type="button"
-                      title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
-                      onClick={() =>
-                        e.filePath
-                          ? openReport(e.filePath)
-                          : e.sessionId
-                            ? resumeSession(e.sessionId)
-                            : openPrWindow(e.url as string, task.repo, task.prNumber)
-                      }
-                      className={`${bubbleClass} cursor-pointer text-left hover:underline`}
-                    >
-                      {body}
-                    </button>
-                  ) : (
-                    <div className={bubbleClass}>{body}</div>
-                  )}
-                  <span
-                    className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
-                    title={new Date(e.ts).toLocaleString()}
-                  >
-                    {timeAgo(e.ts)}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-
-        {run && run.status !== 'closed' && (
-          <div className="border-t border-deck-800 p-3">
-            <div className="flex gap-2">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && send()}
-                disabled={!canReply}
-                placeholder={canReply ? 'e.g. "1,3" to push comments, "all", or free text…' : 'session running…'}
-                className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500 disabled:opacity-50"
-              />
+        <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto bg-deck-950 p-4">
+          {/* mt-auto anchors the chat to the bottom until it overflows, like a real chat */}
+          <div className="mt-auto">
+            <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
+              history
               <button
                 type="button"
-                onClick={send}
-                disabled={!canReply}
-                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
+                onClick={() => buildFeed(task, me).then(setFeed)}
+                className="cursor-pointer text-deck-500 hover:text-deck-200"
+                title="Refresh history"
               >
-                Send
+                ↻
               </button>
-            </div>
+            </h4>
+            {!feed && <p className="text-sm text-deck-500">loading history…</p>}
+            {feed?.length === 0 && <p className="text-sm text-deck-500">No events yet.</p>}
+            <ul className="flex flex-col gap-2">
+              {feed?.map((e, i) => {
+                const body = (
+                  <>
+                    <span className="mr-1.5">{e.icon}</span>
+                    <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
+                    {e.filePath && ' ↗'}
+                    {e.sessionId && ' 👻'}
+                  </>
+                )
+                const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
+                  e.mine
+                    ? 'rounded-br-sm bg-grass-600/25 text-grass-100'
+                    : 'rounded-bl-sm border border-deck-700 bg-deck-800 text-deck-200'
+                }`
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
+                  <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
+                    {e.filePath || e.url || e.sessionId ? (
+                      <button
+                        type="button"
+                        title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
+                        onClick={() =>
+                          e.filePath
+                            ? openReport(e.filePath)
+                            : e.sessionId
+                              ? resumeSession(e.sessionId)
+                              : openPrWindow(e.url as string, task.repo, task.prNumber)
+                        }
+                        className={`${bubbleClass} cursor-pointer text-left hover:underline`}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div className={bubbleClass}>{body}</div>
+                    )}
+                    <span
+                      className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
+                      title={new Date(e.ts).toLocaleString()}
+                    >
+                      {/* ✓✓ = that claude session has concluded (not running anymore) */}
+                      {e.sessionId && !(run?.sessionId === e.sessionId && run.status === 'running') && (
+                        <span className="mr-1 text-grass-400" title="session completed">
+                          ✓✓
+                        </span>
+                      )}
+                      {timeAgo(e.ts)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </div>
+
+        {showReply && (
+          <div className="border-t border-deck-800 p-3">
+            <ReplyBox
+              value={input}
+              onChange={setInput}
+              onSend={send}
+              onCancel={onCancel}
+              canReply={canReply}
+              running={running}
+              placeholder="Message the latest claude session…"
+            />
           </div>
         )}
 
@@ -562,26 +672,21 @@ export const SessionPanel = ({
               <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.path.split('/').at(-1)}</p>
             </div>
             <div
-              className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
+              className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
               // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
               dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
             />
-            {canReply && (
-              <div className="flex gap-2 border-t border-deck-800 p-3">
-                <input
+            {showReply && (
+              <div className="border-t border-deck-800 p-3">
+                <ReplyBox
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && send()}
+                  onChange={setInput}
+                  onSend={send}
+                  onCancel={onCancel}
+                  canReply={canReply}
+                  running={running}
                   placeholder='send comments from here — e.g. "1,3" or "all"'
-                  className="flex-1 rounded border border-deck-600 bg-deck-800 px-2 py-1.5 text-sm outline-none focus:border-grass-500"
                 />
-                <button
-                  type="button"
-                  onClick={send}
-                  className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500"
-                >
-                  Send
-                </button>
               </div>
             )}
           </div>

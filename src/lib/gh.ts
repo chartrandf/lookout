@@ -109,8 +109,9 @@ export const approvePr = async (repo: string, prNumber: number) => {
 
 export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
 
-// Activity = review comments + reviews + issue comments; CI from status check rollup
-export const fetchPrActivity = async (repo: string, prNumber: number): Promise<PrActivity> => {
+// Activity = review comments + reviews + issue comments, excluding my own (my actions are not "new" to me);
+// CI from status check rollup
+export const fetchPrActivity = async (repo: string, prNumber: number, me: string): Promise<PrActivity> => {
   const out = JSON.parse(
     await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,statusCheckRollup']),
   )
@@ -123,5 +124,7 @@ export const fetchPrActivity = async (repo: string, prNumber: number): Promise<P
       ciState = 'pending'
     else ciState = 'pass'
   }
-  return { count: (out.comments?.length ?? 0) + (out.reviews?.length ?? 0), ciState }
+  const notMine = (list?: { author?: { login?: string } }[]) =>
+    (list ?? []).filter((c) => c.author?.login !== me).length
+  return { count: notMine(out.comments) + notMine(out.reviews), ciState }
 }

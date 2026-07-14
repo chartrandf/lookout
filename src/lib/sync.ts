@@ -106,7 +106,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     // watch boarded PRs for new comments / CI failures
     if (ACTIVE_STAGES.has(t.stage) && polledRepos.has(t.repo) && openIds.has(t.id)) {
       try {
-        const { count, ciState } = await fetchPrActivity(t.repo, t.prNumber)
+        const { count, ciState } = await fetchPrActivity(t.repo, t.prNumber, me)
         const baseline = t.activityCount === null // first fetch: set silently
         const isNew = !baseline && count > (t.activityCount ?? 0)
         await setActivity(t.id, count, ciState, isNew)
