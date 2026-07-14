@@ -61,15 +61,22 @@ export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchi
     setTimeout(() => setOpen(false), 200) // let the exit transition finish
   }
 
-  // dismiss when clicking outside
-  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for this listener
+  // dismiss when clicking outside or pressing Esc
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for these listeners
   useEffect(() => {
     if (!open) return
     const onClick = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) close()
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
     window.addEventListener('mousedown', onClick)
-    return () => window.removeEventListener('mousedown', onClick)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', onClick)
+      window.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
   return (
