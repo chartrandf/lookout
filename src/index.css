@@ -66,3 +66,11 @@
   /* biome-ignore lint/complexity/noImportantStyles: must beat tailwind utilities on the element */
   background-color: rgb(78 207 135 / 0.08) !important;
 }
+/* new PR activity since my last look: same treatment, amber like the 💬 new badge */
+.card-new {
+  box-shadow: 0 0 0 1px rgb(251 191 36 / 0.4);
+  /* biome-ignore lint/complexity/noImportantStyles: must beat tailwind utilities on the element */
+  border-color: rgb(251 191 36 / 0.4) !important;
+  /* biome-ignore lint/complexity/noImportantStyles: must beat tailwind utilities on the element */
+  background-color: rgb(251 191 36 / 0.06) !important;
+}

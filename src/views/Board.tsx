@@ -54,7 +54,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd, onDropBefore }: 
       e.stopPropagation()
       onDropBefore()
     }}
-    className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' ? 'card-awaiting' : ''}`}
+    className={`cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10 ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' ? 'card-awaiting' : t.hasNewActivity ? 'card-new' : ''}`}
   >
     <p className="text-sm font-medium leading-snug">{t.prTitle}</p>
     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-deck-400">
