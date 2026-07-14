@@ -633,7 +633,7 @@ export const SessionPanel = ({
               <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.path.split('/').at(-1)}</p>
             </div>
             <div
-              className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
+              className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
               // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
               dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
             />
