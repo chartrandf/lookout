@@ -501,105 +501,108 @@ export const SessionPanel = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-          {run && run.lines.length > 0 && (
-            <div className="mb-4 rounded-lg border border-deck-700 bg-deck-800/50">
-              <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
-                <button
-                  type="button"
-                  onClick={() => setShowRun((s) => !s)}
-                  className="flex flex-1 cursor-pointer items-center justify-between"
-                >
-                  <span>
-                    claude session output
-                    {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
-                  </span>
-                  <span>{showRun ? '▾' : '▸'}</span>
-                </button>
-                {!running && (
+        <div ref={scrollRef} className="flex flex-1 flex-col overflow-y-auto bg-deck-950 p-4">
+          {/* mt-auto anchors the chat to the bottom until it overflows, like a real chat */}
+          <div className="mt-auto">
+            {run && run.lines.length > 0 && (
+              <div className="mb-4 rounded-lg border border-deck-700 bg-deck-800/50">
+                <div className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
                   <button
                     type="button"
-                    onClick={onDismissRun}
-                    title="Dismiss this session output"
-                    className="cursor-pointer normal-case text-deck-500 hover:text-deck-200"
+                    onClick={() => setShowRun((s) => !s)}
+                    className="flex flex-1 cursor-pointer items-center justify-between"
                   >
-                    ✕
+                    <span>
+                      claude session output
+                      {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
+                    </span>
+                    <span>{showRun ? '▾' : '▸'}</span>
                   </button>
-                )}
-              </div>
-              {showRun && (
-                <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
-                  {run.lines.map((l, i) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                    <p key={i} className={lineClass[l.kind]}>
-                      {l.kind === 'user' ? `❯ ${l.text}` : l.text}
-                    </p>
-                  ))}
-                  {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
-                </div>
-              )}
-            </div>
-          )}
-
-          <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
-            history
-            <button
-              type="button"
-              onClick={() => buildFeed(task, me).then(setFeed)}
-              className="cursor-pointer text-deck-500 hover:text-deck-200"
-              title="Refresh history"
-            >
-              ↻
-            </button>
-          </h4>
-          {!feed && <p className="text-sm text-deck-500">loading history…</p>}
-          {feed?.length === 0 && <p className="text-sm text-deck-500">No events yet.</p>}
-          <ul className="flex flex-col gap-2">
-            {feed?.map((e, i) => {
-              const body = (
-                <>
-                  <span className="mr-1.5">{e.icon}</span>
-                  <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
-                  {e.filePath && ' ↗'}
-                  {e.sessionId && ' 👻'}
-                </>
-              )
-              const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
-                e.mine
-                  ? 'rounded-br-sm bg-grass-600/25 text-grass-100'
-                  : 'rounded-bl-sm border border-deck-700 bg-deck-800 text-deck-200'
-              }`
-              return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
-                <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
-                  {e.filePath || e.url || e.sessionId ? (
+                  {!running && (
                     <button
                       type="button"
-                      title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
-                      onClick={() =>
-                        e.filePath
-                          ? openReport(e.filePath)
-                          : e.sessionId
-                            ? resumeSession(e.sessionId)
-                            : openPrWindow(e.url as string, task.repo, task.prNumber)
-                      }
-                      className={`${bubbleClass} cursor-pointer text-left hover:underline`}
+                      onClick={onDismissRun}
+                      title="Dismiss this session output"
+                      className="cursor-pointer normal-case text-deck-500 hover:text-deck-200"
                     >
-                      {body}
+                      ✕
                     </button>
-                  ) : (
-                    <div className={bubbleClass}>{body}</div>
                   )}
-                  <span
-                    className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
-                    title={new Date(e.ts).toLocaleString()}
-                  >
-                    {timeAgo(e.ts)}
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+                </div>
+                {showRun && (
+                  <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
+                    {run.lines.map((l, i) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+                      <p key={i} className={lineClass[l.kind]}>
+                        {l.kind === 'user' ? `❯ ${l.text}` : l.text}
+                      </p>
+                    ))}
+                    {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <h4 className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-deck-400">
+              history
+              <button
+                type="button"
+                onClick={() => buildFeed(task, me).then(setFeed)}
+                className="cursor-pointer text-deck-500 hover:text-deck-200"
+                title="Refresh history"
+              >
+                ↻
+              </button>
+            </h4>
+            {!feed && <p className="text-sm text-deck-500">loading history…</p>}
+            {feed?.length === 0 && <p className="text-sm text-deck-500">No events yet.</p>}
+            <ul className="flex flex-col gap-2">
+              {feed?.map((e, i) => {
+                const body = (
+                  <>
+                    <span className="mr-1.5">{e.icon}</span>
+                    <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
+                    {e.filePath && ' ↗'}
+                    {e.sessionId && ' 👻'}
+                  </>
+                )
+                const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
+                  e.mine
+                    ? 'rounded-br-sm bg-grass-600/25 text-grass-100'
+                    : 'rounded-bl-sm border border-deck-700 bg-deck-800 text-deck-200'
+                }`
+                return (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
+                  <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
+                    {e.filePath || e.url || e.sessionId ? (
+                      <button
+                        type="button"
+                        title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
+                        onClick={() =>
+                          e.filePath
+                            ? openReport(e.filePath)
+                            : e.sessionId
+                              ? resumeSession(e.sessionId)
+                              : openPrWindow(e.url as string, task.repo, task.prNumber)
+                        }
+                        className={`${bubbleClass} cursor-pointer text-left hover:underline`}
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <div className={bubbleClass}>{body}</div>
+                    )}
+                    <span
+                      className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
+                      title={new Date(e.ts).toLocaleString()}
+                    >
+                      {timeAgo(e.ts)}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         </div>
 
         {showReply && (
