@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
@@ -46,6 +46,8 @@ import { PullRequests } from './views/PullRequests'
 import { Settings } from './views/Settings'
 
 const POLL_MS = 10 * 60 * 1000
+// on tab change we do a lightweight sync of just that tab's data, but not more often than this
+const MIN_PARTIAL_MS = 60 * 1000
 
 type View = 'pulls' | 'discovery' | 'board' | 'settings'
 
@@ -75,26 +77,77 @@ const App = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
+  // last successful sync per data source, to throttle the on-tab-change partial syncs
+  const tasksSyncedAt = useRef(0)
+  const pullsSyncedAt = useRef(0)
+  const busy = useRef(false)
 
   const reload = useCallback(async () => setTasks(await allTasks()), [])
 
   const reloadNotifications = useCallback(async () => setNotifications(await allNotifications()), [])
 
-  const refresh = useCallback(async () => {
+  // serialize syncs (never overlap) and surface the shared syncing/error/lastSync UI state
+  const runSync = useCallback(async (fn: () => Promise<void>) => {
+    if (busy.current) return
+    busy.current = true
     setSyncing(true)
     setError(null)
     try {
-      setTasks(await syncAll())
-      const cfg = await getConfig()
-      setConfig(cfg)
-      setMyPrs(await syncMyPrs(cfg))
+      await fn()
       setLastSync(new Date())
     } catch (e) {
       setError(String(e))
     } finally {
+      busy.current = false
       setSyncing(false)
     }
   }, [])
+
+  // partial: Reviews + Discovery share the tasks dataset (syncAll)
+  const syncTasks = useCallback(
+    () =>
+      runSync(async () => {
+        setTasks(await syncAll())
+        tasksSyncedAt.current = Date.now()
+      }),
+    [runSync],
+  )
+
+  // partial: the Pull Requests board
+  const syncPulls = useCallback(
+    () =>
+      runSync(async () => {
+        setMyPrs(await syncMyPrs())
+        pullsSyncedAt.current = Date.now()
+      }),
+    [runSync],
+  )
+
+  // full sync: mount, the 10-min poll, the manual button, and after editing repos
+  const refresh = useCallback(
+    () =>
+      runSync(async () => {
+        setTasks(await syncAll())
+        const cfg = await getConfig()
+        setConfig(cfg)
+        setMyPrs(await syncMyPrs(cfg))
+        const now = Date.now()
+        tasksSyncedAt.current = now
+        pullsSyncedAt.current = now
+      }),
+    [runSync],
+  )
+
+  // change tab + kick a throttled partial sync of that tab's data (manual button stays the full sync)
+  const switchView = useCallback(
+    (v: View) => {
+      setView(v)
+      const now = Date.now()
+      if ((v === 'board' || v === 'discovery') && now - tasksSyncedAt.current >= MIN_PARTIAL_MS) syncTasks()
+      else if (v === 'pulls' && now - pullsSyncedAt.current >= MIN_PARTIAL_MS) syncPulls()
+    },
+    [syncTasks, syncPulls],
+  )
 
   useEffect(() => {
     initTray()
@@ -128,12 +181,12 @@ const App = () => {
       const idx = Number(e.key) - 1
       if (e.metaKey && !e.shiftKey && !e.altKey && TAB_ORDER[idx]) {
         e.preventDefault()
-        setView(TAB_ORDER[idx].view)
+        switchView(TAB_ORDER[idx].view)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [switchView])
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
@@ -307,7 +360,7 @@ const App = () => {
       <button
         key={v}
         type="button"
-        onClick={() => setView(v)}
+        onClick={() => switchView(v)}
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
