@@ -18,22 +18,25 @@ import {
   setSnoozed,
   setStage,
 } from './lib/db'
+import { syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick } from './lib/notify'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
-import type { AppNotification, Config, ReviewTask, Stage, WatchedRepo } from './types'
+import type { AppNotification, Config, MyPr, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
+import { PullRequests } from './views/PullRequests'
 import { Settings } from './views/Settings'
 
 const POLL_MS = 10 * 60 * 1000
 
-type View = 'discovery' | 'board' | 'settings'
+type View = 'pulls' | 'discovery' | 'board' | 'settings'
 
 // Single source of truth for tab order: shortcuts (⌘1..⌘n) derive from the index
 const TAB_ORDER: { view: View; label: string }[] = [
+  { view: 'pulls', label: 'Pull Requests' },
   { view: 'board', label: 'Reviews' },
   { view: 'discovery', label: 'Discovery' },
   { view: 'settings', label: 'Settings' },
@@ -48,6 +51,7 @@ const App = () => {
   const [view, setView] = useState<View>('board')
   const [config, setConfig] = useState<Config>({ githubUser: '', repos: [], commands: DEFAULT_COMMANDS })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
+  const [myPrs, setMyPrs] = useState<MyPr[]>([])
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -66,7 +70,9 @@ const App = () => {
     setError(null)
     try {
       setTasks(await syncAll())
-      setConfig(await getConfig())
+      const cfg = await getConfig()
+      setConfig(cfg)
+      setMyPrs(await syncMyPrs(cfg))
       setLastSync(new Date())
     } catch (e) {
       setError(String(e))
@@ -209,7 +215,12 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
-  const badges: Partial<Record<View, number>> = { board: awaitingCount, discovery: discoveredCount }
+  const inReviewCount = myPrs.filter((p) => p.column === 'in_review').length
+  const badges: Partial<Record<View, number>> = {
+    pulls: inReviewCount,
+    board: awaitingCount,
+    discovery: discoveredCount,
+  }
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
@@ -281,7 +292,10 @@ const App = () => {
       {error && <div className="mx-4 mt-3 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</div>}
 
       {/* board: columns scroll individually and stop 50px above the bottom (sync pill stays clear) */}
-      <main className={`flex-1 p-4 ${view === 'board' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}>
+      <main
+        className={`flex-1 p-4 ${view === 'board' || view === 'pulls' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
+      >
+        {view === 'pulls' && <PullRequests prs={myPrs} me={config.githubUser} />}
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
