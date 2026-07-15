@@ -163,9 +163,16 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
       )}
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {COLUMNS.map((col, colIdx) => {
+          const isDone = col.stage.includes('done')
           const items = visible
             .filter((t) => col.stage.includes(t.stage))
-            .sort((a, b) => (a.sortOrder ?? 1e9) - (b.sortOrder ?? 1e9) || b.updatedAt.localeCompare(a.updatedAt))
+            // Done ignores drag order: open cards first, merged/closed last (updatedAt tiebreak)
+            .sort((a, b) =>
+              isDone
+                ? (a.prState === 'open' ? 0 : 1) - (b.prState === 'open' ? 0 : 1) ||
+                  b.updatedAt.localeCompare(a.updatedAt)
+                : (a.sortOrder ?? 1e9) - (b.sortOrder ?? 1e9) || b.updatedAt.localeCompare(a.updatedAt),
+            )
           const canDrop = dragging !== null // any column: other = move stage, same = reorder
           return (
             // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
