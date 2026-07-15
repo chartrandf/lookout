@@ -80,6 +80,8 @@ const App = () => {
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+  // in-review PR ids already seen; the Pull Requests attention dot shows only for unseen ones
+  const [seenPullIds, setSeenPullIds] = useState<Set<string>>(new Set())
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
   // last successful sync per data source, to throttle the on-tab-change partial syncs
@@ -192,6 +194,11 @@ const App = () => {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [switchView])
+
+  // viewing the Pull Requests tab clears its attention dot (marks current in-review PRs as seen)
+  useEffect(() => {
+    if (view === 'pulls') setSeenPullIds(new Set(myPrs.filter((p) => p.column === 'in_review').map((p) => p.id)))
+  }, [view, myPrs])
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
@@ -352,12 +359,12 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
-  const inReviewCount = myPrs.filter((p) => p.column === 'in_review').length
   const badges: Partial<Record<View, number>> = {
-    pulls: inReviewCount,
     board: awaitingCount,
     discovery: discoveredCount,
   }
+  // Pull Requests shows a small dot (not a count) for unseen in-review PRs, hidden while on that tab
+  const pullsDot = view !== 'pulls' && myPrs.some((p) => p.column === 'in_review' && !seenPullIds.has(p.id))
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
@@ -369,7 +376,14 @@ const App = () => {
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
-        {badge ? (
+        {v === 'pulls' ? (
+          pullsDot ? (
+            <span
+              className="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle"
+              title="New in-review pull requests"
+            />
+          ) : null
+        ) : badge ? (
           <span
             className={`ml-1.5 rounded-full px-1.5 text-xs ${v === 'discovery' ? 'bg-deck-700 text-deck-300' : 'bg-amber-500 text-black'}`}
           >
