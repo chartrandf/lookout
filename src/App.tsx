@@ -64,9 +64,11 @@ const parseFollowupSummary = (text: string) => {
   return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
 }
 
-// a PR carries "new events" once something happened to it (a review, CI, or it left Waiting);
-// the signature changes whenever that state moves, so a click that records it clears "new" until the next change
-const pullHasEvent = (p: MyPr) => p.column !== 'waiting' || p.humanReview !== null || p.botReview !== null
+// a PR carries "new events" once something happened to it (a review, CI, or it left Waiting), but never
+// once it's Done — merged PRs need no action. The signature changes whenever that state moves, so a click
+// that records it clears "new" until the next change.
+const pullHasEvent = (p: MyPr) =>
+  p.column !== 'done' && (p.column !== 'waiting' || p.humanReview !== null || p.botReview !== null)
 const pullSig = (p: MyPr) => `${p.column}|${p.humanReview}|${p.botReview}|${p.ciState}`
 
 const App = () => {
