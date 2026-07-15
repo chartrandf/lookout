@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GhMyPr } from './gh'
-import { isBot, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
+import { applyOverride, isBot, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
 
 const REPO = 'owner/repo'
 
@@ -99,6 +99,21 @@ describe('classifyColumn — column per PR state', () => {
 
   it('Done: merged PR', () => {
     expect(col({ state: 'MERGED' })).toBe('done')
+  })
+})
+
+describe('applyOverride — manual placement', () => {
+  it('no override: keeps the derived column', () => {
+    expect(applyOverride('waiting', undefined)).toBe('waiting')
+  })
+  it('override wins over the derived column (hand-off before any review lands)', () => {
+    expect(applyOverride('waiting', 'in_review')).toBe('in_review')
+  })
+  it('override sticks even once GitHub would derive a different column', () => {
+    expect(applyOverride('ready', 'in_review')).toBe('in_review')
+  })
+  it('merged always goes Done, ignoring any override', () => {
+    expect(applyOverride('done', 'in_review')).toBe('done')
   })
 })
 

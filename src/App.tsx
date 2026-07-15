@@ -22,6 +22,7 @@ import {
 import { syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick } from './lib/notify'
 import { fillPrompt } from './lib/prompt'
+import { setOverride } from './lib/proverrides'
 import { scanReviewFiles } from './lib/reviews'
 import {
   cancelRun,
@@ -37,7 +38,7 @@ import {
 } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
-import type { AppNotification, Config, MyPr, ReviewTask, Stage, WatchedRepo } from './types'
+import type { AppNotification, Config, MyPr, PrColumn, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
 import { PullRequests } from './views/PullRequests'
@@ -249,6 +250,12 @@ const App = () => {
     if (!getRun(pr.id)) dispatchHandleReview(myPrToTask(pr))
   }
 
+  // manual hand-off: pin the card to a column (optimistic) and persist the override
+  const moveMyPr = async (id: string, column: PrColumn) => {
+    setMyPrs((prev) => prev.map((p) => (p.id === id ? { ...p, column } : p)))
+    await setOverride(id, column)
+  }
+
   const openCard = (t: ReviewTask) => {
     setView('board')
     setPanelTaskId(t.id)
@@ -358,7 +365,9 @@ const App = () => {
       <main
         className={`flex-1 p-4 ${view === 'board' || view === 'pulls' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
       >
-        {view === 'pulls' && <PullRequests prs={myPrs} me={config.githubUser} onHandleReview={onHandleReview} />}
+        {view === 'pulls' && (
+          <PullRequests prs={myPrs} me={config.githubUser} onHandleReview={onHandleReview} onMove={moveMyPr} />
+        )}
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}

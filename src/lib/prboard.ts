@@ -46,6 +46,13 @@ export const classifyColumn = (pr: {
   return 'waiting'
 }
 
+// Effective column given a manual override: a merged PR is always Done (a hand-off can't outlive the merge);
+// otherwise the manual placement wins and sticks until the user moves it again or the PR merges.
+export const applyOverride = (derived: PrColumn, override: PrColumn | undefined): PrColumn => {
+  if (derived === 'done') return 'done'
+  return override ?? derived
+}
+
 // Map a raw gh PR into a classified MyPr. Returns null for closed-unmerged PRs (not boarded).
 export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr | null => {
   const state = raw.state.toLowerCase() as PrState
