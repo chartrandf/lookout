@@ -22,11 +22,16 @@ export type MyPr = {
   createdAt: string
   state: PrState
   isDraft: boolean
-  column: PrColumn
+  column: PrColumn // effective column (manual override applied)
+  derivedColumn: PrColumn // column purely from GitHub state (override baseline)
   humanReview: ReviewFlavor
   botReview: ReviewFlavor
   ciState: CiState
 }
+
+// a manual hand-off: pin `column`, recorded against the GitHub-derived column at drop time.
+// When the derived column later moves off `baseline`, the override is stale and gets dropped.
+export type PrOverride = { column: PrColumn; baseline: PrColumn }
 
 export type FollowupSummary = {
   addressed: number

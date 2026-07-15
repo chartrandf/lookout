@@ -257,10 +257,12 @@ const App = () => {
     if (!getRun(pr.id)) dispatchHandleReview(myPrToTask(pr))
   }
 
-  // manual hand-off: pin the card to a column (optimistic) and persist the override
+  // manual hand-off: pin the card to a column (optimistic) and persist the override against the
+  // GitHub-derived column, so it self-heals once real review state moves past that baseline
   const moveMyPr = async (id: string, column: PrColumn) => {
+    const pr = myPrs.find((p) => p.id === id)
     setMyPrs((prev) => prev.map((p) => (p.id === id ? { ...p, column } : p)))
-    await setOverride(id, column)
+    await setOverride(id, column, pr?.derivedColumn ?? column)
   }
 
   const openCard = (t: ReviewTask) => {

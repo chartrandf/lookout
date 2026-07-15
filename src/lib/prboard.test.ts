@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GhMyPr } from './gh'
-import { applyOverride, isBot, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
+import { isBot, resolveOverride, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
 
 const REPO = 'owner/repo'
 
@@ -102,18 +102,32 @@ describe('classifyColumn — column per PR state', () => {
   })
 })
 
-describe('applyOverride — manual placement', () => {
+describe('resolveOverride — self-healing manual placement', () => {
   it('no override: keeps the derived column', () => {
-    expect(applyOverride('waiting', undefined)).toBe('waiting')
+    expect(resolveOverride('waiting', undefined)).toEqual({ column: 'waiting', stale: false })
   })
-  it('override wins over the derived column (hand-off before any review lands)', () => {
-    expect(applyOverride('waiting', 'in_review')).toBe('in_review')
+
+  it('hand-off holds while GitHub is still at the baseline', () => {
+    // dragged waiting→in_review before any review; still no review → stays in_review
+    expect(resolveOverride('waiting', { column: 'in_review', baseline: 'waiting' })).toEqual({
+      column: 'in_review',
+      stale: false,
+    })
   })
-  it('override sticks even once GitHub would derive a different column', () => {
-    expect(applyOverride('ready', 'in_review')).toBe('in_review')
+
+  it('self-heals when the derived column moves off the baseline (approval → ready)', () => {
+    // the #2187 case: pinned in_review off a waiting baseline, then Mig approved → derived ready
+    expect(resolveOverride('ready', { column: 'in_review', baseline: 'waiting' })).toEqual({
+      column: 'ready',
+      stale: true,
+    })
   })
-  it('merged always goes Done, ignoring any override', () => {
-    expect(applyOverride('done', 'in_review')).toBe('done')
+
+  it('merged drops the hand-off and forces Done', () => {
+    expect(resolveOverride('done', { column: 'in_review', baseline: 'waiting' })).toEqual({
+      column: 'done',
+      stale: true,
+    })
   })
 })
 

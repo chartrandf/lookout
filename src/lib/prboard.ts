@@ -1,4 +1,4 @@
-import type { CiState, MyPr, PrColumn, PrState, ReviewFlavor } from '../types'
+import type { CiState, MyPr, PrColumn, PrOverride, PrState, ReviewFlavor } from '../types'
 import type { GhMyPr } from './gh'
 
 // Collapse a statusCheckRollup array into a single CI verdict (fail > pending > pass; empty = null).
@@ -46,11 +46,17 @@ export const classifyColumn = (pr: {
   return 'waiting'
 }
 
-// Effective column given a manual override: a merged PR is always Done (a hand-off can't outlive the merge);
-// otherwise the manual placement wins and sticks until the user moves it again or the PR merges.
-export const applyOverride = (derived: PrColumn, override: PrColumn | undefined): PrColumn => {
-  if (derived === 'done') return 'done'
-  return override ?? derived
+// Resolve a manual hand-off against the live GitHub-derived column. The override is self-healing:
+// it holds the manual placement only while GitHub hasn't moved off the baseline it was set against.
+// Once the derived column changes (e.g. a review lands, an approval → ready) or the PR merges, it's stale.
+export const resolveOverride = (
+  derived: PrColumn,
+  override: PrOverride | undefined,
+): { column: PrColumn; stale: boolean } => {
+  if (!override) return { column: derived, stale: false }
+  if (derived === 'done') return { column: 'done', stale: true } // merged: a hand-off can't outlive the merge
+  if (derived !== override.baseline) return { column: derived, stale: true } // reality moved past the hand-off
+  return { column: override.column, stale: false }
 }
 
 // Map a raw gh PR into a classified MyPr. Returns null for closed-unmerged PRs (not boarded).
@@ -62,6 +68,7 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
   const botReviews = raw.latestReviews.filter((r) => isBot(r.author))
   const humanReview = reviewFlavor(humanReviews)
   const botReview = reviewFlavor(botReviews)
+  const column = classifyColumn({ state, isDraft: raw.isDraft, humanReview, botReview })
 
   return {
     id: `${repo}#${raw.number}`,
@@ -74,7 +81,8 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
     createdAt: raw.createdAt,
     state,
     isDraft: raw.isDraft,
-    column: classifyColumn({ state, isDraft: raw.isDraft, humanReview, botReview }),
+    column,
+    derivedColumn: column,
     humanReview,
     botReview,
     ciState: rollupToCiState(raw.statusCheckRollup ?? []),
