@@ -5,6 +5,7 @@ import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 type Props = {
   prs: MyPr[]
   me: string
+  newIds: Set<string> // PR ids with new events (show a "new" tag until clicked)
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onMove: (id: string, column: PrColumn) => void
@@ -48,6 +49,7 @@ const CiTag = ({ ci }: { ci: CiState }) => {
 const PrCard = ({
   pr,
   me,
+  isNew,
   onOpen,
   onHandleReview,
   onDragStart,
@@ -55,6 +57,7 @@ const PrCard = ({
 }: {
   pr: MyPr
   me: string
+  isNew: boolean
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onDragStart: () => void
@@ -74,7 +77,9 @@ const PrCard = ({
       onDragStart()
     }}
     onDragEnd={onDragEnd}
+    className={isNew ? 'card-awaiting' : ''}
   >
+    {isNew && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
     {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">draft</span>}
     <ReviewTag flavor={pr.humanReview} />
     <ReviewTag flavor={pr.botReview} bot />
@@ -99,6 +104,7 @@ type ColumnProps = {
   title: string
   prs: MyPr[]
   me: string
+  newIds: Set<string>
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   dragging: boolean
@@ -113,6 +119,7 @@ const Column = ({
   title,
   prs,
   me,
+  newIds,
   onOpen,
   onHandleReview,
   dragging,
@@ -147,6 +154,7 @@ const Column = ({
           key={pr.id}
           pr={pr}
           me={me}
+          isNew={newIds.has(pr.id)}
           onOpen={onOpen}
           onHandleReview={onHandleReview}
           onDragStart={() => onCardDragStart(pr.id)}
@@ -157,7 +165,7 @@ const Column = ({
   </div>
 )
 
-export const PullRequests = ({ prs, me, onOpen, onHandleReview, onMove }: Props) => {
+export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onMove }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropCol, setDropCol] = useState<PrColumn | null>(null)
@@ -190,6 +198,7 @@ export const PullRequests = ({ prs, me, onOpen, onHandleReview, onMove }: Props)
             title={col.title}
             prs={byColumn(col.column)}
             me={me}
+            newIds={newIds}
             onOpen={onOpen}
             onHandleReview={onHandleReview}
             dragging={dragId !== null}

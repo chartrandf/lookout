@@ -64,6 +64,11 @@ const parseFollowupSummary = (text: string) => {
   return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
 }
 
+// a PR carries "new events" once something happened to it (a review, CI, or it left Waiting);
+// the signature changes whenever that state moves, so a click that records it clears "new" until the next change
+const pullHasEvent = (p: MyPr) => p.column !== 'waiting' || p.humanReview !== null || p.botReview !== null
+const pullSig = (p: MyPr) => `${p.column}|${p.humanReview}|${p.botReview}|${p.ciState}`
+
 const App = () => {
   const [view, setView] = useState<View>('board')
   const [config, setConfig] = useState<Config>({
@@ -80,8 +85,8 @@ const App = () => {
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
-  // in-review PR ids already seen; the Pull Requests attention dot shows only for unseen ones
-  const [seenPullIds, setSeenPullIds] = useState<Set<string>>(new Set())
+  // acknowledged PR state signatures (id -> sig); a card is "new" until its current sig is recorded by a click
+  const [seenPullSig, setSeenPullSig] = useState<Record<string, string>>({})
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
   // last successful sync per data source, to throttle the on-tab-change partial syncs
@@ -194,11 +199,6 @@ const App = () => {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [switchView])
-
-  // viewing the Pull Requests tab clears its attention dot (marks current in-review PRs as seen)
-  useEffect(() => {
-    if (view === 'pulls') setSeenPullIds(new Set(myPrs.filter((p) => p.column === 'in_review').map((p) => p.id)))
-  }, [view, myPrs])
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
@@ -363,8 +363,9 @@ const App = () => {
     board: awaitingCount,
     discovery: discoveredCount,
   }
-  // Pull Requests shows a small dot (not a count) for unseen in-review PRs, hidden while on that tab
-  const pullsDot = view !== 'pulls' && myPrs.some((p) => p.column === 'in_review' && !seenPullIds.has(p.id))
+  // PR cards with new events (not yet clicked); tab shows a small dot while any remain
+  const newPullIds = new Set(myPrs.filter((p) => pullHasEvent(p) && seenPullSig[p.id] !== pullSig(p)).map((p) => p.id))
+  const pullsDot = newPullIds.size > 0
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
@@ -450,7 +451,11 @@ const App = () => {
           <PullRequests
             prs={myPrs}
             me={config.githubUser}
-            onOpen={(pr) => setPanelTaskId(pr.id)}
+            newIds={newPullIds}
+            onOpen={(pr) => {
+              setPanelTaskId(pr.id)
+              setSeenPullSig((prev) => ({ ...prev, [pr.id]: pullSig(pr) })) // clicking clears this card's "new"
+            }}
             onHandleReview={onHandleReview}
             onMove={moveMyPr}
           />
@@ -476,7 +481,13 @@ const App = () => {
               await setOrders(orderedIds)
               await reload()
             }}
-            onOpenSession={(t) => setPanelTaskId(t.id)}
+            onOpenSession={async (t) => {
+              setPanelTaskId(t.id)
+              if (t.hasNewActivity) {
+                await clearNewActivity(t.id) // clicking a card clears its "new" (same as the 💬 new button)
+                await reload()
+              }
+            }}
             onSeen={async (t) => {
               await clearNewActivity(t.id)
               await reload()
