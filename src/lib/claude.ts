@@ -9,7 +9,9 @@ export type StreamEvent =
   | { type: 'exit'; code: number | null }
 
 // /do-review needs: gh (diff + push comments), read-only code access, Task (code-reviewer agent), Write (review export)
-const ALLOWED_TOOLS = 'Bash(gh:*),Read,Glob,Grep,Task,Write,TodoWrite'
+export const REVIEW_TOOLS = 'Bash(gh:*),Read,Glob,Grep,Task,Write,TodoWrite'
+// /handle-review edits files, commits and pushes: it needs Edit + git on top of the review set
+export const HANDLE_REVIEW_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
 
 const toolDetail = (input: Record<string, unknown>): string =>
   String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')
@@ -38,6 +40,7 @@ export const spawnClaude = async (
   cwd: string,
   onEvent: (e: StreamEvent) => void,
   resumeSessionId?: string,
+  allowedTools: string = REVIEW_TOOLS,
 ): Promise<Child> => {
   const args = [
     '-p',
@@ -47,7 +50,7 @@ export const spawnClaude = async (
     'stream-json',
     '--verbose',
     '--allowedTools',
-    ALLOWED_TOOLS,
+    allowedTools,
   ]
   const cmd = Command.create('claude', args, { cwd })
   cmd.stdout.on('data', (line: string) => parseLine(line, onEvent))

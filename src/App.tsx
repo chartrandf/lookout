@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
+import { HANDLE_REVIEW_TOOLS } from './lib/claude'
 import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
 import {
   addNotification,
@@ -15,25 +16,44 @@ import {
   setFollowupSummary,
   setLinks,
   setOrders,
+  setSeen,
   setSnoozed,
   setStage,
 } from './lib/db'
+import { syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick } from './lib/notify'
+import { fillPrompt } from './lib/prompt'
+import { setOverride } from './lib/proverrides'
 import { scanReviewFiles } from './lib/reviews'
-import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
+import {
+  cancelRun,
+  closeRun,
+  getRun,
+  getRuns,
+  killRun,
+  type RunCommand,
+  replyRun,
+  resumeRun,
+  startRun,
+  subscribeRuns,
+} from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
-import type { AppNotification, Config, ReviewTask, Stage, WatchedRepo } from './types'
+import type { AppNotification, Config, MyPr, PrColumn, ReviewTask, Stage, WatchedRepo } from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
+import { PullRequests } from './views/PullRequests'
 import { Settings } from './views/Settings'
 
 const POLL_MS = 10 * 60 * 1000
+// on tab change we do a lightweight sync of just that tab's data, but not more often than this
+const MIN_PARTIAL_MS = 60 * 1000
 
-type View = 'discovery' | 'board' | 'settings'
+type View = 'pulls' | 'discovery' | 'board' | 'settings'
 
 // Single source of truth for tab order: shortcuts (⌘1..⌘n) derive from the index
 const TAB_ORDER: { view: View; label: string }[] = [
+  { view: 'pulls', label: 'Pull Requests' },
   { view: 'board', label: 'Reviews' },
   { view: 'discovery', label: 'Discovery' },
   { view: 'settings', label: 'Settings' },
@@ -44,36 +64,104 @@ const parseFollowupSummary = (text: string) => {
   return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
 }
 
+// a PR carries "new events" once something happened to it (a review, CI, or it left Waiting), but never
+// once it's Done — merged PRs need no action. The signature changes whenever that state moves, so a click
+// that records it clears "new" until the next change.
+const pullHasEvent = (p: MyPr) =>
+  p.column !== 'done' && (p.column !== 'waiting' || p.humanReview !== null || p.botReview !== null)
+const pullSig = (p: MyPr) => `${p.column}|${p.humanReview}|${p.botReview}|${p.ciState}`
+
 const App = () => {
   const [view, setView] = useState<View>('board')
-  const [config, setConfig] = useState<Config>({ githubUser: '', repos: [], commands: DEFAULT_COMMANDS })
+  const [config, setConfig] = useState<Config>({
+    githubUser: '',
+    githubName: '',
+    repos: [],
+    commands: DEFAULT_COMMANDS,
+  })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
+  const [myPrs, setMyPrs] = useState<MyPr[]>([])
   const [syncing, setSyncing] = useState(false)
   const [lastSync, setLastSync] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
   const [notifications, setNotifications] = useState<AppNotification[]>([])
+  // acknowledged PR state signatures (id -> sig); a card is "new" until its current sig is recorded by a click
+  const [seenPullSig, setSeenPullSig] = useState<Record<string, string>>({})
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
+  // last successful sync per data source, to throttle the on-tab-change partial syncs
+  const tasksSyncedAt = useRef(0)
+  const pullsSyncedAt = useRef(0)
+  const busy = useRef(false)
 
   const reload = useCallback(async () => setTasks(await allTasks()), [])
 
   const reloadNotifications = useCallback(async () => setNotifications(await allNotifications()), [])
 
-  const refresh = useCallback(async () => {
+  // serialize syncs (never overlap) and surface the shared syncing/error/lastSync UI state
+  const runSync = useCallback(async (fn: () => Promise<void>) => {
+    if (busy.current) return
+    busy.current = true
     setSyncing(true)
     setError(null)
     try {
-      setTasks(await syncAll())
-      setConfig(await getConfig())
+      await fn()
       setLastSync(new Date())
     } catch (e) {
       setError(String(e))
     } finally {
+      busy.current = false
       setSyncing(false)
     }
   }, [])
+
+  // partial: Reviews + Discovery share the tasks dataset (syncAll)
+  const syncTasks = useCallback(
+    () =>
+      runSync(async () => {
+        setTasks(await syncAll())
+        tasksSyncedAt.current = Date.now()
+      }),
+    [runSync],
+  )
+
+  // partial: the Pull Requests board
+  const syncPulls = useCallback(
+    () =>
+      runSync(async () => {
+        setMyPrs(await syncMyPrs())
+        pullsSyncedAt.current = Date.now()
+      }),
+    [runSync],
+  )
+
+  // full sync: mount, the 10-min poll, the manual button, and after editing repos
+  const refresh = useCallback(
+    () =>
+      runSync(async () => {
+        setTasks(await syncAll())
+        const cfg = await getConfig()
+        setConfig(cfg)
+        setMyPrs(await syncMyPrs(cfg))
+        const now = Date.now()
+        tasksSyncedAt.current = now
+        pullsSyncedAt.current = now
+      }),
+    [runSync],
+  )
+
+  // change tab + kick a throttled partial sync of that tab's data (manual button stays the full sync)
+  const switchView = useCallback(
+    (v: View) => {
+      setView(v)
+      const now = Date.now()
+      if ((v === 'board' || v === 'discovery') && now - tasksSyncedAt.current >= MIN_PARTIAL_MS) syncTasks()
+      else if (v === 'pulls' && now - pullsSyncedAt.current >= MIN_PARTIAL_MS) syncPulls()
+    },
+    [syncTasks, syncPulls],
+  )
 
   useEffect(() => {
     initTray()
@@ -107,16 +195,21 @@ const App = () => {
       const idx = Number(e.key) - 1
       if (e.metaKey && !e.shiftKey && !e.altKey && TAB_ORDER[idx]) {
         e.preventDefault()
-        setView(TAB_ORDER[idx].view)
+        switchView(TAB_ORDER[idx].view)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [switchView])
 
   const moveStage = async (id: string, stage: Stage) => {
     await setStage(id, stage)
     if (stage === 'done') closeRun(id) // done = my part is over, no reply expected
+    await reload()
+  }
+
+  const markSeen = async (id: string, seen: boolean) => {
+    await setSeen(id, seen)
     await reload()
   }
 
@@ -146,25 +239,34 @@ const App = () => {
     await reloadNotifications()
   }
 
-  const runCallbacks = (command: 'do-review' | 'do-followup') => ({
-    onSession: async (taskId: string, sessionId: string) => {
-      await addSessionId(taskId, sessionId)
-      await reload()
-    },
-    onResult: async (taskId: string, result: string) => {
-      if (command === 'do-followup') {
-        const summary = parseFollowupSummary(result)
-        if (summary) await setFollowupSummary(taskId, summary)
-        await setStage(taskId, 'followup')
-        closeRun(taskId) // follow-up is informational: no reply expected
-      } else {
-        await setStage(taskId, 'reviewed')
-        await linkReviewReport(taskId)
+  const runCallbacks = (command: RunCommand) => {
+    // handle-review runs against my own PRs (not tracked in the tasks DB): just re-derive the board on result
+    if (command === 'handle-review')
+      return {
+        onResult: async () => {
+          setMyPrs(await syncMyPrs())
+        },
       }
-      await notifySessionDone(taskId, command)
-      await reload()
-    },
-  })
+    return {
+      onSession: async (taskId: string, sessionId: string) => {
+        await addSessionId(taskId, sessionId)
+        await reload()
+      },
+      onResult: async (taskId: string, result: string) => {
+        if (command === 'do-followup') {
+          const summary = parseFollowupSummary(result)
+          if (summary) await setFollowupSummary(taskId, summary)
+          await setStage(taskId, 'followup')
+          closeRun(taskId) // follow-up is informational: no reply expected
+        } else {
+          await setStage(taskId, 'reviewed')
+          await linkReviewReport(taskId)
+        }
+        await notifySessionDone(taskId, command)
+        await reload()
+      },
+    }
+  }
 
   const dispatchRun = async (t: ReviewTask, command: 'do-review' | 'do-followup') => {
     if (!t.repoPath) return
@@ -172,15 +274,62 @@ const App = () => {
     await reload()
     setPanelTaskId(t.id)
     const { commands } = await getConfig()
-    const prompt = (command === 'do-review' ? commands.review : commands.followup)
-      .replaceAll('<branch_name>', t.branch)
-      .replaceAll('<pr_id>', String(t.prNumber))
+    const prompt = fillPrompt(command === 'do-review' ? commands.review : commands.followup, t.branch, t.prNumber)
     await startRun(t.id, command, prompt, t.repoPath, runCallbacks(command))
   }
 
   const startReview = (id: string) => {
     const t = tasks.find((x) => x.id === id)
     if (t) dispatchRun(t, 'do-review')
+  }
+
+  // adapt a MyPr into the ReviewTask shape SessionPanel consumes (my PRs aren't in the tasks DB)
+  const myPrToTask = (pr: MyPr): ReviewTask => ({
+    id: pr.id,
+    repo: pr.repo,
+    repoPath: pr.repoPath,
+    branch: pr.branch,
+    prNumber: pr.number,
+    prTitle: pr.title,
+    prUrl: pr.url,
+    prState: pr.state,
+    prAuthor: config.githubUser,
+    prCreatedAt: pr.createdAt,
+    stage: 'reviewing',
+    reviewRequested: false,
+    sessionIds: [],
+    reviewFiles: [],
+    followupSummary: null,
+    activityCount: null,
+    ciState: pr.ciState,
+    hasNewActivity: false,
+    snoozed: false,
+    seen: true,
+    sortOrder: null,
+    doneAt: null,
+    updatedAt: pr.createdAt,
+  })
+
+  const dispatchHandleReview = async (t: ReviewTask) => {
+    if (!t.repoPath) return
+    setPanelTaskId(t.id)
+    const { commands } = await getConfig()
+    const prompt = fillPrompt(commands.handleReview, t.branch, t.prNumber)
+    await startRun(t.id, 'handle-review', prompt, t.repoPath, runCallbacks('handle-review'), HANDLE_REVIEW_TOOLS)
+  }
+
+  // card button: open the panel; start the run only if one isn't already live/awaiting for this PR
+  const onHandleReview = (pr: MyPr) => {
+    setPanelTaskId(pr.id)
+    if (!getRun(pr.id)) dispatchHandleReview(myPrToTask(pr))
+  }
+
+  // manual hand-off: pin the card to a column (optimistic) and persist the override against the
+  // GitHub-derived column, so it self-heals once real review state moves past that baseline
+  const moveMyPr = async (id: string, column: PrColumn) => {
+    const pr = myPrs.find((p) => p.id === id)
+    setMyPrs((prev) => prev.map((p) => (p.id === id ? { ...p, column } : p)))
+    await setOverride(id, column, pr?.derivedColumn ?? column)
   }
 
   const openCard = (t: ReviewTask) => {
@@ -195,9 +344,12 @@ const App = () => {
     if (t) openCard(t)
   }
 
-  const panelTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
+  const panelReviewTask = panelTaskId ? (tasks.find((t) => t.id === panelTaskId) ?? null) : null
+  const panelPr = panelTaskId ? (myPrs.find((p) => p.id === panelTaskId) ?? null) : null
+  const panelIsPr = !panelReviewTask && !!panelPr
+  const panelTask = panelReviewTask ?? (panelPr ? myPrToTask(panelPr) : null)
 
-  const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
+  const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open' && !t.seen).length
   // board badge = sessions done and waiting on my feedback (not in-progress runs)
   const awaitingCount = runs.filter((r) => r.status === 'awaiting-input').length
   const attentionCount =
@@ -209,7 +361,13 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
-  const badges: Partial<Record<View, number>> = { board: awaitingCount, discovery: discoveredCount }
+  const badges: Partial<Record<View, number>> = {
+    board: awaitingCount,
+    discovery: discoveredCount,
+  }
+  // PR cards with new events (not yet clicked); tab shows a small dot while any remain
+  const newPullIds = new Set(myPrs.filter((p) => pullHasEvent(p) && seenPullSig[p.id] !== pullSig(p)).map((p) => p.id))
+  const pullsDot = newPullIds.size > 0
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
@@ -217,11 +375,18 @@ const App = () => {
       <button
         key={v}
         type="button"
-        onClick={() => setView(v)}
+        onClick={() => switchView(v)}
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
-        {badge ? (
+        {v === 'pulls' ? (
+          pullsDot ? (
+            <span
+              className="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle"
+              title="New in-review pull requests"
+            />
+          ) : null
+        ) : badge ? (
           <span
             className={`ml-1.5 rounded-full px-1.5 text-xs ${v === 'discovery' ? 'bg-deck-700 text-deck-300' : 'bg-amber-500 text-black'}`}
           >
@@ -281,7 +446,22 @@ const App = () => {
       {error && <div className="mx-4 mt-3 rounded-md bg-red-500/15 px-3 py-2 text-sm text-red-300">{error}</div>}
 
       {/* board: columns scroll individually and stop 50px above the bottom (sync pill stays clear) */}
-      <main className={`flex-1 p-4 ${view === 'board' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}>
+      <main
+        className={`flex-1 p-4 ${view === 'board' || view === 'pulls' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
+      >
+        {view === 'pulls' && (
+          <PullRequests
+            prs={myPrs}
+            me={config.githubUser}
+            newIds={newPullIds}
+            onOpen={(pr) => {
+              setPanelTaskId(pr.id)
+              setSeenPullSig((prev) => ({ ...prev, [pr.id]: pullSig(pr) })) // clicking clears this card's "new"
+            }}
+            onHandleReview={onHandleReview}
+            onMove={moveMyPr}
+          />
+        )}
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
@@ -291,6 +471,7 @@ const App = () => {
             onUnignore={(id) => moveStage(id, 'discovered')}
             showIgnored={showIgnored}
             onToggleIgnored={() => setShowIgnored((s) => !s)}
+            onSetSeen={markSeen}
           />
         )}
         {view === 'board' && (
@@ -302,7 +483,13 @@ const App = () => {
               await setOrders(orderedIds)
               await reload()
             }}
-            onOpenSession={(t) => setPanelTaskId(t.id)}
+            onOpenSession={async (t) => {
+              setPanelTaskId(t.id)
+              if (t.hasNewActivity) {
+                await clearNewActivity(t.id) // clicking a card clears its "new" (same as the 💬 new button)
+                await reload()
+              }
+            }}
             onSeen={async (t) => {
               await clearNewActivity(t.id)
               await reload()
@@ -327,17 +514,25 @@ const App = () => {
           task={panelTask}
           run={getRun(panelTask.id)}
           me={config.githubUser}
+          myName={config.githubName}
+          variant={panelIsPr ? 'pr' : 'review'}
           onReply={(text) => {
             const sessionId = panelTask.sessionIds.at(-1)
             const run = getRun(panelTask.id)
-            if (run) replyRun(panelTask.id, text, runCallbacks(run.command ?? 'do-review'), sessionId)
-            // no live run (app restarted, run dismissed): resume the review session directly
-            else if (panelTask.repoPath && sessionId)
-              resumeRun(panelTask.id, 'do-review', panelTask.repoPath, text, sessionId, runCallbacks('do-review'))
+            if (run) replyRun(panelTask.id, text, runCallbacks(run.command), sessionId)
+            // no live run (app restarted, run dismissed): resume the session directly
+            else if (panelTask.repoPath && sessionId) {
+              const cmd: RunCommand = panelIsPr ? 'handle-review' : 'do-review'
+              const tools = panelIsPr ? HANDLE_REVIEW_TOOLS : undefined
+              resumeRun(panelTask.id, cmd, panelTask.repoPath, text, sessionId, runCallbacks(cmd), tools)
+            }
           }}
           onDismissRun={() => killRun(panelTask.id)}
           onCancel={() => cancelRun(panelTask.id)}
-          onDispatch={(command) => dispatchRun(panelTask, command)}
+          onDispatch={(command) => {
+            if (command === 'handle-review') dispatchHandleReview(panelTask)
+            else dispatchRun(panelTask, command)
+          }}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}
           onSnooze={async (snoozed) => {
             await setSnoozed(panelTask.id, snoozed)

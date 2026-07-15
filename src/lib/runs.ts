@@ -1,16 +1,19 @@
 import type { Child } from '@tauri-apps/plugin-shell'
-import { spawnClaude } from './claude'
+import { REVIEW_TOOLS, spawnClaude } from './claude'
 
 export type RunLine = { kind: 'text' | 'tool' | 'user' | 'error'; text: string }
 
+export type RunCommand = 'do-review' | 'do-followup' | 'handle-review'
+
 export type Run = {
   taskId: string
-  command: 'do-review' | 'do-followup'
+  command: RunCommand
   repoPath: string
   sessionId: string | null
   lines: RunLine[]
   status: 'running' | 'awaiting-input' | 'error' | 'closed'
   child: Child | null
+  allowedTools: string // tool allowlist for this run's command (reused on reply/resume)
 }
 
 // Module-level registry so runs survive view switches; React subscribes via listeners.
@@ -62,6 +65,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
       notify()
     },
     resumeSessionId,
+    run.allowedTools,
   )
   notify()
 }
@@ -72,6 +76,7 @@ export const startRun = async (
   prompt: string,
   repoPath: string,
   callbacks: Callbacks = {},
+  allowedTools: string = REVIEW_TOOLS,
 ) => {
   const existing = runs.get(taskId)
   if (existing && existing.status === 'running') return
@@ -83,6 +88,7 @@ export const startRun = async (
     lines: [{ kind: 'user', text: prompt }],
     status: 'running',
     child: null,
+    allowedTools,
   }
   runs.set(taskId, run)
   await dispatch(run, prompt, callbacks)
@@ -106,6 +112,7 @@ export const resumeRun = async (
   text: string,
   sessionId: string,
   callbacks: Callbacks = {},
+  allowedTools: string = REVIEW_TOOLS,
 ) => {
   const existing = runs.get(taskId)
   if (existing && existing.status === 'running') return
@@ -117,6 +124,7 @@ export const resumeRun = async (
     lines: [{ kind: 'user', text }],
     status: 'running',
     child: null,
+    allowedTools,
   }
   runs.set(taskId, run)
   await dispatch(run, text, callbacks, sessionId)

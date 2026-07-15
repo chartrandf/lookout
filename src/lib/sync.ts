@@ -1,7 +1,7 @@
 import type { ReviewTask } from '../types'
-import { getConfig, setGithubUser } from './config'
+import { getConfig, setGithubName, setGithubUser } from './config'
 import { allTasks, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
-import { fetchLogin, fetchPrActivity, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
+import { fetchLogin, fetchName, fetchPrActivity, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { scanRepoSessions } from './sessions'
@@ -16,6 +16,11 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
   if (!me) {
     me = await fetchLogin()
     await setGithubUser(me)
+  }
+  // resolve my display name once (used to attribute commits, whose actor is a git name, not a login)
+  if (!config.githubName) {
+    const name = await fetchName().catch(() => '')
+    if (name) await setGithubName(name)
   }
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
