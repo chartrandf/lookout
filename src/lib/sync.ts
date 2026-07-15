@@ -87,16 +87,18 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
   // Advance stages + auto-clear
   const tasks = await allTasks()
   for (const t of tasks) {
-    if (t.stage === 'done') continue
+    // reconcile PR state even for cards already in Done: a card manually moved to Done while its
+    // PR was still open would otherwise never pick up a later merge/close (it's skipped below).
     if (polledRepos.has(t.repo) && !openIds.has(t.id) && t.prState === 'open') {
       // tracked PR no longer open: distinguish merged vs closed
       const state = await fetchPrState(t.repo, t.prNumber)
       if (state !== 'open') {
         await setPrState(t.id, state)
-        await setStage(t.id, 'done')
+        if (t.stage !== 'done') await setStage(t.id, 'done')
         continue
       }
     }
+    if (t.stage === 'done') continue
     // auto-advance triaged tasks when NEW review artifacts appear (forward-only; respects manual demotion)
     const active = t.stage === 'watching' || t.stage === 'inbox' || t.stage === 'reviewing'
     if (active && fresh.get(t.id)?.report) await setStage(t.id, 'reviewed')
