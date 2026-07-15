@@ -59,6 +59,12 @@ pub fn run() {
                             sql: include_str!("../migrations/007_notif_archive.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 8,
+                            description: "discovery seen flag",
+                            sql: include_str!("../migrations/008_seen.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

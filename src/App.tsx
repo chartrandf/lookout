@@ -16,6 +16,7 @@ import {
   setFollowupSummary,
   setLinks,
   setOrders,
+  setSeen,
   setSnoozed,
   setStage,
 } from './lib/db'
@@ -140,6 +141,11 @@ const App = () => {
     await reload()
   }
 
+  const markSeen = async (id: string, seen: boolean) => {
+    await setSeen(id, seen)
+    await reload()
+  }
+
   const saveRepos = async (repos: WatchedRepo[]) => {
     await setRepos(repos)
     setConfig(await getConfig())
@@ -231,6 +237,7 @@ const App = () => {
     ciState: pr.ciState,
     hasNewActivity: false,
     snoozed: false,
+    seen: true,
     sortOrder: null,
     doneAt: null,
     updatedAt: pr.createdAt,
@@ -273,7 +280,7 @@ const App = () => {
   const panelIsPr = !panelReviewTask && !!panelPr
   const panelTask = panelReviewTask ?? (panelPr ? myPrToTask(panelPr) : null)
 
-  const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open').length
+  const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open' && !t.seen).length
   // board badge = sessions done and waiting on my feedback (not in-progress runs)
   const awaitingCount = runs.filter((r) => r.status === 'awaiting-input').length
   const attentionCount =
@@ -377,6 +384,7 @@ const App = () => {
             onUnignore={(id) => moveStage(id, 'discovered')}
             showIgnored={showIgnored}
             onToggleIgnored={() => setShowIgnored((s) => !s)}
+            onSetSeen={markSeen}
           />
         )}
         {view === 'board' && (

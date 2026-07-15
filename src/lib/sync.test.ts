@@ -54,6 +54,7 @@ const task = (overrides: Partial<ReviewTask>): ReviewTask => ({
   ciState: null,
   hasNewActivity: false,
   snoozed: false,
+  seen: false,
   sortOrder: null,
   doneAt: null,
   updatedAt: '2026-07-01T00:00:00Z',

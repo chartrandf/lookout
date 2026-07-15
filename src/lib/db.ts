@@ -28,6 +28,7 @@ type Row = {
   ci_state: string | null
   new_activity: number
   snoozed: number
+  seen: number
   sort_order: number | null
   done_at: string | null
   updated_at: string
@@ -53,6 +54,7 @@ const toTask = (r: Row): ReviewTask => ({
   ciState: r.ci_state as ReviewTask['ciState'],
   hasNewActivity: r.new_activity === 1,
   snoozed: r.snoozed === 1,
+  seen: r.seen === 1,
   sortOrder: r.sort_order,
   doneAt: r.done_at,
   updatedAt: r.updated_at,
@@ -138,6 +140,11 @@ export const setOrders = async (orderedIds: string[]) => {
 export const setSnoozed = async (id: string, snoozed: boolean) => {
   const d = await getDb()
   await d.execute('UPDATE tasks SET snoozed = $1 WHERE id = $2', [snoozed ? 1 : 0, id])
+}
+
+export const setSeen = async (id: string, seen: boolean) => {
+  const d = await getDb()
+  await d.execute('UPDATE tasks SET seen = $1 WHERE id = $2', [seen ? 1 : 0, id])
 }
 
 export const clearNewActivity = async (id: string) => {

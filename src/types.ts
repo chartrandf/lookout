@@ -54,6 +54,7 @@ export type ReviewTask = {
   ciState: 'pass' | 'fail' | 'pending' | null
   hasNewActivity: boolean
   snoozed: boolean
+  seen: boolean // acknowledged in Discovery (clears the "new" highlight and drops it from the count)
   sortOrder: number | null
   doneAt: string | null
   updatedAt: string
