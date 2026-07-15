@@ -16,8 +16,11 @@ type Props = {
   task: ReviewTask
   run: Run | undefined
   me: string
+  // 'review' = the Reviews board (do-review/do-followup/approve, stage select).
+  // 'pr' = the Pull Requests board for my own PRs (a single Handle review action).
+  variant?: 'review' | 'pr'
   onReply: (text: string) => void
-  onDispatch: (command: 'do-review' | 'do-followup') => void
+  onDispatch: (command: 'do-review' | 'do-followup' | 'handle-review') => void
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
@@ -222,6 +225,7 @@ export const SessionPanel = ({
   task,
   run,
   me,
+  variant = 'review',
   onReply,
   onDispatch,
   onStageChange,
@@ -231,6 +235,7 @@ export const SessionPanel = ({
   onDismissRun,
   onClose,
 }: Props) => {
+  const isPr = variant === 'pr'
   const [input, setInput] = useState('')
   const [copied, setCopied] = useState(false)
   const [copiedBranch, setCopiedBranch] = useState(false)
@@ -368,17 +373,19 @@ export const SessionPanel = ({
               {task.repo}#{task.prNumber} ↗
             </PrLink>
             <div className="ml-auto flex items-center gap-1.5">
-              <select
-                value={task.stage}
-                onChange={(e) => onStageChange(e.target.value as Stage)}
-                className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
-              >
-                {STAGES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
+              {!isPr && (
+                <select
+                  value={task.stage}
+                  onChange={(e) => onStageChange(e.target.value as Stage)}
+                  className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
+                >
+                  {STAGES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="relative">
                 <button
                   type="button"
@@ -472,38 +479,54 @@ export const SessionPanel = ({
         </div>
 
         <div className="flex gap-2 border-b border-deck-800 px-4 py-2">
-          <button
-            type="button"
-            onClick={() => onDispatch('do-review')}
-            disabled={running}
-            className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
-          >
-            <span className="flex items-center gap-1.5">
-              <PlayIcon /> do-review
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => onDispatch('do-followup')}
-            disabled={running}
-            className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
-          >
-            <span className="flex items-center gap-1.5">
-              <RepeatIcon /> do-followup
-            </span>
-          </button>
-          {(canApprove || approved) && (
+          {isPr ? (
             <button
               type="button"
-              onClick={approve}
-              disabled={approving || approved}
-              title="Approve the PR on GitHub and move it to Done"
-              className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
+              onClick={() => onDispatch('handle-review')}
+              disabled={running}
+              title="Run /handle-review on this PR's review comments"
+              className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
             >
               <span className="flex items-center gap-1.5">
-                <CheckIcon /> {approved ? 'approved' : approving ? 'approving…' : 'approve'}
+                <PlayIcon /> handle review
               </span>
             </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => onDispatch('do-review')}
+                disabled={running}
+                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-1.5">
+                  <PlayIcon /> do-review
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDispatch('do-followup')}
+                disabled={running}
+                className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-1.5">
+                  <RepeatIcon /> do-followup
+                </span>
+              </button>
+              {(canApprove || approved) && (
+                <button
+                  type="button"
+                  onClick={approve}
+                  disabled={approving || approved}
+                  title="Approve the PR on GitHub and move it to Done"
+                  className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <CheckIcon /> {approved ? 'approved' : approving ? 'approving…' : 'approve'}
+                  </span>
+                </button>
+              )}
+            </>
           )}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>
