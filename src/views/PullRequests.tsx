@@ -79,11 +79,18 @@ const PrCard = ({
     onDragEnd={onDragEnd}
     className={isNew ? 'card-awaiting' : ''}
   >
-    {isNew && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
-    {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">draft</span>}
-    <ReviewTag flavor={pr.humanReview} />
-    <ReviewTag flavor={pr.botReview} bot />
-    <CiTag ci={pr.ciState} />
+    {pr.column === 'done' ? (
+      // Done = merged: the review/CI detail no longer matters, just show the outcome
+      <span className="rounded bg-purple-500/20 px-1 py-0.5 text-purple-300">merged</span>
+    ) : (
+      <>
+        {isNew && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
+        {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">draft</span>}
+        <ReviewTag flavor={pr.humanReview} />
+        <ReviewTag flavor={pr.botReview} bot />
+        <CiTag ci={pr.ciState} />
+      </>
+    )}
     {pr.column === 'in_review' && (
       <button
         type="button"
