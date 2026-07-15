@@ -16,6 +16,7 @@ type Props = {
   task: ReviewTask
   run: Run | undefined
   me: string
+  myName?: string
   // 'review' = the Reviews board (do-review/do-followup/approve, stage select).
   // 'pr' = the Pull Requests board for my own PRs (a single Handle review action).
   variant?: 'review' | 'pr'
@@ -225,6 +226,7 @@ export const SessionPanel = ({
   task,
   run,
   me,
+  myName = '',
   variant = 'review',
   onReply,
   onDispatch,
@@ -262,7 +264,7 @@ export const SessionPanel = ({
   useEffect(() => {
     setFeed(null)
     setReport(null)
-    buildFeed(task, me).then(setFeed)
+    buildFeed(task, me, myName).then(setFeed)
   }, [task.id])
 
   // chronological feed: keep the newest events in view, next to the reply input
@@ -274,7 +276,7 @@ export const SessionPanel = ({
   const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
   // biome-ignore lint/correctness/useExhaustiveDependencies: refresh triggers only
   useEffect(() => {
-    if (runIdle) buildFeed(task, me).then(setFeed)
+    if (runIdle) buildFeed(task, me, myName).then(setFeed)
   }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
@@ -603,7 +605,7 @@ export const SessionPanel = ({
               history
               <button
                 type="button"
-                onClick={() => buildFeed(task, me).then(setFeed)}
+                onClick={() => buildFeed(task, me, myName).then(setFeed)}
                 className="cursor-pointer text-deck-500 hover:text-deck-200"
                 title="Refresh history"
               >

@@ -14,6 +14,9 @@ export const repoFromPath = async (path: string): Promise<string> =>
 
 export const fetchLogin = async (): Promise<string> => (await gh(['api', 'user', '--jq', '.login'])).trim()
 
+// GitHub profile name (e.g. "Francis Chartrand") — matches git commit author names, which carry no login
+export const fetchName = async (): Promise<string> => (await gh(['api', 'user', '--jq', '.name // ""'])).trim()
+
 export type GhPr = {
   number: number
   title: string
@@ -132,6 +135,7 @@ export type GhMyPr = {
   isDraft: boolean
   state: string // OPEN | CLOSED | MERGED
   latestReviews: { author: { login: string; is_bot?: boolean } | null; state: string }[]
+  reviewRequests: { login?: string }[] // reviewers with a pending (re-)review request
   statusCheckRollup: { conclusion?: string; status?: string; state?: string }[]
 }
 
@@ -149,6 +153,6 @@ export const listMyPrs = async (repo: string, me: string): Promise<GhMyPr[]> =>
       '--limit',
       '50',
       '--json',
-      'number,title,url,headRefName,createdAt,isDraft,state,latestReviews,statusCheckRollup',
+      'number,title,url,headRefName,createdAt,isDraft,state,latestReviews,reviewRequests,statusCheckRollup',
     ]),
   )

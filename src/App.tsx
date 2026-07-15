@@ -66,7 +66,12 @@ const parseFollowupSummary = (text: string) => {
 
 const App = () => {
   const [view, setView] = useState<View>('board')
-  const [config, setConfig] = useState<Config>({ githubUser: '', repos: [], commands: DEFAULT_COMMANDS })
+  const [config, setConfig] = useState<Config>({
+    githubUser: '',
+    githubName: '',
+    repos: [],
+    commands: DEFAULT_COMMANDS,
+  })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])
   const [syncing, setSyncing] = useState(false)
@@ -482,6 +487,7 @@ const App = () => {
           task={panelTask}
           run={getRun(panelTask.id)}
           me={config.githubUser}
+          myName={config.githubName}
           variant={panelIsPr ? 'pr' : 'review'}
           onReply={(text) => {
             const sessionId = panelTask.sessionIds.at(-1)

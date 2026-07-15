@@ -4,6 +4,7 @@ import type { ReviewTask } from '../types'
 vi.mock('./config', () => ({
   getConfig: vi.fn(),
   setGithubUser: vi.fn(),
+  setGithubName: vi.fn(),
 }))
 vi.mock('./db', () => ({
   allTasks: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock('./db', () => ({
 }))
 vi.mock('./gh', () => ({
   fetchLogin: vi.fn(),
+  fetchName: vi.fn(),
   fetchPrActivity: vi.fn(),
   fetchPrState: vi.fn(),
   listCommentedByMe: vi.fn(),
@@ -67,6 +69,7 @@ describe('syncAll — PR state reconciliation', () => {
     vi.mocked(getConfig).mockResolvedValue({
       githubUser: 'me',
       repos: [{ repo: REPO, path: '/clone' }],
+      githubName: 'Me Name',
       commands: { review: '', followup: '', handleReview: '' },
     })
     // PR is no longer in the open list (it merged/closed on GitHub)

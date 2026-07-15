@@ -86,7 +86,8 @@ export type Commands = {
 }
 
 export type Config = {
-  githubUser: string
+  githubUser: string // GitHub login (e.g. chartrandf)
+  githubName: string // GitHub profile / git author name (e.g. Francis Chartrand) — used to match my commits
   repos: WatchedRepo[]
   commands: Commands
 }

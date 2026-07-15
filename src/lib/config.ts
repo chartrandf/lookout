@@ -21,6 +21,7 @@ export const getConfig = async (): Promise<Config> => {
   const s = await getStore()
   return {
     githubUser: (await s.get<string>('githubUser')) ?? '',
+    githubName: (await s.get<string>('githubName')) ?? '',
     repos: (await s.get<WatchedRepo[]>('repos')) ?? [],
     commands: { ...DEFAULT_COMMANDS, ...((await s.get<Partial<Commands>>('commands')) ?? {}) },
   }
@@ -34,6 +35,11 @@ export const setCommands = async (commands: Commands) => {
 export const setGithubUser = async (githubUser: string) => {
   const s = await getStore()
   await s.set('githubUser', githubUser)
+}
+
+export const setGithubName = async (githubName: string) => {
+  const s = await getStore()
+  await s.set('githubName', githubName)
 }
 
 export const setRepos = async (repos: WatchedRepo[]) => {

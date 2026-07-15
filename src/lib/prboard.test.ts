@@ -14,6 +14,7 @@ const raw = (o: Partial<GhMyPr> = {}): GhMyPr => ({
   isDraft: false,
   state: 'OPEN',
   latestReviews: [],
+  reviewRequests: [],
   statusCheckRollup: [],
   ...o,
 })
@@ -99,6 +100,34 @@ describe('classifyColumn — column per PR state', () => {
 
   it('Done: merged PR', () => {
     expect(col({ state: 'MERGED' })).toBe('done')
+  })
+})
+
+describe('re-requested review supersedes a prior review', () => {
+  it('a commented reviewer who is re-requested no longer shows a tag → back to Waiting', () => {
+    const pr = toMyPr(
+      raw({ latestReviews: [human('COMMENTED', 'Mig-OG')], reviewRequests: [{ login: 'Mig-OG' }] }),
+      REPO,
+      '/clone',
+    )
+    expect(pr?.humanReview).toBe(null)
+    expect(pr?.column).toBe('waiting')
+  })
+
+  it('without a pending request the commented tag stays and it sits In Review', () => {
+    const pr = toMyPr(raw({ latestReviews: [human('COMMENTED', 'Mig-OG')] }), REPO, '/clone')
+    expect(pr?.humanReview).toBe('commented')
+    expect(pr?.column).toBe('in_review')
+  })
+
+  it('a re-requested reviewer who already approved earlier is treated as pending (not ready)', () => {
+    const pr = toMyPr(
+      raw({ latestReviews: [human('APPROVED', 'Mig-OG')], reviewRequests: [{ login: 'Mig-OG' }] }),
+      REPO,
+      '/clone',
+    )
+    expect(pr?.humanReview).toBe(null)
+    expect(pr?.column).toBe('waiting')
   })
 })
 

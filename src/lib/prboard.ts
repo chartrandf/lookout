@@ -64,8 +64,12 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
   const state = raw.state.toLowerCase() as PrState
   if (state === 'closed') return null // closed without merging: don't board it
 
-  const humanReviews = raw.latestReviews.filter((r) => !isBot(r.author))
-  const botReviews = raw.latestReviews.filter((r) => isBot(r.author))
+  // a reviewer with a pending (re-)review request has had their prior review superseded — ignore it,
+  // so re-requesting review after handling comments clears the stale "commented"/"changes" tag
+  const requested = new Set((raw.reviewRequests ?? []).map((r) => r.login).filter(Boolean))
+  const active = raw.latestReviews.filter((r) => !(r.author?.login && requested.has(r.author.login)))
+  const humanReviews = active.filter((r) => !isBot(r.author))
+  const botReviews = active.filter((r) => isBot(r.author))
   const humanReview = reviewFlavor(humanReviews)
   const botReview = reviewFlavor(botReviews)
   const column = classifyColumn({ state, isDraft: raw.isDraft, humanReview, botReview })

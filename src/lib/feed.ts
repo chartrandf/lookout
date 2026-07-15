@@ -53,8 +53,10 @@ const groupCommits = (events: FeedEvent[]): FeedEvent[] => {
   return out
 }
 
-export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent[]> => {
+export const buildFeed = async (task: ReviewTask, me: string, myName = ''): Promise<FeedEvent[]> => {
   const events: FeedEvent[] = []
+  // timeline actors are logins for most events but git author *names* for commits, so match either
+  const isMine = (actor: string) => actor === me || (!!myName && actor === myName)
 
   if (task.prCreatedAt)
     events.push({
@@ -62,7 +64,7 @@ export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent
       icon: '🌱',
       actor: task.prAuthor,
       text: 'opened the pull request',
-      mine: false,
+      mine: isMine(task.prAuthor),
     })
 
   if (task.repoPath) {
@@ -86,7 +88,7 @@ export const buildFeed = async (task: ReviewTask, me: string): Promise<FeedEvent
 
   const gh = await fetchPrTimeline(task.repo, task.prNumber).catch(() => [])
   for (const e of gh) {
-    const mine = e.actor === me
+    const mine = isMine(e.actor)
     if (e.kind === 'review')
       events.push({
         ts: e.ts,
