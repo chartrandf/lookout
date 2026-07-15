@@ -7,6 +7,7 @@ export const DEFAULT_COMMANDS: Commands = {
   review: '/review <pr_id>',
   followup:
     'Fetch the review comments of PR #<pr_id> (branch <branch_name>) with gh, check the PR commits to verify whether each comment was addressed, and finish with a line: SUMMARY: X addressed | Y partial | Z pending',
+  handleReview: '/handle-review',
 }
 
 let store: Store | null = null

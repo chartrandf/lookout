@@ -1,4 +1,6 @@
 import { Command } from '@tauri-apps/plugin-shell'
+import type { CiState } from '../types'
+import { rollupToCiState } from './prboard'
 
 const gh = async (args: string[], cwd?: string): Promise<string> => {
   const out = await Command.create('gh', args, cwd ? { cwd } : undefined).execute()
@@ -107,7 +109,7 @@ export const approvePr = async (repo: string, prNumber: number) => {
   await gh(['pr', 'review', String(prNumber), '--repo', repo, '--approve'])
 }
 
-export type PrActivity = { count: number; ciState: 'pass' | 'fail' | 'pending' | null }
+export type PrActivity = { count: number; ciState: CiState }
 
 // Activity = review comments + reviews + issue comments, excluding my own (my actions are not "new" to me);
 // CI from status check rollup
@@ -115,16 +117,38 @@ export const fetchPrActivity = async (repo: string, prNumber: number, me: string
   const out = JSON.parse(
     await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,statusCheckRollup']),
   )
-  const checks: { conclusion?: string; status?: string; state?: string }[] = out.statusCheckRollup ?? []
-  let ciState: PrActivity['ciState'] = null
-  if (checks.length) {
-    const states = checks.map((c) => (c.conclusion || c.state || c.status || '').toUpperCase())
-    if (states.some((s) => s === 'FAILURE' || s === 'ERROR')) ciState = 'fail'
-    else if (states.some((s) => s === '' || s === 'PENDING' || s === 'IN_PROGRESS' || s === 'QUEUED'))
-      ciState = 'pending'
-    else ciState = 'pass'
-  }
   const notMine = (list?: { author?: { login?: string } }[]) =>
     (list ?? []).filter((c) => c.author?.login !== me).length
-  return { count: notMine(out.comments) + notMine(out.reviews), ciState }
+  return { count: notMine(out.comments) + notMine(out.reviews), ciState: rollupToCiState(out.statusCheckRollup ?? []) }
 }
+
+// A PR authored by me, as returned by `gh pr list --author @me` (raw shape before classification)
+export type GhMyPr = {
+  number: number
+  title: string
+  url: string
+  headRefName: string
+  createdAt: string
+  isDraft: boolean
+  state: string // OPEN | CLOSED | MERGED
+  latestReviews: { author: { login: string; is_bot?: boolean } | null; state: string }[]
+  statusCheckRollup: { conclusion?: string; status?: string; state?: string }[]
+}
+
+export const listMyPrs = async (repo: string, me: string): Promise<GhMyPr[]> =>
+  JSON.parse(
+    await gh([
+      'pr',
+      'list',
+      '--repo',
+      repo,
+      '--author',
+      me,
+      '--state',
+      'all',
+      '--limit',
+      '50',
+      '--json',
+      'number,title,url,headRefName,createdAt,isDraft,state,latestReviews,statusCheckRollup',
+    ]),
+  )
