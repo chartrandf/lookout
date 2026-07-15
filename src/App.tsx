@@ -375,7 +375,13 @@ const App = () => {
         className={`flex-1 p-4 ${view === 'board' || view === 'pulls' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
       >
         {view === 'pulls' && (
-          <PullRequests prs={myPrs} me={config.githubUser} onHandleReview={onHandleReview} onMove={moveMyPr} />
+          <PullRequests
+            prs={myPrs}
+            me={config.githubUser}
+            onOpen={(pr) => setPanelTaskId(pr.id)}
+            onHandleReview={onHandleReview}
+            onMove={moveMyPr}
+          />
         )}
         {view === 'discovery' && (
           <Discovery

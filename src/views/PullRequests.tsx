@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { CardFrame } from '../components/CardFrame'
-import { openPrWindow } from '../lib/prwindow'
 import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 type Props = {
   prs: MyPr[]
   me: string
+  onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onMove: (id: string, column: PrColumn) => void
 }
@@ -48,12 +48,14 @@ const CiTag = ({ ci }: { ci: CiState }) => {
 const PrCard = ({
   pr,
   me,
+  onOpen,
   onHandleReview,
   onDragStart,
   onDragEnd,
 }: {
   pr: MyPr
   me: string
+  onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onDragStart: () => void
   onDragEnd: () => void
@@ -63,7 +65,7 @@ const PrCard = ({
     author={me}
     repo={pr.repo}
     prNumber={pr.number}
-    onClick={() => openPrWindow(pr.url, pr.repo, pr.number)}
+    onClick={() => onOpen(pr)}
     draggable
     onDragStart={(e) => {
       // WebKit requires setData for the drag to actually start
@@ -97,6 +99,7 @@ type ColumnProps = {
   title: string
   prs: MyPr[]
   me: string
+  onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   dragging: boolean
   isDropTarget: boolean
@@ -110,6 +113,7 @@ const Column = ({
   title,
   prs,
   me,
+  onOpen,
   onHandleReview,
   dragging,
   isDropTarget,
@@ -143,6 +147,7 @@ const Column = ({
           key={pr.id}
           pr={pr}
           me={me}
+          onOpen={onOpen}
           onHandleReview={onHandleReview}
           onDragStart={() => onCardDragStart(pr.id)}
           onDragEnd={onCardDragEnd}
@@ -152,7 +157,7 @@ const Column = ({
   </div>
 )
 
-export const PullRequests = ({ prs, me, onHandleReview, onMove }: Props) => {
+export const PullRequests = ({ prs, me, onOpen, onHandleReview, onMove }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropCol, setDropCol] = useState<PrColumn | null>(null)
@@ -185,6 +190,7 @@ export const PullRequests = ({ prs, me, onHandleReview, onMove }: Props) => {
             title={col.title}
             prs={byColumn(col.column)}
             me={me}
+            onOpen={onOpen}
             onHandleReview={onHandleReview}
             dragging={dragId !== null}
             isDropTarget={dropCol === col.column && dragId !== null}
