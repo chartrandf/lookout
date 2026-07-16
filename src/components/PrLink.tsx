@@ -15,7 +15,7 @@ export const PrLink = ({ url, repo, prNumber, children, className, onClick }: Pr
     onClick={(e) => {
       e.stopPropagation()
       onClick?.()
-      openPrWindow(url, repo, prNumber)
+      openPrWindow(url, repo, prNumber, e.metaKey)
     }}
     className={`cursor-pointer text-left hover:underline ${className ?? ''}`}
   >

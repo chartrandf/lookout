@@ -191,7 +191,7 @@ const StopIcon = () => (
 // (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
 const URL_SPLIT = /(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]])/g
 
-const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string) => void }) => (
+const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string, external: boolean) => void }) => (
   <>
     {text.split(URL_SPLIT).map((part, i) =>
       i % 2 === 1 ? (
@@ -199,10 +199,10 @@ const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string) => void
           // biome-ignore lint/suspicious/noArrayIndexKey: static text snapshot
           key={i}
           href={part}
-          title="Open in app browser"
+          title="Open in app browser (⌘+click for default browser)"
           onClick={(e) => {
             e.preventDefault()
-            onOpen(part)
+            onOpen(part, e.metaKey)
           }}
           className="cursor-pointer underline decoration-dotted underline-offset-2 hover:text-grass-300"
         >
@@ -587,7 +587,7 @@ export const SessionPanel = ({
                     <p key={i} className={lineClass[l.kind]}>
                       <Linkify
                         text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
-                        onOpen={(url) => openPrWindow(url, task.repo, task.prNumber)}
+                        onOpen={(url, external) => openPrWindow(url, task.repo, task.prNumber, external)}
                       />
                     </p>
                   ))}
@@ -636,12 +636,12 @@ export const SessionPanel = ({
                       <button
                         type="button"
                         title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
-                        onClick={() =>
+                        onClick={(ev) =>
                           e.filePath
                             ? openReport(e.filePath)
                             : e.sessionId
                               ? resumeSession(e.sessionId)
-                              : openPrWindow(e.url as string, task.repo, task.prNumber)
+                              : openPrWindow(e.url as string, task.repo, task.prNumber, ev.metaKey)
                         }
                         className={`${bubbleClass} cursor-pointer text-left hover:underline`}
                       >
