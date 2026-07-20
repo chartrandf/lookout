@@ -12,6 +12,8 @@ export type StreamEvent =
 export const REVIEW_TOOLS = 'Bash(gh:*),Read,Glob,Grep,Task,Write,TodoWrite'
 // /handle-review edits files, commits and pushes: it needs Edit + git on top of the review set
 export const HANDLE_REVIEW_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
+// handle-ci fixes failing CI: same edit/commit/push surface as handle-review
+export const HANDLE_CI_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
 
 const toolDetail = (input: Record<string, unknown>): string =>
   String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')

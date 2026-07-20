@@ -83,6 +83,7 @@ export type Commands = {
   review: string
   followup: string
   handleReview: string
+  handleCi: string
 }
 
 export type Config = {

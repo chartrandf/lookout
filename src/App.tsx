@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
-import { HANDLE_REVIEW_TOOLS } from './lib/claude'
+import { HANDLE_CI_TOOLS, HANDLE_REVIEW_TOOLS } from './lib/claude'
 import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
 import {
   addNotification,
@@ -240,8 +240,8 @@ const App = () => {
   }
 
   const runCallbacks = (command: RunCommand) => {
-    // handle-review runs against my own PRs (not tracked in the tasks DB): just re-derive the board on result
-    if (command === 'handle-review')
+    // handle-review / handle-ci run against my own PRs (not tracked in the tasks DB): just re-derive the board on result
+    if (command === 'handle-review' || command === 'handle-ci')
       return {
         onResult: async () => {
           setMyPrs(await syncMyPrs())
@@ -322,6 +322,15 @@ const App = () => {
   const onHandleReview = (pr: MyPr) => {
     setPanelTaskId(pr.id)
     if (!getRun(pr.id)) dispatchHandleReview(myPrToTask(pr))
+  }
+
+  const dispatchHandleCi = async (t: ReviewTask) => {
+    if (!t.repoPath) return
+    setPanelTaskId(t.id)
+    const { commands } = await getConfig()
+    if (!commands.handleCi) return
+    const prompt = fillPrompt(commands.handleCi, t.branch, t.prNumber)
+    await startRun(t.id, 'handle-ci', prompt, t.repoPath, runCallbacks('handle-ci'), HANDLE_CI_TOOLS)
   }
 
   // manual hand-off: pin the card to a column (optimistic) and persist the override against the
@@ -516,6 +525,7 @@ const App = () => {
           me={config.githubUser}
           myName={config.githubName}
           variant={panelIsPr ? 'pr' : 'review'}
+          handleCi={config.commands.handleCi}
           onReply={(text) => {
             const sessionId = panelTask.sessionIds.at(-1)
             const run = getRun(panelTask.id)
@@ -531,6 +541,7 @@ const App = () => {
           onCancel={() => cancelRun(panelTask.id)}
           onDispatch={(command) => {
             if (command === 'handle-review') dispatchHandleReview(panelTask)
+            else if (command === 'handle-ci') dispatchHandleCi(panelTask)
             else dispatchRun(panelTask, command)
           }}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}

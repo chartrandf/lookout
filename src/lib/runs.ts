@@ -3,7 +3,7 @@ import { REVIEW_TOOLS, spawnClaude } from './claude'
 
 export type RunLine = { kind: 'text' | 'tool' | 'user' | 'error'; text: string }
 
-export type RunCommand = 'do-review' | 'do-followup' | 'handle-review'
+export type RunCommand = 'do-review' | 'do-followup' | 'handle-review' | 'handle-ci'
 
 export type Run = {
   taskId: string

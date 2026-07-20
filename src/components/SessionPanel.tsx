@@ -20,8 +20,9 @@ type Props = {
   // 'review' = the Reviews board (do-review/do-followup/approve, stage select).
   // 'pr' = the Pull Requests board for my own PRs (a single Handle review action).
   variant?: 'review' | 'pr'
+  handleCi?: string // "handle CI" command; empty = button hidden
   onReply: (text: string) => void
-  onDispatch: (command: 'do-review' | 'do-followup' | 'handle-review') => void
+  onDispatch: (command: 'do-review' | 'do-followup' | 'handle-review' | 'handle-ci') => void
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
@@ -228,6 +229,7 @@ export const SessionPanel = ({
   me,
   myName = '',
   variant = 'review',
+  handleCi = '',
   onReply,
   onDispatch,
   onStageChange,
@@ -482,17 +484,32 @@ export const SessionPanel = ({
 
         <div className="flex gap-2 border-b border-deck-800 px-4 py-2">
           {isPr ? (
-            <button
-              type="button"
-              onClick={() => onDispatch('handle-review')}
-              disabled={running}
-              title="Run /handle-review on this PR's review comments"
-              className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
-            >
-              <span className="flex items-center gap-1.5">
-                <PlayIcon /> handle review
-              </span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => onDispatch('handle-review')}
+                disabled={running}
+                title="Run /handle-review on this PR's review comments"
+                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
+              >
+                <span className="flex items-center gap-1.5">
+                  <PlayIcon /> handle review
+                </span>
+              </button>
+              {handleCi && (
+                <button
+                  type="button"
+                  onClick={() => onDispatch('handle-ci')}
+                  disabled={running}
+                  title="Run the handle-CI command on this PR"
+                  className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <PlayIcon /> handle CI
+                  </span>
+                </button>
+              )}
+            </>
           ) : (
             <>
               <button
