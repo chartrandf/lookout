@@ -32,9 +32,19 @@ const STAGE_OPTIONS: Stage[] = [
   'ignored',
 ]
 
+const BOARD_META: Record<ButtonBoard, { title: string; hint: string }> = {
+  review: {
+    title: 'Review actions',
+    hint: "Actions shown in a review card's panel. The first is the primary (used by the quick review shortcut).",
+  },
+  pr: {
+    title: 'Pull Request actions',
+    hint: "Actions shown in your own PR's panel. The first is the primary (used by the card's quick shortcut).",
+  },
+}
+
 type EditorProps = {
   board: ButtonBoard
-  title: string
   hint: string
   buttons: ActionButton[]
   defaults: ActionButton[]
@@ -43,8 +53,8 @@ type EditorProps = {
   persist: () => void // persist current local buttons (used on blur)
 }
 
-// One repeater: add/remove/edit the action buttons of a single board.
-const ButtonsEditor = ({ board, title, hint, buttons, defaults, onEdit, onCommit, persist }: EditorProps) => {
+// The full add/remove/edit UI for one board's actions. Rendered inside the side panel.
+const ActionsEditor = ({ board, hint, buttons, defaults, onEdit, onCommit, persist }: EditorProps) => {
   const fields = CONDITION_FIELDS[board]
   const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-deck-500'
   const patch = (id: string, p: Partial<ActionButton>, commit: boolean) => {
@@ -53,12 +63,9 @@ const ButtonsEditor = ({ board, title, hint, buttons, defaults, onEdit, onCommit
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-deck-700 p-3">
+    <div className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h3 className="text-sm font-semibold text-deck-300">{title}</h3>
-          <p className="text-xs text-deck-500">{hint}</p>
-        </div>
+        <p className="text-xs text-deck-500">{hint}</p>
         <button
           type="button"
           onClick={() => onCommit(defaults)}
@@ -72,7 +79,7 @@ const ButtonsEditor = ({ board, title, hint, buttons, defaults, onEdit, onCommit
         <div key={b.id} className="flex flex-col gap-3 rounded-md border border-deck-800 bg-deck-800/40 p-3">
           <div className="flex items-center justify-between gap-2">
             <span className={labelCls}>
-              {i === 0 ? 'Primary button' : `Button ${i + 1}`}
+              {i === 0 ? 'Primary action' : `Action ${i + 1}`}
               {i === 0 && <span className="ml-1.5 normal-case text-deck-600">— used by the quick shortcut</span>}
             </span>
             <button
@@ -237,18 +244,124 @@ const ButtonsEditor = ({ board, title, hint, buttons, defaults, onEdit, onCommit
       <button
         type="button"
         onClick={() =>
-          onCommit([...buttons, { id: crypto.randomUUID(), label: 'New button', prompt: '', conditions: [] }])
+          onCommit([...buttons, { id: crypto.randomUUID(), label: 'New action', prompt: '', conditions: [] }])
         }
         className="cursor-pointer self-start rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20"
       >
-        + Add button
+        + Add action
       </button>
     </div>
   )
 }
 
+const PencilIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </svg>
+)
+
+// A read-only card previewing a board's actions as they render in the real panel; click to edit.
+const ActionsPreview = ({
+  title,
+  hint,
+  buttons,
+  onEdit,
+}: {
+  title: string
+  hint: string
+  buttons: ActionButton[]
+  onEdit: () => void
+}) => (
+  <div className="flex flex-col gap-2">
+    <div>
+      <h3 className="text-sm font-semibold text-deck-300">{title}</h3>
+      <p className="text-xs text-deck-500">{hint}</p>
+    </div>
+    <button
+      type="button"
+      onClick={onEdit}
+      title="Edit actions"
+      className="group flex items-center justify-between gap-3 rounded-lg border border-deck-700 bg-deck-800/40 p-3 text-left hover:border-grass-600/60 hover:bg-deck-800"
+    >
+      <div className="flex flex-wrap gap-2">
+        {buttons.length === 0 && <span className="text-sm text-deck-500">No actions yet — click to add one.</span>}
+        {buttons.map((b, i) => (
+          <span
+            key={b.id}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
+              i === 0 ? 'bg-grass-600 text-white' : 'border border-grass-600 text-grass-300'
+            }`}
+          >
+            <ActionIcon name={b.icon} /> {b.label}
+          </span>
+        ))}
+      </div>
+      <span className="shrink-0 rounded-md border border-deck-600 p-1.5 text-deck-400 group-hover:border-grass-500 group-hover:text-grass-300">
+        <PencilIcon />
+      </span>
+    </button>
+  </div>
+)
+
+// Generic right-side slide-in drawer (backdrop + slide + Esc), reused for the actions editor.
+const SidePanel = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const close = () => {
+    setShown(false)
+    setTimeout(onClose, 220)
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for this listener
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  return (
+    <>
+      <div
+        onClick={close}
+        className={`fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`}
+        aria-hidden="true"
+      />
+      <div
+        className={`fixed inset-y-0 right-0 z-20 flex w-[620px] max-w-[92vw] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between border-b border-deck-800 px-4 py-3">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <button
+            type="button"
+            onClick={close}
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-xl leading-none text-deck-400 hover:text-deck-100"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </>
+  )
+}
+
 export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons }: Props) => {
   const [path, setPath] = useState('')
+  const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
   const [reviewBtns, setReviewBtns] = useState<ActionButton[]>(config.reviewButtons)
   const [prBtns, setPrBtns] = useState<ActionButton[]>(config.prButtons)
 
@@ -308,10 +421,30 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
     }
   }
 
+  // Wire the ActionsEditor to one board's local state + persistence.
+  const editorProps = (board: ButtonBoard) => {
+    const isReview = board === 'review'
+    const buttons = isReview ? reviewBtns : prBtns
+    const setLocal = isReview ? setReviewBtns : setPrBtns
+    const save = isReview ? onSaveReviewButtons : onSavePrButtons
+    return {
+      board,
+      hint: BOARD_META[board].hint,
+      buttons,
+      defaults: isReview ? DEFAULT_REVIEW_BUTTONS : DEFAULT_PR_BUTTONS,
+      onEdit: setLocal,
+      onCommit: (next: ActionButton[]) => {
+        setLocal(next)
+        save(next)
+      },
+      persist: () => save(buttons),
+    }
+  }
+
   return (
-    <div className="flex max-w-[1000px] flex-col gap-4">
+    <div className="flex max-w-[1000px] flex-col gap-8">
       <div>
-        <h2 className="text-lg font-semibold">Settings</h2>
+        <h2 className="text-2xl font-bold">Settings</h2>
         <p className="mt-1 flex items-center gap-2 text-sm text-deck-400">
           {config.githubUser ? (
             <button
@@ -381,32 +514,18 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
         </button>
       </div>
 
-      <ButtonsEditor
-        board="review"
-        title="Reviews board buttons"
-        hint="Actions shown in a review card's panel. First button is the primary (used by the quick review shortcut)."
+      <ActionsPreview
+        title={BOARD_META.review.title}
+        hint={BOARD_META.review.hint}
         buttons={reviewBtns}
-        defaults={DEFAULT_REVIEW_BUTTONS}
-        onEdit={setReviewBtns}
-        onCommit={(next) => {
-          setReviewBtns(next)
-          onSaveReviewButtons(next)
-        }}
-        persist={() => onSaveReviewButtons(reviewBtns)}
+        onEdit={() => setEditing('review')}
       />
 
-      <ButtonsEditor
-        board="pr"
-        title="Pull Requests board buttons"
-        hint="Actions shown in your own PR's panel. First button is the primary (used by the card's quick shortcut)."
+      <ActionsPreview
+        title={BOARD_META.pr.title}
+        hint={BOARD_META.pr.hint}
         buttons={prBtns}
-        defaults={DEFAULT_PR_BUTTONS}
-        onEdit={setPrBtns}
-        onCommit={(next) => {
-          setPrBtns(next)
-          onSavePrButtons(next)
-        }}
-        persist={() => onSavePrButtons(prBtns)}
+        onEdit={() => setEditing('pr')}
       />
 
       <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
@@ -446,6 +565,12 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
       <div className="mt-6 border-t border-deck-800 pt-4">
         <History tasks={tasks} />
       </div>
+
+      {editing && (
+        <SidePanel title={BOARD_META[editing].title} onClose={() => setEditing(null)}>
+          <ActionsEditor {...editorProps(editing)} />
+        </SidePanel>
+      )}
     </div>
   )
 }
