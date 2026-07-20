@@ -250,11 +250,34 @@ export const SessionPanel = ({
   const [report, setReport] = useState<{ path: string; content: string } | null>(null)
   const [showRun, setShowRun] = useState(true)
   const [shown, setShown] = useState(false) // drives slide-in/out + backdrop fade
+  const [width, setWidth] = useState(() => Math.min(Math.max(window.innerWidth * 0.45, 440), 860)) // reopens at default
+  const resizing = useRef(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setShown(true))
     return () => cancelAnimationFrame(id)
+  }, [])
+
+  // drag the left edge to resize horizontally
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!resizing.current) return
+      const w = window.innerWidth - e.clientX
+      setWidth(Math.min(Math.max(w, 440), window.innerWidth * 0.9))
+    }
+    const onUp = () => {
+      if (!resizing.current) return
+      resizing.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
   }, [])
 
   const close = () => {
@@ -364,8 +387,21 @@ export const SessionPanel = ({
         aria-hidden="true"
       />
       <div
-        className={`fixed inset-y-0 right-0 z-20 flex w-[45vw] min-w-[440px] max-w-[860px] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
+        style={{ width }}
+        className={`fixed inset-y-0 right-0 z-20 flex transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
       >
+        <button
+          type="button"
+          aria-label="Resize panel"
+          title="Drag to resize"
+          onPointerDown={(e) => {
+            e.preventDefault()
+            resizing.current = true
+            document.body.style.userSelect = 'none'
+            document.body.style.cursor = 'col-resize'
+          }}
+          className="absolute inset-y-0 left-0 z-40 w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-grass-500/40"
+        />
         <div className="border-b border-deck-800 px-4 py-3">
           <div className="flex items-center gap-2">
             <PrLink
