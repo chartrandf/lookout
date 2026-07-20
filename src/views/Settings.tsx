@@ -185,6 +185,16 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
             className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
           />
         </label>
+        <label className="flex flex-col gap-1 text-xs text-deck-400">
+          Handle CI
+          <input
+            value={commands.handleCi}
+            onChange={(e) => setCommandsState((c) => ({ ...c, handleCi: e.target.value }))}
+            onBlur={() => onSaveCommands(commands)}
+            placeholder="empty = hide the card button"
+            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
+          />
+        </label>
         <button
           type="button"
           onClick={() => {

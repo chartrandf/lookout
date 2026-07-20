@@ -8,6 +8,7 @@ export const DEFAULT_COMMANDS: Commands = {
   followup:
     'Fetch the review comments of PR #<pr_id> (branch <branch_name>) with gh, check the PR commits to verify whether each comment was addressed, and finish with a line: SUMMARY: X addressed | Y partial | Z pending',
   handleReview: '/handle-review',
+  handleCi: '', // empty by default: the "handle CI" card button stays hidden until a command is set
 }
 
 let store: Store | null = null
