@@ -4,27 +4,373 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
+import { ACTION_ICON_NAMES, ActionIcon } from '../components/ActionIcon'
 import { avatarUrl } from '../lib/avatar'
-import { DEFAULT_COMMANDS } from '../lib/config'
+import { CONDITION_FIELDS } from '../lib/buttons'
+import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
 import { notify } from '../lib/notify'
-import type { Commands, Config, ReviewTask, WatchedRepo } from '../types'
+import type { ActionButton, ButtonBoard, Config, ReviewTask, Stage, WatchedRepo } from '../types'
 import { History } from './History'
 
 type Props = {
   config: Config
   tasks: ReviewTask[]
   onSave: (repos: WatchedRepo[]) => void
-  onSaveCommands: (commands: Commands) => void
+  onSaveReviewButtons: (buttons: ActionButton[]) => void
+  onSavePrButtons: (buttons: ActionButton[]) => void
 }
 
-export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
+const STAGE_OPTIONS: Stage[] = [
+  'discovered',
+  'watching',
+  'inbox',
+  'reviewing',
+  'reviewed',
+  'followup',
+  'done',
+  'ignored',
+]
+
+const BOARD_META: Record<ButtonBoard, { title: string; hint: string }> = {
+  review: {
+    title: 'Review actions',
+    hint: "Actions shown in a review card's panel. The first is the primary (used by the quick review shortcut).",
+  },
+  pr: {
+    title: 'Pull Request actions',
+    hint: "Actions shown in your own PR's panel. The first is the primary (used by the card's quick shortcut).",
+  },
+}
+
+type EditorProps = {
+  board: ButtonBoard
+  hint: string
+  buttons: ActionButton[]
+  defaults: ActionButton[]
+  onEdit: (buttons: ActionButton[]) => void // local update while typing (not persisted)
+  onCommit: (buttons: ActionButton[]) => void // persist these buttons
+  persist: () => void // persist current local buttons (used on blur)
+}
+
+// The full add/remove/edit UI for one board's actions. Rendered inside the side panel.
+const ActionsEditor = ({ board, hint, buttons, defaults, onEdit, onCommit, persist }: EditorProps) => {
+  const fields = CONDITION_FIELDS[board]
+  const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-deck-500'
+  const patch = (id: string, p: Partial<ActionButton>, commit: boolean) => {
+    const next = buttons.map((b) => (b.id === id ? { ...b, ...p } : b))
+    ;(commit ? onCommit : onEdit)(next)
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-deck-500">{hint}</p>
+        <button
+          type="button"
+          onClick={() => onCommit(defaults)}
+          className="shrink-0 cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+        >
+          Reset to defaults
+        </button>
+      </div>
+
+      {buttons.map((b, i) => (
+        <div key={b.id} className="flex flex-col gap-3 rounded-md border border-deck-800 bg-deck-800/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className={labelCls}>
+              {i === 0 ? 'Primary action' : `Action ${i + 1}`}
+              {i === 0 && <span className="ml-1.5 normal-case text-deck-600">— used by the quick shortcut</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => onCommit(buttons.filter((x) => x.id !== b.id))}
+              className="cursor-pointer text-xs text-red-400 hover:text-red-300"
+            >
+              remove
+            </button>
+          </div>
+
+          {/* 1 — what the button says */}
+          <label className="flex flex-col gap-1">
+            <span className={labelCls}>Button text</span>
+            <input
+              value={b.label}
+              onChange={(e) => patch(b.id, { label: e.target.value }, false)}
+              onBlur={persist}
+              placeholder="e.g. do-review"
+              className="rounded border border-deck-600 bg-deck-800 px-2 py-1 text-sm text-deck-100 outline-none focus:border-grass-500"
+            />
+          </label>
+
+          {/* 1b — its icon */}
+          <div className="flex flex-col gap-1">
+            <span className={labelCls}>Icon</span>
+            <div className="flex flex-wrap gap-1">
+              {ACTION_ICON_NAMES.map((name) => {
+                const on = (b.icon ?? 'play') === name
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    onClick={() => patch(b.id, { icon: name }, true)}
+                    className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded border ${
+                      on
+                        ? 'border-grass-500 bg-grass-600/20 text-grass-300'
+                        : 'border-deck-600 text-deck-400 hover:bg-deck-700 hover:text-deck-200'
+                    }`}
+                  >
+                    <ActionIcon name={name} size={16} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 2 — what it sends to claude */}
+          <label className="flex flex-col gap-1">
+            <span className={labelCls}>Prompt sent to claude</span>
+            <textarea
+              value={b.prompt}
+              onChange={(e) => patch(b.id, { prompt: e.target.value }, false)}
+              onBlur={persist}
+              rows={3}
+              placeholder="/do-review <pr_id>  — or a full prompt. Placeholders: <pr_id>, <branch_name>"
+              className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-xs text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
+            />
+          </label>
+
+          {/* 3 — when the button is visible */}
+          <div className="flex flex-col gap-1.5">
+            <span className={labelCls}>
+              Show when {b.conditions.length === 0 && <span className="normal-case text-deck-600">(always)</span>}
+            </span>
+            {b.conditions.map((c, idx) => {
+              const field = fields.find((f) => f.field === c.field) ?? fields[0]
+              return (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: conditions are a positional list
+                  key={idx}
+                  className="flex items-start gap-2 rounded-md border border-deck-700 bg-deck-800/60 px-2 py-1.5"
+                >
+                  <span className="w-9 shrink-0 pt-1 text-right text-[11px] font-semibold text-deck-500">
+                    {idx === 0 ? 'Where' : 'AND'}
+                  </span>
+                  <select
+                    value={c.field}
+                    onChange={(e) => {
+                      const nextConds = b.conditions.map((x, j) =>
+                        j === idx ? { field: e.target.value as typeof c.field, values: [] } : x,
+                      )
+                      patch(b.id, { conditions: nextConds }, true)
+                    }}
+                    className="w-32 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-0.5 text-xs text-deck-200 outline-none focus:border-grass-500"
+                  >
+                    {fields.map((f) => (
+                      <option key={f.field} value={f.field}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="shrink-0 pt-1 text-xs text-deck-500">is any of</span>
+                  <div className="flex flex-1 flex-wrap gap-1">
+                    {field.values.map((v) => {
+                      const on = c.values.includes(v)
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            const values = on ? c.values.filter((x) => x !== v) : [...c.values, v]
+                            const nextConds = b.conditions.map((x, j) => (j === idx ? { ...x, values } : x))
+                            patch(b.id, { conditions: nextConds }, true)
+                          }}
+                          className={`cursor-pointer rounded px-1.5 py-0.5 text-xs ${
+                            on ? 'bg-grass-600 text-white' : 'border border-deck-600 text-deck-400 hover:bg-deck-700'
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => patch(b.id, { conditions: b.conditions.filter((_, j) => j !== idx) }, true)}
+                    title="Remove condition"
+                    className="shrink-0 cursor-pointer rounded border border-deck-600 px-1.5 py-0.5 text-sm leading-none text-deck-400 hover:border-red-400/50 hover:text-red-300"
+                  >
+                    −
+                  </button>
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() =>
+                patch(b.id, { conditions: [...b.conditions, { field: fields[0].field, values: [] }] }, true)
+              }
+              className="cursor-pointer self-start text-xs text-grass-400 hover:text-grass-300"
+            >
+              + add condition
+            </button>
+          </div>
+
+          {/* 4 — where the card lands once the run finishes (review board only) */}
+          {board === 'review' && (
+            <label className="flex flex-col gap-1">
+              <span className={labelCls}>On completion</span>
+              <div className="flex items-center gap-2 text-xs text-deck-400">
+                move card to stage
+                <select
+                  value={b.advanceTo ?? ''}
+                  onChange={(e) => patch(b.id, { advanceTo: (e.target.value || undefined) as Stage | undefined }, true)}
+                  className="w-48 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
+                >
+                  <option value="">— leave unchanged —</option>
+                  {STAGE_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          )}
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() =>
+          onCommit([...buttons, { id: crypto.randomUUID(), label: 'New action', prompt: '', conditions: [] }])
+        }
+        className="cursor-pointer self-start rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20"
+      >
+        + Add action
+      </button>
+    </div>
+  )
+}
+
+const PencilIcon = () => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+    <path d="m15 5 4 4" />
+  </svg>
+)
+
+// A read-only card previewing a board's actions as they render in the real panel; click to edit.
+const ActionsPreview = ({
+  title,
+  hint,
+  buttons,
+  onEdit,
+}: {
+  title: string
+  hint: string
+  buttons: ActionButton[]
+  onEdit: () => void
+}) => (
+  <div className="flex flex-col gap-2">
+    <div>
+      <h3 className="text-sm font-semibold text-deck-300">{title}</h3>
+      <p className="text-xs text-deck-500">{hint}</p>
+    </div>
+    <button
+      type="button"
+      onClick={onEdit}
+      title="Edit actions"
+      className="group flex items-center justify-between gap-3 rounded-lg border border-deck-700 bg-deck-800/40 p-3 text-left hover:border-grass-600/60 hover:bg-deck-800"
+    >
+      <div className="flex flex-wrap gap-2">
+        {buttons.length === 0 && <span className="text-sm text-deck-500">No actions yet — click to add one.</span>}
+        {buttons.map((b, i) => (
+          <span
+            key={b.id}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
+              i === 0 ? 'bg-grass-600 text-white' : 'border border-grass-600 text-grass-300'
+            }`}
+          >
+            <ActionIcon name={b.icon} /> {b.label}
+          </span>
+        ))}
+      </div>
+      <span className="shrink-0 rounded-md border border-deck-600 p-1.5 text-deck-400 group-hover:border-grass-500 group-hover:text-grass-300">
+        <PencilIcon />
+      </span>
+    </button>
+  </div>
+)
+
+// Generic right-side slide-in drawer (backdrop + slide + Esc), reused for the actions editor.
+const SidePanel = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => {
+  const [shown, setShown] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const close = () => {
+    setShown(false)
+    setTimeout(onClose, 220)
+  }
+  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for this listener
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  return (
+    <>
+      <div
+        onClick={close}
+        className={`fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`}
+        aria-hidden="true"
+      />
+      <div
+        className={`fixed inset-y-0 right-0 z-20 flex w-[620px] max-w-[92vw] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between border-b border-deck-800 px-4 py-3">
+          <h2 className="text-lg font-semibold text-white">{title}</h2>
+          <button
+            type="button"
+            onClick={close}
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-xl leading-none text-deck-400 hover:text-deck-100"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+      </div>
+    </>
+  )
+}
+
+export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons }: Props) => {
   const [path, setPath] = useState('')
-  const [commands, setCommandsState] = useState<Commands>(config.commands)
+  const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
+  const [reviewBtns, setReviewBtns] = useState<ActionButton[]>(config.reviewButtons)
+  const [prBtns, setPrBtns] = useState<ActionButton[]>(config.prButtons)
 
   useEffect(() => {
-    setCommandsState(config.commands)
-  }, [config.commands])
+    setReviewBtns(config.reviewButtons)
+  }, [config.reviewButtons])
+  useEffect(() => {
+    setPrBtns(config.prButtons)
+  }, [config.prButtons])
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [autostart, setAutostart] = useState(false)
@@ -75,10 +421,30 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
     }
   }
 
+  // Wire the ActionsEditor to one board's local state + persistence.
+  const editorProps = (board: ButtonBoard) => {
+    const isReview = board === 'review'
+    const buttons = isReview ? reviewBtns : prBtns
+    const setLocal = isReview ? setReviewBtns : setPrBtns
+    const save = isReview ? onSaveReviewButtons : onSavePrButtons
+    return {
+      board,
+      hint: BOARD_META[board].hint,
+      buttons,
+      defaults: isReview ? DEFAULT_REVIEW_BUTTONS : DEFAULT_PR_BUTTONS,
+      onEdit: setLocal,
+      onCommit: (next: ActionButton[]) => {
+        setLocal(next)
+        save(next)
+      },
+      persist: () => save(buttons),
+    }
+  }
+
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
+    <div className="flex max-w-[1000px] flex-col gap-8">
       <div>
-        <h2 className="text-lg font-semibold">Settings</h2>
+        <h2 className="text-2xl font-bold">Settings</h2>
         <p className="mt-1 flex items-center gap-2 text-sm text-deck-400">
           {config.githubUser ? (
             <button
@@ -148,64 +514,19 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-deck-700 p-3">
-        <div>
-          <h3 className="text-sm font-semibold text-deck-300">Claude commands</h3>
-          <p className="text-xs text-deck-500">
-            Prompt sent to <code className="text-deck-400">claude -p</code> per action. Placeholders:{' '}
-            <code className="text-grass-400">&lt;branch_name&gt;</code>,{' '}
-            <code className="text-grass-400">&lt;pr_id&gt;</code>.
-          </p>
-        </div>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Review
-          <input
-            value={commands.review}
-            onChange={(e) => setCommandsState((c) => ({ ...c, review: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Follow-up
-          <textarea
-            value={commands.followup}
-            onChange={(e) => setCommandsState((c) => ({ ...c, followup: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            rows={3}
-            className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Handle review
-          <input
-            value={commands.handleReview}
-            onChange={(e) => setCommandsState((c) => ({ ...c, handleReview: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Handle CI
-          <input
-            value={commands.handleCi}
-            onChange={(e) => setCommandsState((c) => ({ ...c, handleCi: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            placeholder="empty = hide the card button"
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            setCommandsState(DEFAULT_COMMANDS)
-            onSaveCommands(DEFAULT_COMMANDS)
-          }}
-          className="cursor-pointer self-start text-xs text-deck-400 hover:text-deck-200"
-        >
-          Reset to defaults
-        </button>
-      </div>
+      <ActionsPreview
+        title={BOARD_META.review.title}
+        hint={BOARD_META.review.hint}
+        buttons={reviewBtns}
+        onEdit={() => setEditing('review')}
+      />
+
+      <ActionsPreview
+        title={BOARD_META.pr.title}
+        hint={BOARD_META.pr.hint}
+        buttons={prBtns}
+        onEdit={() => setEditing('pr')}
+      />
 
       <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
         <div>
@@ -244,6 +565,12 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
       <div className="mt-6 border-t border-deck-800 pt-4">
         <History tasks={tasks} />
       </div>
+
+      {editing && (
+        <SidePanel title={BOARD_META[editing].title} onClose={() => setEditing(null)}>
+          <ActionsEditor {...editorProps(editing)} />
+        </SidePanel>
+      )}
     </div>
   )
 }

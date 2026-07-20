@@ -9,7 +9,8 @@ import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
 import type { Run } from '../lib/runs'
 import { timeAgo } from '../lib/time'
-import type { ReviewTask, Stage } from '../types'
+import type { ActionButton, ReviewTask, Stage } from '../types'
+import { ActionIcon } from './ActionIcon'
 import { PrLink } from './PrLink'
 
 type Props = {
@@ -17,12 +18,12 @@ type Props = {
   run: Run | undefined
   me: string
   myName?: string
-  // 'review' = the Reviews board (do-review/do-followup/approve, stage select).
-  // 'pr' = the Pull Requests board for my own PRs (a single Handle review action).
+  // 'review' = the Reviews board (adds a built-in approve button + stage select).
+  // 'pr' = the Pull Requests board for my own PRs.
   variant?: 'review' | 'pr'
-  handleCi?: string // "handle CI" command; empty = button hidden
+  buttons: ActionButton[] // user-configured action buttons, already filtered by their visibility conditions
   onReply: (text: string) => void
-  onDispatch: (command: 'do-review' | 'do-followup' | 'handle-review' | 'handle-ci') => void
+  onRunButton: (button: ActionButton) => void
   onStageChange: (stage: Stage) => void
   onSnooze: (snoozed: boolean) => void
   onKill: () => void
@@ -101,31 +102,6 @@ const STAGES: { value: Stage; label: string }[] = [
   { value: 'done', label: 'Done' },
   { value: 'ignored', label: 'Ignored' },
 ]
-
-const PlayIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-    <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.9l11.02-6.86a1.05 1.05 0 0 0 0-1.8L9.56 4.24A1.05 1.05 0 0 0 8 5.14Z" />
-  </svg>
-)
-
-const RepeatIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
-    <path d="m17 2 4 4-4 4" />
-    <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
-    <path d="m7 22-4-4 4-4" />
-    <path d="M21 13v1a4 4 0 0 1-4 4H3" />
-  </svg>
-)
 
 const CheckIcon = () => (
   <svg
@@ -229,9 +205,9 @@ export const SessionPanel = ({
   me,
   myName = '',
   variant = 'review',
-  handleCi = '',
+  buttons,
   onReply,
-  onDispatch,
+  onRunButton,
   onStageChange,
   onSnooze,
   onKill,
@@ -518,70 +494,37 @@ export const SessionPanel = ({
           </div>
         </div>
 
-        <div className="flex gap-2 border-b border-deck-800 px-4 py-2">
-          {isPr ? (
-            <>
-              <button
-                type="button"
-                onClick={() => onDispatch('handle-review')}
-                disabled={running}
-                title="Run /handle-review on this PR's review comments"
-                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
-              >
-                <span className="flex items-center gap-1.5">
-                  <PlayIcon /> handle review
-                </span>
-              </button>
-              {handleCi && (
-                <button
-                  type="button"
-                  onClick={() => onDispatch('handle-ci')}
-                  disabled={running}
-                  title="Run the handle-CI command on this PR"
-                  className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <PlayIcon /> handle CI
-                  </span>
-                </button>
-              )}
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => onDispatch('do-review')}
-                disabled={running}
-                className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50"
-              >
-                <span className="flex items-center gap-1.5">
-                  <PlayIcon /> do-review
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onDispatch('do-followup')}
-                disabled={running}
-                className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50"
-              >
-                <span className="flex items-center gap-1.5">
-                  <RepeatIcon /> do-followup
-                </span>
-              </button>
-              {(canApprove || approved) && (
-                <button
-                  type="button"
-                  onClick={approve}
-                  disabled={approving || approved}
-                  title="Approve the PR on GitHub and move it to Done"
-                  className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
-                >
-                  <span className="flex items-center gap-1.5">
-                    <CheckIcon /> {approved ? 'approved' : approving ? 'approving…' : 'approve'}
-                  </span>
-                </button>
-              )}
-            </>
+        <div className="flex flex-wrap gap-2 border-b border-deck-800 px-4 py-2">
+          {buttons.map((b, i) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => onRunButton(b)}
+              disabled={running}
+              title={b.prompt}
+              className={
+                i === 0
+                  ? 'cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:opacity-50'
+                  : 'cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20 disabled:opacity-50'
+              }
+            >
+              <span className="flex items-center gap-1.5">
+                <ActionIcon name={b.icon} /> {b.label}
+              </span>
+            </button>
+          ))}
+          {!isPr && (canApprove || approved) && (
+            <button
+              type="button"
+              onClick={approve}
+              disabled={approving || approved}
+              title="Approve the PR on GitHub and move it to Done"
+              className="ml-auto cursor-pointer rounded-md bg-grass-500 px-3 py-1.5 text-sm font-medium text-deck-950 hover:bg-grass-400 disabled:opacity-60"
+            >
+              <span className="flex items-center gap-1.5">
+                <CheckIcon /> {approved ? 'approved' : approving ? 'approving…' : 'approve'}
+              </span>
+            </button>
           )}
           {run?.status === 'awaiting-input' && (
             <span className="self-center text-xs text-grass-300">awaiting input</span>

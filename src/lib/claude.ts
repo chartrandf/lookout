@@ -8,12 +8,11 @@ export type StreamEvent =
   | { type: 'stderr'; text: string }
   | { type: 'exit'; code: number | null }
 
-// /do-review needs: gh (diff + push comments), read-only code access, Task (code-reviewer agent), Write (review export)
-export const REVIEW_TOOLS = 'Bash(gh:*),Read,Glob,Grep,Task,Write,TodoWrite'
-// /handle-review edits files, commits and pushes: it needs Edit + git on top of the review set
-export const HANDLE_REVIEW_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
-// handle-ci fixes failing CI: same edit/commit/push surface as handle-review
-export const HANDLE_CI_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
+// Tool allowlist for every configurable action button. A superset of what the fixed actions used
+// (gh + git + read/edit/write + Task): read-only prompts simply never reach for the edit tools.
+export const ACTION_TOOLS = 'Bash(gh:*),Bash(git:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite'
+// default used by runs.ts when no allowlist is passed (kept in sync with ACTION_TOOLS)
+export const REVIEW_TOOLS = ACTION_TOOLS
 
 const toolDetail = (input: Record<string, unknown>): string =>
   String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')

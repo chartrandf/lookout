@@ -2,8 +2,16 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
-import { HANDLE_CI_TOOLS, HANDLE_REVIEW_TOOLS } from './lib/claude'
-import { DEFAULT_COMMANDS, getConfig, setCommands, setRepos } from './lib/config'
+import { visibleButtons } from './lib/buttons'
+import { ACTION_TOOLS } from './lib/claude'
+import {
+  DEFAULT_PR_BUTTONS,
+  DEFAULT_REVIEW_BUTTONS,
+  getConfig,
+  setPrButtons,
+  setRepos,
+  setReviewButtons,
+} from './lib/config'
 import {
   addNotification,
   addSessionId,
@@ -25,21 +33,20 @@ import { notify, onNotificationClick } from './lib/notify'
 import { fillPrompt } from './lib/prompt'
 import { setOverride } from './lib/proverrides'
 import { scanReviewFiles } from './lib/reviews'
-import {
-  cancelRun,
-  closeRun,
-  getRun,
-  getRuns,
-  killRun,
-  type RunCommand,
-  replyRun,
-  resumeRun,
-  startRun,
-  subscribeRuns,
-} from './lib/runs'
+import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
-import type { AppNotification, Config, MyPr, PrColumn, ReviewTask, Stage, WatchedRepo } from './types'
+import type {
+  ActionButton,
+  AppNotification,
+  ButtonBoard,
+  Config,
+  MyPr,
+  PrColumn,
+  ReviewTask,
+  Stage,
+  WatchedRepo,
+} from './types'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
 import { PullRequests } from './views/PullRequests'
@@ -77,7 +84,8 @@ const App = () => {
     githubUser: '',
     githubName: '',
     repos: [],
-    commands: DEFAULT_COMMANDS,
+    reviewButtons: DEFAULT_REVIEW_BUTTONS,
+    prButtons: DEFAULT_PR_BUTTONS,
   })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])
@@ -229,19 +237,20 @@ const App = () => {
     if (files.length) await setLinks(t.id, t.sessionIds, files)
   }
 
-  const notifySessionDone = async (taskId: string, command: 'do-review' | 'do-followup') => {
+  const notifySessionDone = async (taskId: string, label: string) => {
     const t = (await allTasks()).find((x) => x.id === taskId)
     if (!t) return
-    const title = `${command === 'do-followup' ? 'Follow up' : 'Review'} done (${t.repo})`
+    const title = `${label} done (${t.repo})`
     const body = `${t.prTitle} by ${t.prAuthor}`
     const id = await addNotification(t.id, title, body)
     notify(title, body, { notificationId: id, taskId: t.id })
     await reloadNotifications()
   }
 
-  const runCallbacks = (command: RunCommand) => {
-    // handle-review / handle-ci run against my own PRs (not tracked in the tasks DB): just re-derive the board on result
-    if (command === 'handle-review' || command === 'handle-ci')
+  // Post-run behavior is routed by board, not by a fixed command name.
+  const runCallbacks = (board: ButtonBoard, button?: ActionButton) => {
+    // PR board runs act on my own PRs (not tracked in the tasks DB): just re-derive the board on result
+    if (board === 'pr')
       return {
         onResult: async () => {
           setMyPrs(await syncMyPrs())
@@ -253,34 +262,33 @@ const App = () => {
         await reload()
       },
       onResult: async (taskId: string, result: string) => {
-        if (command === 'do-followup') {
-          const summary = parseFollowupSummary(result)
-          if (summary) await setFollowupSummary(taskId, summary)
-          await setStage(taskId, 'followup')
-          closeRun(taskId) // follow-up is informational: no reply expected
-        } else {
-          await setStage(taskId, 'reviewed')
-          await linkReviewReport(taskId)
-        }
-        await notifySessionDone(taskId, command)
+        // any button whose prompt emits a "SUMMARY: … addressed … partial … pending" line updates the badge
+        const summary = parseFollowupSummary(result)
+        if (summary) await setFollowupSummary(taskId, summary)
+        await linkReviewReport(taskId)
+        if (button?.advanceTo) await setStage(taskId, button.advanceTo)
+        await notifySessionDone(taskId, button?.label ?? 'Run')
         await reload()
       },
     }
   }
 
-  const dispatchRun = async (t: ReviewTask, command: 'do-review' | 'do-followup') => {
+  // Start a configurable button's prompt as a claude run for the given task/board.
+  const runButton = async (t: ReviewTask, board: ButtonBoard, button: ActionButton) => {
     if (!t.repoPath) return
-    if (command === 'do-review') await setStage(t.id, 'reviewing')
-    await reload()
     setPanelTaskId(t.id)
-    const { commands } = await getConfig()
-    const prompt = fillPrompt(command === 'do-review' ? commands.review : commands.followup, t.branch, t.prNumber)
-    await startRun(t.id, command, prompt, t.repoPath, runCallbacks(command))
+    const prompt = fillPrompt(button.prompt, t.branch, t.prNumber)
+    await startRun(t.id, button.label, board, prompt, t.repoPath, runCallbacks(board, button), ACTION_TOOLS)
   }
 
-  const startReview = (id: string) => {
+  // Discovery / search "review" shortcut: add the PR to the board, then run the first review button.
+  const startReview = async (id: string) => {
     const t = tasks.find((x) => x.id === id)
-    if (t) dispatchRun(t, 'do-review')
+    const button = config.reviewButtons[0]
+    if (!t || !button) return
+    await setStage(t.id, 'reviewing')
+    await reload()
+    await runButton({ ...t, stage: 'reviewing' }, 'review', button)
   }
 
   // adapt a MyPr into the ReviewTask shape SessionPanel consumes (my PRs aren't in the tasks DB)
@@ -296,6 +304,7 @@ const App = () => {
     prAuthor: config.githubUser,
     prCreatedAt: pr.createdAt,
     stage: 'reviewing',
+    column: pr.column, // drives PR-board button conditions
     reviewRequested: false,
     sessionIds: [],
     reviewFiles: [],
@@ -310,27 +319,11 @@ const App = () => {
     updatedAt: pr.createdAt,
   })
 
-  const dispatchHandleReview = async (t: ReviewTask) => {
-    if (!t.repoPath) return
-    setPanelTaskId(t.id)
-    const { commands } = await getConfig()
-    const prompt = fillPrompt(commands.handleReview, t.branch, t.prNumber)
-    await startRun(t.id, 'handle-review', prompt, t.repoPath, runCallbacks('handle-review'), HANDLE_REVIEW_TOOLS)
-  }
-
-  // card button: open the panel; start the run only if one isn't already live/awaiting for this PR
+  // PR card shortcut: open the panel; run the first PR button only if nothing is already live for this PR
   const onHandleReview = (pr: MyPr) => {
     setPanelTaskId(pr.id)
-    if (!getRun(pr.id)) dispatchHandleReview(myPrToTask(pr))
-  }
-
-  const dispatchHandleCi = async (t: ReviewTask) => {
-    if (!t.repoPath) return
-    setPanelTaskId(t.id)
-    const { commands } = await getConfig()
-    if (!commands.handleCi) return
-    const prompt = fillPrompt(commands.handleCi, t.branch, t.prNumber)
-    await startRun(t.id, 'handle-ci', prompt, t.repoPath, runCallbacks('handle-ci'), HANDLE_CI_TOOLS)
+    const button = config.prButtons[0]
+    if (button && !getRun(pr.id)) runButton(myPrToTask(pr), 'pr', button)
   }
 
   // manual hand-off: pin the card to a column (optimistic) and persist the override against the
@@ -510,8 +503,12 @@ const App = () => {
             config={config}
             tasks={tasks}
             onSave={saveRepos}
-            onSaveCommands={async (commands) => {
-              await setCommands(commands)
+            onSaveReviewButtons={async (buttons) => {
+              await setReviewButtons(buttons)
+              setConfig(await getConfig())
+            }}
+            onSavePrButtons={async (buttons) => {
+              await setPrButtons(buttons)
               setConfig(await getConfig())
             }}
           />
@@ -525,25 +522,29 @@ const App = () => {
           me={config.githubUser}
           myName={config.githubName}
           variant={panelIsPr ? 'pr' : 'review'}
-          handleCi={config.commands.handleCi}
+          buttons={visibleButtons(panelIsPr ? config.prButtons : config.reviewButtons, panelTask)}
           onReply={(text) => {
+            const board: ButtonBoard = panelIsPr ? 'pr' : 'review'
             const sessionId = panelTask.sessionIds.at(-1)
             const run = getRun(panelTask.id)
-            if (run) replyRun(panelTask.id, text, runCallbacks(run.command), sessionId)
+            if (run) replyRun(panelTask.id, text, runCallbacks(board), sessionId)
             // no live run (app restarted, run dismissed): resume the session directly
             else if (panelTask.repoPath && sessionId) {
-              const cmd: RunCommand = panelIsPr ? 'handle-review' : 'do-review'
-              const tools = panelIsPr ? HANDLE_REVIEW_TOOLS : undefined
-              resumeRun(panelTask.id, cmd, panelTask.repoPath, text, sessionId, runCallbacks(cmd), tools)
+              resumeRun(
+                panelTask.id,
+                'reply',
+                board,
+                panelTask.repoPath,
+                text,
+                sessionId,
+                runCallbacks(board),
+                ACTION_TOOLS,
+              )
             }
           }}
           onDismissRun={() => killRun(panelTask.id)}
           onCancel={() => cancelRun(panelTask.id)}
-          onDispatch={(command) => {
-            if (command === 'handle-review') dispatchHandleReview(panelTask)
-            else if (command === 'handle-ci') dispatchHandleCi(panelTask)
-            else dispatchRun(panelTask, command)
-          }}
+          onRunButton={(button) => runButton(panelTask, panelIsPr ? 'pr' : 'review', button)}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}
           onSnooze={async (snoozed) => {
             await setSnoozed(panelTask.id, snoozed)

@@ -1,13 +1,13 @@
 import type { Child } from '@tauri-apps/plugin-shell'
+import type { ButtonBoard } from '../types'
 import { REVIEW_TOOLS, spawnClaude } from './claude'
 
 export type RunLine = { kind: 'text' | 'tool' | 'user' | 'error'; text: string }
 
-export type RunCommand = 'do-review' | 'do-followup' | 'handle-review' | 'handle-ci'
-
 export type Run = {
   taskId: string
-  command: RunCommand
+  command: string // the button label that started the run (display only)
+  board: ButtonBoard // routes post-run behavior (review vs my-PR board)
   repoPath: string
   sessionId: string | null
   lines: RunLine[]
@@ -73,6 +73,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
 export const startRun = async (
   taskId: string,
   command: Run['command'],
+  board: ButtonBoard,
   prompt: string,
   repoPath: string,
   callbacks: Callbacks = {},
@@ -83,6 +84,7 @@ export const startRun = async (
   const run: Run = {
     taskId,
     command,
+    board,
     repoPath,
     sessionId: null,
     lines: [{ kind: 'user', text: prompt }],
@@ -108,6 +110,7 @@ export const replyRun = async (taskId: string, text: string, callbacks: Callback
 export const resumeRun = async (
   taskId: string,
   command: Run['command'],
+  board: ButtonBoard,
   repoPath: string,
   text: string,
   sessionId: string,
@@ -119,6 +122,7 @@ export const resumeRun = async (
   const run: Run = {
     taskId,
     command,
+    board,
     repoPath,
     sessionId,
     lines: [{ kind: 'user', text }],
