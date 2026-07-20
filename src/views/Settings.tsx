@@ -4,27 +4,260 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
+import { ACTION_ICON_NAMES, ActionIcon } from '../components/ActionIcon'
 import { avatarUrl } from '../lib/avatar'
-import { DEFAULT_COMMANDS } from '../lib/config'
+import { CONDITION_FIELDS } from '../lib/buttons'
+import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
 import { notify } from '../lib/notify'
-import type { Commands, Config, ReviewTask, WatchedRepo } from '../types'
+import type { ActionButton, ButtonBoard, Config, ReviewTask, Stage, WatchedRepo } from '../types'
 import { History } from './History'
 
 type Props = {
   config: Config
   tasks: ReviewTask[]
   onSave: (repos: WatchedRepo[]) => void
-  onSaveCommands: (commands: Commands) => void
+  onSaveReviewButtons: (buttons: ActionButton[]) => void
+  onSavePrButtons: (buttons: ActionButton[]) => void
 }
 
-export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
+const STAGE_OPTIONS: Stage[] = [
+  'discovered',
+  'watching',
+  'inbox',
+  'reviewing',
+  'reviewed',
+  'followup',
+  'done',
+  'ignored',
+]
+
+type EditorProps = {
+  board: ButtonBoard
+  title: string
+  hint: string
+  buttons: ActionButton[]
+  defaults: ActionButton[]
+  onEdit: (buttons: ActionButton[]) => void // local update while typing (not persisted)
+  onCommit: (buttons: ActionButton[]) => void // persist these buttons
+  persist: () => void // persist current local buttons (used on blur)
+}
+
+// One repeater: add/remove/edit the action buttons of a single board.
+const ButtonsEditor = ({ board, title, hint, buttons, defaults, onEdit, onCommit, persist }: EditorProps) => {
+  const fields = CONDITION_FIELDS[board]
+  const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-deck-500'
+  const patch = (id: string, p: Partial<ActionButton>, commit: boolean) => {
+    const next = buttons.map((b) => (b.id === id ? { ...b, ...p } : b))
+    ;(commit ? onCommit : onEdit)(next)
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-deck-700 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-deck-300">{title}</h3>
+          <p className="text-xs text-deck-500">{hint}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onCommit(defaults)}
+          className="shrink-0 cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+        >
+          Reset to defaults
+        </button>
+      </div>
+
+      {buttons.map((b, i) => (
+        <div key={b.id} className="flex flex-col gap-3 rounded-md border border-deck-800 bg-deck-800/40 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className={labelCls}>
+              {i === 0 ? 'Primary button' : `Button ${i + 1}`}
+              {i === 0 && <span className="ml-1.5 normal-case text-deck-600">— used by the quick shortcut</span>}
+            </span>
+            <button
+              type="button"
+              onClick={() => onCommit(buttons.filter((x) => x.id !== b.id))}
+              className="cursor-pointer text-xs text-red-400 hover:text-red-300"
+            >
+              remove
+            </button>
+          </div>
+
+          {/* 1 — what the button says */}
+          <label className="flex flex-col gap-1">
+            <span className={labelCls}>Button text</span>
+            <input
+              value={b.label}
+              onChange={(e) => patch(b.id, { label: e.target.value }, false)}
+              onBlur={persist}
+              placeholder="e.g. do-review"
+              className="rounded border border-deck-600 bg-deck-800 px-2 py-1 text-sm text-deck-100 outline-none focus:border-grass-500"
+            />
+          </label>
+
+          {/* 1b — its icon */}
+          <div className="flex flex-col gap-1">
+            <span className={labelCls}>Icon</span>
+            <div className="flex flex-wrap gap-1">
+              {ACTION_ICON_NAMES.map((name) => {
+                const on = (b.icon ?? 'play') === name
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    title={name}
+                    onClick={() => patch(b.id, { icon: name }, true)}
+                    className={`flex h-8 w-8 cursor-pointer items-center justify-center rounded border ${
+                      on
+                        ? 'border-grass-500 bg-grass-600/20 text-grass-300'
+                        : 'border-deck-600 text-deck-400 hover:bg-deck-700 hover:text-deck-200'
+                    }`}
+                  >
+                    <ActionIcon name={name} size={16} />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 2 — what it sends to claude */}
+          <label className="flex flex-col gap-1">
+            <span className={labelCls}>Prompt sent to claude</span>
+            <textarea
+              value={b.prompt}
+              onChange={(e) => patch(b.id, { prompt: e.target.value }, false)}
+              onBlur={persist}
+              rows={3}
+              placeholder="/do-review <pr_id>  — or a full prompt. Placeholders: <pr_id>, <branch_name>"
+              className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-xs text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
+            />
+          </label>
+
+          {/* 3 — when the button is visible */}
+          <div className="flex flex-col gap-1.5">
+            <span className={labelCls}>
+              Show when {b.conditions.length === 0 && <span className="normal-case text-deck-600">(always)</span>}
+            </span>
+            {b.conditions.map((c, idx) => {
+              const field = fields.find((f) => f.field === c.field) ?? fields[0]
+              return (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: conditions are a positional list
+                  key={idx}
+                  className="flex items-start gap-2 rounded-md border border-deck-700 bg-deck-800/60 px-2 py-1.5"
+                >
+                  <span className="w-9 shrink-0 pt-1 text-right text-[11px] font-semibold text-deck-500">
+                    {idx === 0 ? 'Where' : 'AND'}
+                  </span>
+                  <select
+                    value={c.field}
+                    onChange={(e) => {
+                      const nextConds = b.conditions.map((x, j) =>
+                        j === idx ? { field: e.target.value as typeof c.field, values: [] } : x,
+                      )
+                      patch(b.id, { conditions: nextConds }, true)
+                    }}
+                    className="w-32 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-0.5 text-xs text-deck-200 outline-none focus:border-grass-500"
+                  >
+                    {fields.map((f) => (
+                      <option key={f.field} value={f.field}>
+                        {f.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="shrink-0 pt-1 text-xs text-deck-500">is any of</span>
+                  <div className="flex flex-1 flex-wrap gap-1">
+                    {field.values.map((v) => {
+                      const on = c.values.includes(v)
+                      return (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => {
+                            const values = on ? c.values.filter((x) => x !== v) : [...c.values, v]
+                            const nextConds = b.conditions.map((x, j) => (j === idx ? { ...x, values } : x))
+                            patch(b.id, { conditions: nextConds }, true)
+                          }}
+                          className={`cursor-pointer rounded px-1.5 py-0.5 text-xs ${
+                            on ? 'bg-grass-600 text-white' : 'border border-deck-600 text-deck-400 hover:bg-deck-700'
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => patch(b.id, { conditions: b.conditions.filter((_, j) => j !== idx) }, true)}
+                    title="Remove condition"
+                    className="shrink-0 cursor-pointer rounded border border-deck-600 px-1.5 py-0.5 text-sm leading-none text-deck-400 hover:border-red-400/50 hover:text-red-300"
+                  >
+                    −
+                  </button>
+                </div>
+              )
+            })}
+            <button
+              type="button"
+              onClick={() =>
+                patch(b.id, { conditions: [...b.conditions, { field: fields[0].field, values: [] }] }, true)
+              }
+              className="cursor-pointer self-start text-xs text-grass-400 hover:text-grass-300"
+            >
+              + add condition
+            </button>
+          </div>
+
+          {/* 4 — where the card lands once the run finishes (review board only) */}
+          {board === 'review' && (
+            <label className="flex flex-col gap-1">
+              <span className={labelCls}>On completion</span>
+              <div className="flex items-center gap-2 text-xs text-deck-400">
+                move card to stage
+                <select
+                  value={b.advanceTo ?? ''}
+                  onChange={(e) => patch(b.id, { advanceTo: (e.target.value || undefined) as Stage | undefined }, true)}
+                  className="w-48 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
+                >
+                  <option value="">— leave unchanged —</option>
+                  {STAGE_OPTIONS.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </label>
+          )}
+        </div>
+      ))}
+
+      <button
+        type="button"
+        onClick={() =>
+          onCommit([...buttons, { id: crypto.randomUUID(), label: 'New button', prompt: '', conditions: [] }])
+        }
+        className="cursor-pointer self-start rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20"
+      >
+        + Add button
+      </button>
+    </div>
+  )
+}
+
+export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons }: Props) => {
   const [path, setPath] = useState('')
-  const [commands, setCommandsState] = useState<Commands>(config.commands)
+  const [reviewBtns, setReviewBtns] = useState<ActionButton[]>(config.reviewButtons)
+  const [prBtns, setPrBtns] = useState<ActionButton[]>(config.prButtons)
 
   useEffect(() => {
-    setCommandsState(config.commands)
-  }, [config.commands])
+    setReviewBtns(config.reviewButtons)
+  }, [config.reviewButtons])
+  useEffect(() => {
+    setPrBtns(config.prButtons)
+  }, [config.prButtons])
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [autostart, setAutostart] = useState(false)
@@ -76,7 +309,7 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
   }
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
+    <div className="flex max-w-[1000px] flex-col gap-4">
       <div>
         <h2 className="text-lg font-semibold">Settings</h2>
         <p className="mt-1 flex items-center gap-2 text-sm text-deck-400">
@@ -148,64 +381,33 @@ export const Settings = ({ config, tasks, onSave, onSaveCommands }: Props) => {
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-lg border border-deck-700 p-3">
-        <div>
-          <h3 className="text-sm font-semibold text-deck-300">Claude commands</h3>
-          <p className="text-xs text-deck-500">
-            Prompt sent to <code className="text-deck-400">claude -p</code> per action. Placeholders:{' '}
-            <code className="text-grass-400">&lt;branch_name&gt;</code>,{' '}
-            <code className="text-grass-400">&lt;pr_id&gt;</code>.
-          </p>
-        </div>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Review
-          <input
-            value={commands.review}
-            onChange={(e) => setCommandsState((c) => ({ ...c, review: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Follow-up
-          <textarea
-            value={commands.followup}
-            onChange={(e) => setCommandsState((c) => ({ ...c, followup: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            rows={3}
-            className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Handle review
-          <input
-            value={commands.handleReview}
-            onChange={(e) => setCommandsState((c) => ({ ...c, handleReview: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none focus:border-grass-500"
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-xs text-deck-400">
-          Handle CI
-          <input
-            value={commands.handleCi}
-            onChange={(e) => setCommandsState((c) => ({ ...c, handleCi: e.target.value }))}
-            onBlur={() => onSaveCommands(commands)}
-            placeholder="empty = hide the card button"
-            className="rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-sm text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            setCommandsState(DEFAULT_COMMANDS)
-            onSaveCommands(DEFAULT_COMMANDS)
-          }}
-          className="cursor-pointer self-start text-xs text-deck-400 hover:text-deck-200"
-        >
-          Reset to defaults
-        </button>
-      </div>
+      <ButtonsEditor
+        board="review"
+        title="Reviews board buttons"
+        hint="Actions shown in a review card's panel. First button is the primary (used by the quick review shortcut)."
+        buttons={reviewBtns}
+        defaults={DEFAULT_REVIEW_BUTTONS}
+        onEdit={setReviewBtns}
+        onCommit={(next) => {
+          setReviewBtns(next)
+          onSaveReviewButtons(next)
+        }}
+        persist={() => onSaveReviewButtons(reviewBtns)}
+      />
+
+      <ButtonsEditor
+        board="pr"
+        title="Pull Requests board buttons"
+        hint="Actions shown in your own PR's panel. First button is the primary (used by the card's quick shortcut)."
+        buttons={prBtns}
+        defaults={DEFAULT_PR_BUTTONS}
+        onEdit={setPrBtns}
+        onCommit={(next) => {
+          setPrBtns(next)
+          onSavePrButtons(next)
+        }}
+        persist={() => onSavePrButtons(prBtns)}
+      />
 
       <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
         <div>
