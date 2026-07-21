@@ -66,6 +66,17 @@ export const allTasks = async (): Promise<ReviewTask[]> => {
   return rows.map(toTask)
 }
 
+// drop tasks whose repo is no longer watched (e.g. a project removed from Settings)
+export const pruneRepos = async (repos: string[]) => {
+  const d = await getDb()
+  if (repos.length === 0) {
+    await d.execute('DELETE FROM tasks')
+    return
+  }
+  const placeholders = repos.map((_, i) => `$${i + 1}`).join(', ')
+  await d.execute(`DELETE FROM tasks WHERE repo NOT IN (${placeholders})`, repos)
+}
+
 export const upsertPr = async (t: {
   id: string
   repo: string

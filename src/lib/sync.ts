@@ -1,6 +1,6 @@
 import type { ReviewTask } from '../types'
 import { getConfig, setGithubName, setGithubUser } from './config'
-import { allTasks, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
+import { allTasks, pruneRepos, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
 import { fetchLogin, fetchName, fetchPrActivity, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
@@ -22,6 +22,9 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     const name = await fetchName().catch(() => '')
     if (name) await setGithubName(name)
   }
+
+  // drop tasks for repos no longer watched so removed projects vanish from Discovery/board
+  await pruneRepos(config.repos.map((r) => r.repo))
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
   const firstSync = known.size === 0 // fresh DB: don't blast a notification per existing PR
