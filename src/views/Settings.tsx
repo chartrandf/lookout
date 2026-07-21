@@ -5,8 +5,11 @@ import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
 import { ACTION_ICON_NAMES, ActionIcon } from '../components/ActionIcon'
+import { CommandTextarea } from '../components/CommandTextarea'
+import { SidePanel } from '../components/SidePanel'
 import { avatarUrl } from '../lib/avatar'
 import { CONDITION_FIELDS } from '../lib/buttons'
+import { listSlashCommands } from '../lib/commands'
 import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
 import { notify } from '../lib/notify'
@@ -48,13 +51,14 @@ type EditorProps = {
   hint: string
   buttons: ActionButton[]
   defaults: ActionButton[]
+  commands: string[] // user's Claude slash-commands, for the prompt autocomplete
   onEdit: (buttons: ActionButton[]) => void // local update while typing (not persisted)
   onCommit: (buttons: ActionButton[]) => void // persist these buttons
   persist: () => void // persist current local buttons (used on blur)
 }
 
 // The full add/remove/edit UI for one board's actions. Rendered inside the side panel.
-const ActionsEditor = ({ board, hint, buttons, defaults, onEdit, onCommit, persist }: EditorProps) => {
+const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCommit, persist }: EditorProps) => {
   const fields = CONDITION_FIELDS[board]
   const labelCls = 'text-[11px] font-semibold uppercase tracking-wide text-deck-500'
   const patch = (id: string, p: Partial<ActionButton>, commit: boolean) => {
@@ -129,17 +133,23 @@ const ActionsEditor = ({ board, hint, buttons, defaults, onEdit, onCommit, persi
           </div>
 
           {/* 2 — what it sends to claude */}
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <span className={labelCls}>Prompt sent to claude</span>
-            <textarea
+            <CommandTextarea
               value={b.prompt}
-              onChange={(e) => patch(b.id, { prompt: e.target.value }, false)}
+              commands={commands}
+              onChange={(v) => patch(b.id, { prompt: v }, false)}
               onBlur={persist}
               rows={3}
-              placeholder="/do-review <pr_id>  — or a full prompt. Placeholders: <pr_id>, <branch_name>"
-              className="resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-xs text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
+              placeholder="/do-review <pr_id>  — or a full prompt. Type / to insert one of your commands."
+              className="w-full resize-y rounded border border-deck-600 bg-deck-800 px-2 py-1.5 font-mono text-xs text-deck-200 outline-none placeholder:text-deck-600 focus:border-grass-500"
             />
-          </label>
+            <span className="text-[11px] text-deck-500">
+              Placeholders: <code className="rounded bg-deck-800 px-1 text-grass-300">&lt;pr_id&gt;</code> (the PR
+              number) and <code className="rounded bg-deck-800 px-1 text-grass-300">&lt;branch_name&gt;</code> (the PR's
+              branch) are filled in when the action runs.
+            </span>
+          </div>
 
           {/* 3 — when the button is visible */}
           <div className="flex flex-col gap-1.5">
@@ -314,56 +324,19 @@ const ActionsPreview = ({
   </div>
 )
 
-// Generic right-side slide-in drawer (backdrop + slide + Esc), reused for the actions editor.
-const SidePanel = ({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) => {
-  const [shown, setShown] = useState(false)
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setShown(true))
-    return () => cancelAnimationFrame(id)
-  }, [])
-  const close = () => {
-    setShown(false)
-    setTimeout(onClose, 220)
-  }
-  // biome-ignore lint/correctness/useExhaustiveDependencies: close is stable enough for this listener
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
-  return (
-    <>
-      <div
-        onClick={close}
-        className={`fixed inset-0 z-20 cursor-pointer bg-black/30 backdrop-blur-sm transition-opacity duration-200 ${shown ? 'opacity-100' : 'opacity-0'}`}
-        aria-hidden="true"
-      />
-      <div
-        className={`fixed inset-y-0 right-0 z-20 flex w-[620px] max-w-[92vw] transform flex-col border-l border-deck-700 bg-deck-900 shadow-2xl transition-transform duration-200 ease-out ${shown ? 'translate-x-0' : 'translate-x-full'}`}
-      >
-        <div className="flex items-center justify-between border-b border-deck-800 px-4 py-3">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button
-            type="button"
-            onClick={close}
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-xl leading-none text-deck-400 hover:text-deck-100"
-          >
-            ✕
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
-      </div>
-    </>
-  )
-}
-
 export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons }: Props) => {
   const [path, setPath] = useState('')
   const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
   const [reviewBtns, setReviewBtns] = useState<ActionButton[]>(config.reviewButtons)
   const [prBtns, setPrBtns] = useState<ActionButton[]>(config.prButtons)
+  const [commands, setCommands] = useState<string[]>([])
+
+  // slash-commands for the prompt autocomplete: user commands + each watched repo's project commands
+  useEffect(() => {
+    listSlashCommands(config.repos.map((r) => r.path))
+      .then(setCommands)
+      .catch(() => setCommands([]))
+  }, [config.repos])
 
   useEffect(() => {
     setReviewBtns(config.reviewButtons)
@@ -432,6 +405,7 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
       hint: BOARD_META[board].hint,
       buttons,
       defaults: isReview ? DEFAULT_REVIEW_BUTTONS : DEFAULT_PR_BUTTONS,
+      commands,
       onEdit: setLocal,
       onCommit: (next: ActionButton[]) => {
         setLocal(next)
@@ -567,8 +541,24 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
       </div>
 
       {editing && (
-        <SidePanel title={BOARD_META[editing].title} onClose={() => setEditing(null)}>
-          <ActionsEditor {...editorProps(editing)} />
+        <SidePanel onClose={() => setEditing(null)} initialWidth={620}>
+          {({ close }) => (
+            <>
+              <div className="flex items-center justify-between border-b border-deck-800 px-4 py-3">
+                <h2 className="text-lg font-semibold text-white">{BOARD_META[editing].title}</h2>
+                <button
+                  type="button"
+                  onClick={close}
+                  className="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-xl leading-none text-deck-400 hover:text-deck-100"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <ActionsEditor {...editorProps(editing)} />
+              </div>
+            </>
+          )}
         </SidePanel>
       )}
     </div>
