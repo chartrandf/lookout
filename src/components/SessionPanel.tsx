@@ -3,7 +3,7 @@ import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { marked } from 'marked'
 import { useEffect, useRef, useState } from 'react'
-import { buildFeed, type FeedEvent } from '../lib/feed'
+import { buildFeed, type FeedEvent, type TimelineSummary } from '../lib/feed'
 import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
@@ -30,6 +30,8 @@ type Props = {
   onCancel: () => void
   onDismissRun: () => void
   onClose: () => void
+  // fired on open with the card summary derived from the freshly-fetched timeline (per-card refresh)
+  onRefresh?: (summary: TimelineSummary) => void
 }
 
 type ReplyBoxProps = {
@@ -214,6 +216,7 @@ export const SessionPanel = ({
   onCancel,
   onDismissRun,
   onClose,
+  onRefresh,
 }: Props) => {
   const isPr = variant === 'pr'
   const [input, setInput] = useState('')
@@ -265,7 +268,10 @@ export const SessionPanel = ({
   useEffect(() => {
     setFeed(null)
     setReport(null)
-    buildFeed(task, me, myName).then(setFeed)
+    buildFeed(task, me, myName).then((r) => {
+      setFeed(r.feed)
+      onRefresh?.(r.summary) // patch this card from the timeline we just fetched
+    })
   }, [task.id])
 
   // chronological feed: keep the newest events in view, next to the reply input
@@ -277,7 +283,7 @@ export const SessionPanel = ({
   const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
   // biome-ignore lint/correctness/useExhaustiveDependencies: refresh triggers only
   useEffect(() => {
-    if (runIdle) buildFeed(task, me, myName).then(setFeed)
+    if (runIdle) buildFeed(task, me, myName).then((r) => setFeed(r.feed))
   }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
@@ -601,7 +607,7 @@ export const SessionPanel = ({
               history
               <button
                 type="button"
-                onClick={() => buildFeed(task, me, myName).then(setFeed)}
+                onClick={() => buildFeed(task, me, myName).then((r) => setFeed(r.feed))}
                 className="cursor-pointer text-deck-500 hover:text-deck-200"
                 title="Refresh history"
               >

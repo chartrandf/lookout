@@ -24,12 +24,15 @@ import {
   setFollowupSummary,
   setLinks,
   setOrders,
+  setPrState,
   setSeen,
   setSnoozed,
   setStage,
 } from './lib/db'
+import type { TimelineSummary } from './lib/feed'
 import { syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick } from './lib/notify'
+import { classifyColumn, resolveOverride } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
 import { setOverride } from './lib/proverrides'
 import { scanReviewFiles } from './lib/reviews'
@@ -43,6 +46,7 @@ import type {
   Config,
   MyPr,
   PrColumn,
+  PrState,
   ReviewTask,
   Stage,
   WatchedRepo,
@@ -334,6 +338,38 @@ const App = () => {
     await setOverride(id, column, pr?.derivedColumn ?? column)
   }
 
+  // Per-card refresh on open (PR board): re-derive the opened card from the timeline just fetched for its
+  // feed, without a full list sync. Only review verdicts + PR state come from the timeline; CI/draft stay
+  // as the last sync left them. The active hand-off is reconstructed from the card (a divergence between
+  // effective and derived column), so resolveOverride self-heals it exactly as a full sync would.
+  const refreshMyPrFromTimeline = (id: string, s: TimelineSummary) => {
+    setMyPrs((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p
+        const state = s.prState ?? p.state
+        if (state === 'closed') return p // closed-unmerged PRs aren't boarded; let the next sync drop it
+        const derivedColumn = classifyColumn({
+          state,
+          isDraft: p.isDraft,
+          humanReview: s.humanReview,
+          botReview: s.botReview,
+        })
+        const override = p.column !== p.derivedColumn ? { column: p.column, baseline: p.derivedColumn } : undefined
+        const { column } = resolveOverride(derivedColumn, override)
+        return { ...p, state, humanReview: s.humanReview, botReview: s.botReview, derivedColumn, column }
+      }),
+    )
+  }
+
+  // Per-card refresh on open (Reviews board): only PR state is safely derivable from the timeline
+  // (activity uses a different counting path in the full sync, CI isn't in the timeline at all).
+  const refreshTaskFromTimeline = async (id: string, prState: PrState | null) => {
+    const t = tasks.find((x) => x.id === id)
+    if (!prState || !t || t.prState === prState) return
+    await setPrState(id, prState)
+    setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, prState } : x)))
+  }
+
   const openCard = (t: ReviewTask) => {
     setView('board')
     setPanelTaskId(t.id)
@@ -552,6 +588,10 @@ const App = () => {
           }}
           onKill={() => killRun(panelTask.id)}
           onClose={() => setPanelTaskId(null)}
+          onRefresh={(summary) => {
+            if (panelIsPr) refreshMyPrFromTimeline(panelTask.id, summary)
+            else refreshTaskFromTimeline(panelTask.id, summary.prState)
+          }}
         />
       )}
     </div>

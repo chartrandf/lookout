@@ -1,5 +1,6 @@
-import type { ReviewTask } from '../types'
-import { fetchPrTimeline } from './gh'
+import type { PrState, ReviewFlavor, ReviewTask } from '../types'
+import { fetchPrTimeline, type GhTimelineEvent } from './gh'
+import { isBot, reviewFlavor } from './prboard'
 import { sessionsForBranch } from './sessions'
 
 export type FeedEvent = {
@@ -53,7 +54,48 @@ const groupCommits = (events: FeedEvent[]): FeedEvent[] => {
   return out
 }
 
-export const buildFeed = async (task: ReviewTask, me: string, myName = ''): Promise<FeedEvent[]> => {
+// Card summary reconstructed from the PR timeline already fetched for the feed — lets a card refresh its
+// own review verdict / state on open without a second network call. CI + draft aren't in the timeline, so
+// they're intentionally absent here (they stay as the last full sync left them).
+export type TimelineSummary = {
+  prState: PrState | null // from merged/closed/reopened events; null = no state event seen
+  humanReview: ReviewFlavor
+  botReview: ReviewFlavor
+}
+
+// GhTimelineEvent stringifies review verdicts ("changes requested"); map back to what reviewFlavor expects
+const REVIEW_STATE: Record<string, string> = {
+  approved: 'APPROVED',
+  'changes requested': 'CHANGES_REQUESTED',
+  commented: 'COMMENTED',
+}
+
+// Latest review per actor wins (events are chronological). NOTE: unlike the full sync this can't see a
+// pending re-review request, so a superseded verdict can linger on the card until the next sync.
+const deriveSummary = (events: GhTimelineEvent[]): TimelineSummary => {
+  const latest = new Map<string, string>() // actor login -> latest review state
+  let prState: PrState | null = null
+  for (const e of events) {
+    if (e.kind === 'review') {
+      const state = REVIEW_STATE[e.text]
+      if (state) latest.set(e.actor, state)
+    } else if (e.kind === 'merged') prState = 'merged'
+    else if (e.kind === 'closed') prState = 'closed'
+    else if (e.kind === 'reopened') prState = 'open'
+  }
+  const reviews = [...latest].map(([login, state]) => ({ author: { login }, state }))
+  return {
+    prState,
+    humanReview: reviewFlavor(reviews.filter((r) => !isBot(r.author))),
+    botReview: reviewFlavor(reviews.filter((r) => isBot(r.author))),
+  }
+}
+
+export const buildFeed = async (
+  task: ReviewTask,
+  me: string,
+  myName = '',
+): Promise<{ feed: FeedEvent[]; summary: TimelineSummary }> => {
   const events: FeedEvent[] = []
   // timeline actors are logins for most events but git author *names* for commits, so match either
   const isMine = (actor: string) => actor === me || (!!myName && actor === myName)
@@ -102,5 +144,6 @@ export const buildFeed = async (task: ReviewTask, me: string, myName = ''): Prom
   }
 
   const asc = events.sort((a, b) => a.ts.localeCompare(b.ts))
-  return groupCommits(asc) // chronological: newest last, next to the reply input
+  // chronological: newest last, next to the reply input
+  return { feed: groupCommits(asc), summary: deriveSummary(gh) }
 }
