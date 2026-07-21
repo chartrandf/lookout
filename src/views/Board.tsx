@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
+import { type BoardFilter, emptyFilter, matchesFilter } from '../lib/filters'
 import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
 
@@ -102,6 +104,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
 
 export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
+  const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragging, setDragging] = useState<ReviewTask | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
   // insertion indicator: line above card `before`, or at the column end when before is null
@@ -110,8 +113,11 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   const active = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
   )
+  const repoOptions = [...new Set(active.map((t) => t.repo))].sort()
   // snoozed cards stay hidden until new activity; Done column always shows
-  const visible = active.filter((t) => showSnoozed || !t.snoozed || t.stage === 'done')
+  const visible = active.filter(
+    (t) => (showSnoozed || !t.snoozed || t.stage === 'done') && matchesFilter(filter, t.repo, t.ciState),
+  )
   const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
 
@@ -145,15 +151,18 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
 
   return (
     <div className="flex h-full flex-col gap-3">
-      {snoozedCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowSnoozed((s) => !s)}
-          className="shrink-0 cursor-pointer self-end text-xs text-deck-400 hover:text-deck-200"
-        >
-          {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
-        </button>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <BoardFilters repos={repoOptions} filter={filter} onChange={setFilter} />
+        {snoozedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowSnoozed((s) => !s)}
+            className="ml-auto cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+          >
+            {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
+          </button>
+        )}
+      </div>
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
         {COLUMNS.map((col, colIdx) => {
           const isDone = col.stage.includes('done')

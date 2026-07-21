@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
+import { type BoardFilter, emptyFilter, matchesFilter } from '../lib/filters'
 import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 type Props = {
@@ -174,11 +176,15 @@ const Column = ({
 
 export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onMove }: Props) => {
   const [showDone, setShowDone] = useState(false)
+  const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropCol, setDropCol] = useState<PrColumn | null>(null)
+  const repoOptions = [...new Set(prs.map((p) => p.repo))].sort()
   const byColumn = (c: PrColumn) =>
-    prs.filter((p) => p.column === c).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  const doneCount = prs.filter((p) => p.column === 'done').length
+    prs
+      .filter((p) => p.column === c && matchesFilter(filter, p.repo, p.ciState))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const doneCount = prs.filter((p) => p.column === 'done' && matchesFilter(filter, p.repo, p.ciState)).length
   const columns = showDone ? [...COLUMNS, { column: 'done' as const, title: 'Done' }] : COLUMNS
 
   const drop = (column: PrColumn) => {
@@ -189,15 +195,18 @@ export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onMove }
 
   return (
     <div className="flex h-full flex-col gap-3">
-      {doneCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowDone((s) => !s)}
-          className="shrink-0 cursor-pointer self-end text-xs text-deck-400 hover:text-deck-200"
-        >
-          {showDone ? 'hide done' : `show done (${doneCount})`}
-        </button>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        <BoardFilters repos={repoOptions} filter={filter} onChange={setFilter} />
+        {doneCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowDone((s) => !s)}
+            className="ml-auto cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+          >
+            {showDone ? 'hide done' : `show done (${doneCount})`}
+          </button>
+        )}
+      </div>
       <div className="flex min-h-0 flex-1 gap-3">
         {columns.map((col) => (
           <Column
