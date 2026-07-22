@@ -167,6 +167,13 @@ const StopIcon = () => (
   </svg>
 )
 
+const RemoveIcon = () => (
+  <svg {...iconProps} aria-hidden="true">
+    <rect width="18" height="18" x="3" y="3" rx="2" />
+    <path d="M8 12h8" />
+  </svg>
+)
+
 // URLs in session output: click to open in the in-app browser window
 // (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
 const URL_SPLIT = /(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]])/g
@@ -402,6 +409,19 @@ export const SessionPanel = ({
                       >
                         <ExternalIcon /> Open in browser
                       </button>
+                      {!isPr && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onStageChange('discovered')
+                            setMoreOpen(false)
+                            close()
+                          }}
+                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-xs text-deck-200 hover:bg-deck-700"
+                        >
+                          <RemoveIcon /> Remove from board
+                        </button>
+                      )}
                       {running && (
                         <button
                           type="button"
