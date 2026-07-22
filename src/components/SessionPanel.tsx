@@ -505,7 +505,7 @@ export const SessionPanel = ({
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
               </span>
-              claude is working — /{run?.command} in progress…
+              claude is working — {run?.command} in progress…
               <button
                 type="button"
                 onClick={onKill}
@@ -529,7 +529,7 @@ export const SessionPanel = ({
                   >
                     <span>
                       claude session output
-                      {run.command && <span className="ml-1.5 normal-case text-grass-400">· /{run.command}</span>}
+                      {run.command && <span className="ml-1.5 normal-case text-grass-400">· {run.command}</span>}
                     </span>
                     <span>{showRun ? '▾' : '▸'}</span>
                   </button>
