@@ -234,9 +234,9 @@ export const markAllNotificationsRead = async () => {
   await d.execute('UPDATE notifications SET read = 1 WHERE read = 0')
 }
 
-export const archiveReadNotifications = async () => {
+export const archiveAllNotifications = async () => {
   const d = await getDb()
-  await d.execute('UPDATE notifications SET archived = 1 WHERE read = 1')
+  await d.execute('UPDATE notifications SET archived = 1')
 }
 
 export const setLinks = async (id: string, sessionIds: string[], reviewFiles: string[]) => {

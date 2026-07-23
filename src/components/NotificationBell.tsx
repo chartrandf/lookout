@@ -38,16 +38,16 @@ type Props = {
   notifications: AppNotification[]
   onOpen: (n: AppNotification) => void
   onMarkAllRead: () => void
-  onArchiveRead: () => void
+  onArchiveAll: () => void
 }
 
-export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchiveRead }: Props) => {
+export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchiveAll }: Props) => {
   const [open, setOpen] = useState(false) // mounted (kept during exit animation)
   const [shown, setShown] = useState(false) // drives the fade/collapse transition
   const wrapRef = useRef<HTMLDivElement>(null)
 
   const unread = notifications.filter((n) => !n.read).length
-  const hasRead = notifications.some((n) => n.read)
+  const hasAny = notifications.length > 0
 
   // once mounted, flip to shown on the next frame so the enter transition runs
   useEffect(() => {
@@ -109,28 +109,27 @@ export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchi
           >
             <div className="flex items-center justify-between border-b border-deck-800 px-3 py-2">
               <span className="text-sm text-deck-300">Notifications</span>
-              <div className="flex items-center gap-1">
-                {unread > 0 && (
+              {hasAny && (
+                <div className="flex items-center gap-1">
                   <button
                     type="button"
                     onClick={onMarkAllRead}
+                    disabled={unread === 0}
                     title="Mark all as read"
-                    className="cursor-pointer rounded p-1 text-deck-400 hover:bg-deck-800 hover:text-deck-200"
+                    className="cursor-pointer rounded p-1 text-deck-400 hover:bg-deck-800 hover:text-deck-200 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-deck-400"
                   >
                     <CheckIcon />
                   </button>
-                )}
-                {hasRead && (
                   <button
                     type="button"
-                    onClick={onArchiveRead}
-                    title="Archive read notifications"
+                    onClick={onArchiveAll}
+                    title="Archive all notifications"
                     className="cursor-pointer rounded p-1 text-deck-400 hover:bg-deck-800 hover:text-deck-200"
                   >
                     <ArchiveIcon />
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
             <div className="max-h-96 overflow-y-auto">
               {notifications.length === 0 && (

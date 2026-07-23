@@ -17,7 +17,7 @@ import {
   addSessionId,
   allNotifications,
   allTasks,
-  archiveReadNotifications,
+  archiveAllNotifications,
   clearNewActivity,
   markAllNotificationsRead,
   markNotificationRead,
@@ -461,8 +461,8 @@ const App = () => {
             await markAllNotificationsRead()
             await reloadNotifications()
           }}
-          onArchiveRead={async () => {
-            await archiveReadNotifications()
+          onArchiveAll={async () => {
+            await archiveAllNotifications()
             await reloadNotifications()
           }}
         />
