@@ -80,7 +80,8 @@ const deriveSummary = (events: GhTimelineEvent[]): TimelineSummary => {
       const state = REVIEW_STATE[e.text]
       if (state) latest.set(e.actor, state)
     } else if (e.kind === 'merged') prState = 'merged'
-    else if (e.kind === 'closed') prState = 'closed'
+    // a merge also emits a 'closed' event right after; merged wins, so don't let it downgrade the state
+    else if (e.kind === 'closed') prState = prState === 'merged' ? 'merged' : 'closed'
     else if (e.kind === 'reopened') prState = 'open'
   }
   const reviews = [...latest].map(([login, state]) => ({ author: { login }, state }))
