@@ -1,16 +1,16 @@
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { marked } from 'marked'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { buildFeed, type FeedEvent, type TimelineSummary } from '../lib/feed'
 import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
-import type { Run } from '../lib/runs'
+import type { Run, RunLine } from '../lib/runs'
 import { timeAgo } from '../lib/time'
 import type { ActionButton, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
+import { Markdown } from './Markdown'
 import { PrLink } from './PrLink'
 import { SidePanel } from './SidePanel'
 
@@ -202,12 +202,60 @@ const Linkify = ({ text, onOpen }: { text: string; onOpen: (url: string, externa
   </>
 )
 
-const lineClass: Record<string, string> = {
-  text: 'text-deck-200 whitespace-pre-wrap',
-  tool: 'text-deck-500 font-mono text-xs',
-  user: 'text-grass-300 font-medium',
-  error: 'text-red-400 font-mono text-xs',
+// One row per command instead of a wrapped wall of pale gray: the detail is truncated to a single
+// line, click reveals the whole thing (heredoc bodies, long gh invocations).
+const ToolLine = ({ text }: { text: string }) => {
+  const [open, setOpen] = useState(false)
+  const cut = text.indexOf(' ')
+  const name = cut === -1 ? text : text.slice(0, cut)
+  const detail = cut === -1 ? '' : text.slice(cut + 1)
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((s) => !s)}
+      title={open ? 'Collapse' : text}
+      className="flex w-full cursor-crosshair items-baseline gap-1.5 text-left font-mono text-xs leading-5 text-deck-500 hover:text-deck-300"
+    >
+      <span className="shrink-0 text-deck-400">{name}</span>
+      <span className={open ? 'min-w-0 flex-1 whitespace-pre-wrap break-all' : 'min-w-0 flex-1 truncate'}>
+        {detail}
+      </span>
+    </button>
+  )
 }
+
+// Our own prompt: action-button prompts are long, so clamp them until clicked.
+const UserLine = ({ text, onOpen }: { text: string; onOpen: (url: string, external: boolean) => void }) => {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 180 || text.includes('\n')
+  const body = (
+    <span className={open ? 'whitespace-pre-wrap' : 'line-clamp-2'}>
+      ❯ <Linkify text={text} onOpen={onOpen} />
+    </span>
+  )
+  return long ? (
+    <button
+      type="button"
+      onClick={() => setOpen((s) => !s)}
+      title={open ? 'Collapse' : 'Show the full prompt'}
+      className="cursor-pointer text-left font-medium text-grass-300"
+    >
+      {body}
+    </button>
+  ) : (
+    <p className="font-medium text-grass-300">{body}</p>
+  )
+}
+
+// Consecutive lines of the same kind render as one block: text groups become a single markdown
+// document (so a table split across stream chunks still parses), tool groups a tight command list.
+const groupLines = (lines: RunLine[]): RunLine[][] =>
+  lines.reduce<RunLine[][]>((groups, l) => {
+    const last = groups.at(-1)
+    if (last && last[0].kind === l.kind) last.push(l)
+    else groups.push([l])
+    return groups
+  }, [])
 
 export const SessionPanel = ({
   task,
@@ -545,16 +593,50 @@ export const SessionPanel = ({
                   )}
                 </div>
                 {showRun && (
-                  <div className="flex max-h-72 flex-col gap-1.5 overflow-y-auto px-3 pb-3 text-sm">
-                    {run.lines.map((l, i) => (
-                      // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                      <p key={i} className={lineClass[l.kind]}>
-                        <Linkify
-                          text={l.kind === 'user' ? `❯ ${l.text}` : l.text}
-                          onOpen={(url, external) => openPrWindow(url, task.repo, task.prNumber, external)}
-                        />
-                      </p>
-                    ))}
+                  <div className="flex max-h-72 flex-col gap-2 overflow-y-auto px-3 pb-3 text-sm">
+                    {groupLines(run.lines).map((group, gi) => {
+                      const openLink = (url: string, external: boolean) =>
+                        openPrWindow(url, task.repo, task.prNumber, external)
+                      const kind = group[0].kind
+                      const key = gi // append-only log: groups only ever grow or get appended to
+                      if (kind === 'tool')
+                        return (
+                          <div key={key} className="flex flex-col rounded bg-deck-900/60 px-2 py-1">
+                            {group.map((l, i) => (
+                              // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+                              <ToolLine key={i} text={l.text} />
+                            ))}
+                          </div>
+                        )
+                      if (kind === 'text')
+                        return (
+                          <Markdown
+                            key={key}
+                            className="md-console"
+                            text={group.map((l) => l.text).join('\n\n')}
+                            onLink={openLink}
+                          />
+                        )
+                      if (kind === 'user')
+                        return (
+                          <div key={key} className="flex flex-col gap-1">
+                            {group.map((l, i) => (
+                              // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+                              <UserLine key={i} text={l.text} onOpen={openLink} />
+                            ))}
+                          </div>
+                        )
+                      return (
+                        <div key={key} className="flex flex-col gap-1">
+                          {group.map((l, i) => (
+                            // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+                            <p key={i} className="font-mono text-xs text-red-400">
+                              <Linkify text={l.text} onOpen={openLink} />
+                            </p>
+                          ))}
+                        </div>
+                      )
+                    })}
                     {running && <p className="animate-pulse text-xs text-deck-500">▍</p>}
                   </div>
                 )}
@@ -662,10 +744,10 @@ export const SessionPanel = ({
                   {report.path.split('/').at(-1)}
                 </p>
               </div>
-              <div
+              <Markdown
+                text={report.content}
+                onLink={(url, external) => openPrWindow(url, task.repo, task.prNumber, external)}
                 className="prose prose-sm prose-invert max-w-none flex-1 overflow-auto p-4 prose-headings:text-deck-100 prose-a:text-grass-300 prose-code:text-grass-300 prose-code:before:content-none prose-code:after:content-none prose-pre:bg-deck-800 prose-td:text-deck-200 prose-th:text-deck-300"
-                // biome-ignore lint/security/noDangerouslySetInnerHtml: local report file written by our own /do-review
-                dangerouslySetInnerHTML={{ __html: marked.parse(report.content, { async: false }) }}
               />
               {showReply && (
                 <div className="border-t border-deck-800 p-3">

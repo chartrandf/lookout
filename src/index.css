@@ -41,6 +41,107 @@
   font-weight: 600;
 }
 
+/* Markdown tables (session output + review reports): scroll inside their own box so a wide table
+   never stretches the panel. Wins over prose's :where() rules on specificity. */
+.md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.md-table {
+  width: max-content;
+  max-width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+.md-table th,
+.md-table td {
+  border: 1px solid var(--color-deck-700);
+  padding: 0.2rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+}
+.md-table th {
+  background-color: var(--color-deck-800);
+  color: var(--color-deck-300);
+  font-weight: 600;
+}
+
+/* Compact markdown for the session console — tighter than .prose, terminal-ish */
+.md-console {
+  color: var(--color-deck-200);
+  overflow-wrap: anywhere;
+}
+.md-console > :first-child {
+  margin-top: 0;
+}
+.md-console > :last-child {
+  margin-bottom: 0;
+}
+.md-console p,
+.md-console ul,
+.md-console ol,
+.md-console pre,
+.md-console blockquote {
+  margin: 0.35rem 0;
+}
+.md-console ul,
+.md-console ol {
+  padding-left: 1.25rem;
+}
+.md-console ul {
+  list-style: disc;
+}
+.md-console ol {
+  list-style: decimal;
+}
+.md-console li {
+  margin: 0.1rem 0;
+}
+.md-console h1,
+.md-console h2,
+.md-console h3,
+.md-console h4 {
+  margin: 0.6rem 0 0.25rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-deck-100);
+}
+.md-console strong {
+  color: var(--color-deck-100);
+  font-weight: 600;
+}
+.md-console code:not(pre code) {
+  background-color: var(--color-deck-700);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-size: 0.85em;
+}
+.md-console pre {
+  overflow-x: auto;
+  border: 1px solid var(--color-deck-700);
+  border-radius: 6px;
+  background-color: var(--color-deck-900);
+  padding: 0.5rem;
+  font-size: 0.8125rem;
+}
+.md-console blockquote {
+  border-left: 2px solid var(--color-deck-600);
+  padding-left: 0.6rem;
+  color: var(--color-deck-300);
+}
+.md-console hr {
+  margin: 0.6rem 0;
+  border-color: var(--color-deck-700);
+}
+.md-console a {
+  color: var(--color-grass-300);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
 /* whole-card glow while a claude run is active */
 @keyframes running-glow {
   0%,
