@@ -8,6 +8,18 @@ Desktop overview of all your Claude Code review sessions: discover open PRs acro
 
 Tauri v2 + React + TypeScript + Tailwind. No server — the app polls `gh`, scans `~/.claude/projects/` sessions and each repo's `AI_TASKS/code-review/` exports.
 
+## Install
+
+Grab the latest `.dmg` from [Releases](https://github.com/chartrandf/lookout/releases) (universal — Apple Silicon + Intel) and drag **Lookout** to Applications.
+
+The app is unsigned, so macOS quarantines it. Clear the flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Lookout.app
+```
+
+Right-click → Open no longer bypasses this on macOS 15+. The GUI alternative is **System Settings → Privacy & Security → Open Anyway**, after a blocked launch.
+
 ## Dev
 
 ```bash
