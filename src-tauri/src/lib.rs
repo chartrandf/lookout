@@ -1,5 +1,8 @@
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // GUI apps launched from Finder get launchd's bare PATH; pull in the login shell's
+    // PATH so `claude`, `gh` and `code` resolve in release builds.
+    let _ = fix_path_env::fix();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
