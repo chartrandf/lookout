@@ -64,6 +64,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         prAuthor: pr.author.login,
         prCreatedAt: pr.createdAt,
         reviewRequested: pr.reviewRequests.some((r) => r.login === me),
+        isDraft: pr.isDraft,
       })
       const sessionIds = sessionsByBranch.get(pr.headRefName) ?? []
       // /do-review flattens "/" in branch names when building the report filename

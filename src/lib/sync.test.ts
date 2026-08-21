@@ -8,6 +8,7 @@ vi.mock('./config', () => ({
 }))
 vi.mock('./db', () => ({
   allTasks: vi.fn(),
+  pruneRepos: vi.fn(),
   setActivity: vi.fn(),
   setLinks: vi.fn(),
   setPrState: vi.fn(),
@@ -47,6 +48,7 @@ const task = (overrides: Partial<ReviewTask>): ReviewTask => ({
   prState: 'open',
   prAuthor: 'someone',
   prCreatedAt: '2026-07-01T00:00:00Z',
+  isDraft: false,
   stage: 'reviewing',
   reviewRequested: false,
   sessionIds: [],

@@ -22,6 +22,7 @@ export type MyPr = {
   createdAt: string
   state: PrState
   isDraft: boolean
+  sortOrder: number | null // manual drag position within a column (null = unranked, drafts sort last)
   column: PrColumn // effective column (manual override applied)
   derivedColumn: PrColumn // column purely from GitHub state (override baseline)
   humanReview: ReviewFlavor
@@ -50,6 +51,7 @@ export type ReviewTask = {
   prState: PrState
   prAuthor: string
   prCreatedAt: string | null
+  isDraft: boolean
   stage: Stage
   column?: PrColumn // only set for my-PR tasks adapted from a MyPr — drives PR-board button conditions
   reviewRequested: boolean

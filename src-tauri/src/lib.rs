@@ -68,6 +68,12 @@ pub fn run() {
                             sql: include_str!("../migrations/008_seen.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 9,
+                            description: "pr draft flag",
+                            sql: include_str!("../migrations/009_is_draft.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

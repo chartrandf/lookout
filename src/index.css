@@ -142,6 +142,26 @@
   cursor: pointer;
 }
 
+/* draft PRs: dashed border, content desaturated until hovered — the filter sits on the
+   children so the card's own background/border keep their tint. focus-within keeps a row
+   in color while an inner menu is in use (a filtered ancestor breaks its fixed overlay);
+   running/awaiting also stay in color (their amber/green must remain visible) */
+.card-draft {
+  border-style: dashed;
+}
+.card-draft > * {
+  filter: grayscale(1);
+  opacity: 0.75;
+  transition: all 150ms;
+}
+.card-draft:hover > *,
+.card-draft:focus-within > *,
+.card-draft.card-running > *,
+.card-draft.card-awaiting > * {
+  filter: none;
+  opacity: 1;
+}
+
 /* whole-card glow while a claude run is active */
 @keyframes running-glow {
   0%,

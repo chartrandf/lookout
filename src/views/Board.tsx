@@ -50,7 +50,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    className={`${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' || t.hasNewActivity ? 'card-awaiting' : ''}`}
+    className={`${t.isDraft ? 'card-draft' : ''} ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' || t.hasNewActivity ? 'card-awaiting' : ''}`}
   >
     {(t.prState !== 'open' || t.stage === 'done') && (
       <span
@@ -169,11 +169,13 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
           const items = visible
             .filter((t) => col.stage.includes(t.stage))
             // Done ignores drag order: open cards first, merged/closed last (updatedAt tiebreak)
+            // Other columns: drag order first; unranked cards follow, drafts at the bottom
             .sort((a, b) =>
               isDone
                 ? (a.prState === 'open' ? 0 : 1) - (b.prState === 'open' ? 0 : 1) ||
                   b.updatedAt.localeCompare(a.updatedAt)
-                : (a.sortOrder ?? 1e9) - (b.sortOrder ?? 1e9) || b.updatedAt.localeCompare(a.updatedAt),
+                : (a.sortOrder ?? (a.isDraft ? 2e9 : 1e9)) - (b.sortOrder ?? (b.isDraft ? 2e9 : 1e9)) ||
+                  b.updatedAt.localeCompare(a.updatedAt),
             )
           const canDrop = dragging !== null // any column: other = move stage, same = reorder
           return (
@@ -207,7 +209,9 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
               <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
                 {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+              {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
+                  (fractional-width) clip edge — give them 1px of breathing room */}
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
                 {items.map((t) => (
                   // wrapper (line + card) is the drop target: hovering the line itself stays stable
                   // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd

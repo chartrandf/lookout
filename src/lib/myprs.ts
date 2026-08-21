@@ -2,7 +2,7 @@ import type { Config, MyPr, PrOverride } from '../types'
 import { getConfig, setGithubUser } from './config'
 import { fetchLogin, listMyPrs } from './gh'
 import { resolveOverride, toMyPr } from './prboard'
-import { clearOverride, getOverrides } from './proverrides'
+import { clearOverride, getOverrides, getPrOrders } from './proverrides'
 
 // One pass: list PRs I authored across watched repos and classify each into a board column.
 // No DB — columns are derived live so they always reflect current GitHub state.
@@ -15,6 +15,7 @@ export const syncMyPrs = async (config?: Config): Promise<MyPr[]> => {
   }
 
   const overrides = await getOverrides().catch(() => ({}) as Record<string, PrOverride>)
+  const orders = await getPrOrders().catch(() => ({}) as Record<string, number>)
 
   const prs: MyPr[] = []
   for (const { repo, path } of cfg.repos) {
@@ -26,6 +27,7 @@ export const syncMyPrs = async (config?: Config): Promise<MyPr[]> => {
         // apply the manual hand-off; drop it once GitHub has moved past the baseline it was set against
         const { column, stale } = resolveOverride(pr.derivedColumn, overrides[pr.id])
         pr.column = column
+        pr.sortOrder = orders[pr.id] ?? null
         if (stale) await clearOverride(pr.id)
         prs.push(pr)
       }

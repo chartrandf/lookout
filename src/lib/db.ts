@@ -19,6 +19,7 @@ type Row = {
   pr_state: string
   pr_author: string
   pr_created_at: string | null
+  is_draft: number
   stage: string
   review_requested: number
   session_ids: string
@@ -45,6 +46,7 @@ const toTask = (r: Row): ReviewTask => ({
   prState: r.pr_state as ReviewTask['prState'],
   prAuthor: r.pr_author,
   prCreatedAt: r.pr_created_at,
+  isDraft: r.is_draft === 1,
   stage: r.stage as Stage,
   reviewRequested: r.review_requested === 1,
   sessionIds: JSON.parse(r.session_ids),
@@ -88,13 +90,14 @@ export const upsertPr = async (t: {
   prAuthor: string
   prCreatedAt: string
   reviewRequested: boolean
+  isDraft: boolean
 }) => {
   const d = await getDb()
   await d.execute(
-    `INSERT INTO tasks (id, repo, repo_path, branch, pr_number, pr_title, pr_url, pr_author, pr_created_at, review_requested, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    `INSERT INTO tasks (id, repo, repo_path, branch, pr_number, pr_title, pr_url, pr_author, pr_created_at, review_requested, is_draft, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT(id) DO UPDATE SET
-       pr_title = $6, pr_url = $7, pr_created_at = $9, review_requested = $10, repo_path = $3, updated_at = $11`,
+       pr_title = $6, pr_url = $7, pr_created_at = $9, review_requested = $10, is_draft = $11, repo_path = $3, updated_at = $12`,
     [
       t.id,
       t.repo,
@@ -106,6 +109,7 @@ export const upsertPr = async (t: {
       t.prAuthor,
       t.prCreatedAt,
       t.reviewRequested ? 1 : 0,
+      t.isDraft ? 1 : 0,
       new Date().toISOString(),
     ],
   )

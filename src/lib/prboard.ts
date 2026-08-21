@@ -85,6 +85,7 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
     createdAt: raw.createdAt,
     state,
     isDraft: raw.isDraft,
+    sortOrder: null,
     column,
     derivedColumn: column,
     humanReview,

@@ -10,7 +10,7 @@ type Props = {
   newIds: Set<string> // PR ids with new events (show a "new" tag until clicked)
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
-  onMove: (id: string, column: PrColumn) => void
+  onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
 }
 
 const COLUMNS: { column: PrColumn; title: string }[] = [
@@ -79,7 +79,7 @@ const PrCard = ({
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    className={isNew ? 'card-awaiting' : ''}
+    className={`${pr.isDraft ? 'card-draft' : ''} ${isNew ? 'card-awaiting' : ''}`}
   >
     {pr.column === 'done' ? (
       // Done = merged: the review/CI detail no longer matters, just show the outcome
@@ -87,7 +87,7 @@ const PrCard = ({
     ) : (
       <>
         {isNew && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
-        {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">draft</span>}
+        {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ draft</span>}
         <ReviewTag flavor={pr.humanReview} />
         <ReviewTag flavor={pr.botReview} bot />
         <CiTag ci={pr.ciState} />
@@ -109,88 +109,55 @@ const PrCard = ({
   </CardFrame>
 )
 
-type ColumnProps = {
-  title: string
-  prs: MyPr[]
-  me: string
-  newIds: Set<string>
-  onOpen: (pr: MyPr) => void
-  onHandleReview: (pr: MyPr) => void
-  dragging: boolean
-  isDropTarget: boolean
-  onDragOver: () => void
-  onDrop: () => void
-  onCardDragStart: (id: string) => void
-  onCardDragEnd: () => void
-}
+// default (unranked) position: manual drag order first, then non-drafts, drafts at the bottom
+const orderKey = (p: MyPr) => p.sortOrder ?? (p.isDraft ? 2e9 : 1e9)
 
-const Column = ({
-  title,
-  prs,
-  me,
-  newIds,
-  onOpen,
-  onHandleReview,
-  dragging,
-  isDropTarget,
-  onDragOver,
-  onDrop,
-  onCardDragStart,
-  onCardDragEnd,
-}: ColumnProps) => (
-  // biome-ignore lint/a11y/noStaticElementInteractions: kanban drop target
-  <div
-    onDragOver={(e) => {
-      if (!dragging) return
-      e.preventDefault()
-      e.dataTransfer.dropEffect = 'move'
-      onDragOver()
-    }}
-    onDrop={(e) => {
-      e.preventDefault()
-      onDrop()
-    }}
-    className={`flex min-h-0 flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
-      isDropTarget ? 'bg-grass-600/30 ring-1 ring-grass-500' : dragging ? 'bg-grass-600/20' : 'bg-grass-600/10'
-    }`}
-  >
-    <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
-      {title} <span className="font-normal text-deck-400">({prs.length})</span>
-    </h3>
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
-      {prs.map((pr) => (
-        <PrCard
-          key={pr.id}
-          pr={pr}
-          me={me}
-          isNew={newIds.has(pr.id)}
-          onOpen={onOpen}
-          onHandleReview={onHandleReview}
-          onDragStart={() => onCardDragStart(pr.id)}
-          onDragEnd={onCardDragEnd}
-        />
-      ))}
-    </div>
-  </div>
-)
-
-export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onMove }: Props) => {
+export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onReorder }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [dropCol, setDropCol] = useState<PrColumn | null>(null)
+  const [dragging, setDragging] = useState<MyPr | null>(null)
+  const [dropTarget, setDropTarget] = useState<PrColumn | null>(null)
+  // insertion indicator: line above card `before`, or at the column end when before is null
+  const [dropLine, setDropLine] = useState<{ col: PrColumn; before: string | null } | null>(null)
   const repoOptions = [...new Set(prs.map((p) => p.repo))].sort()
   const byColumn = (c: PrColumn) =>
     prs
       .filter((p) => p.column === c && matchesFilter(filter, p.repo, p.ciState))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      // Done ignores drag order: merged PRs just list newest first
+      .sort((a, b) =>
+        c === 'done'
+          ? b.createdAt.localeCompare(a.createdAt)
+          : orderKey(a) - orderKey(b) || b.createdAt.localeCompare(a.createdAt),
+      )
   const doneCount = prs.filter((p) => p.column === 'done' && matchesFilter(filter, p.repo, p.ciState)).length
   const columns = showDone ? [...COLUMNS, { column: 'done' as const, title: 'Done' }] : COLUMNS
 
-  const drop = (column: PrColumn) => {
-    if (dragId) onMove(dragId, column)
-    setDragId(null)
-    setDropCol(null)
+  // hide the insertion line when dropping there wouldn't move the card
+  // (over itself, over the card right after it, or at the end while already last)
+  const isNoMove = (colItems: MyPr[], before: MyPr | null) => {
+    if (!dragging) return true
+    const idx = colItems.findIndex((x) => x.id === dragging.id)
+    if (idx < 0) return false // coming from another column: always a real move
+    if (before === null) return idx === colItems.length - 1
+    const beforeIdx = colItems.findIndex((x) => x.id === before.id)
+    return beforeIdx === idx || beforeIdx === idx + 1
+  }
+
+  // drop the dragged card into a column, before `before` (or at the end)
+  const drop = (colItems: MyPr[], column: PrColumn, before: MyPr | null) => {
+    if (!dragging) return
+    const rest = colItems.filter((x) => x.id !== dragging.id)
+    const idx = before ? rest.findIndex((x) => x.id === before.id) : rest.length
+    const at = idx < 0 ? rest.length : idx
+    const ordered = [...rest.slice(0, at), dragging, ...rest.slice(at)]
+    onReorder(
+      dragging,
+      column,
+      ordered.map((x) => x.id),
+    )
+    setDragging(null)
+    setDropTarget(null)
+    setDropLine(null)
   }
 
   return (
@@ -208,26 +175,89 @@ export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onMove }
         )}
       </div>
       <div className="flex min-h-0 flex-1 gap-3">
-        {columns.map((col) => (
-          <Column
-            key={col.column}
-            title={col.title}
-            prs={byColumn(col.column)}
-            me={me}
-            newIds={newIds}
-            onOpen={onOpen}
-            onHandleReview={onHandleReview}
-            dragging={dragId !== null}
-            isDropTarget={dropCol === col.column && dragId !== null}
-            onDragOver={() => setDropCol(col.column)}
-            onDrop={() => drop(col.column)}
-            onCardDragStart={setDragId}
-            onCardDragEnd={() => {
-              setDragId(null)
-              setDropCol(null)
-            }}
-          />
-        ))}
+        {columns.map((col) => {
+          const items = byColumn(col.column)
+          return (
+            // biome-ignore lint/a11y/noStaticElementInteractions: kanban drop target
+            <div
+              key={col.column}
+              onDragOver={(e) => {
+                if (!dragging) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDropTarget(col.column)
+                // cards stopPropagation on dragOver, so reaching here means empty space -> drop at end
+                setDropLine({ col: col.column, before: null })
+              }}
+              onDragLeave={() => {
+                setDropTarget((cur) => (cur === col.column ? null : cur))
+                setDropLine((cur) => (cur?.col === col.column ? null : cur))
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                drop(items, col.column, null)
+              }}
+              className={`flex min-h-0 flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+                dropTarget === col.column && dragging
+                  ? 'bg-grass-600/30 ring-1 ring-grass-500'
+                  : dragging
+                    ? 'bg-grass-600/20'
+                    : 'bg-grass-600/10'
+              }`}
+            >
+              <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+                {col.title} <span className="font-normal text-deck-400">({items.length})</span>
+              </h3>
+              {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
+                  (fractional-width) clip edge — give them 1px of breathing room */}
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+                {items.map((pr) => (
+                  // wrapper (line + card) is the drop target: hovering the line itself stays stable
+                  // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
+                  <div
+                    key={pr.id}
+                    className="flex flex-col gap-2"
+                    onDragOver={(e) => {
+                      if (!dragging) return
+                      e.preventDefault()
+                      e.stopPropagation()
+                      e.dataTransfer.dropEffect = 'move'
+                      setDropTarget(col.column)
+                      setDropLine((cur) =>
+                        cur?.col === col.column && cur.before === pr.id ? cur : { col: col.column, before: pr.id },
+                      )
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      drop(items, col.column, pr)
+                    }}
+                  >
+                    {dropLine?.col === col.column && dropLine.before === pr.id && !isNoMove(items, pr) && (
+                      <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
+                    )}
+                    <PrCard
+                      pr={pr}
+                      me={me}
+                      isNew={newIds.has(pr.id)}
+                      onOpen={onOpen}
+                      onHandleReview={onHandleReview}
+                      onDragStart={() => setDragging(pr)}
+                      onDragEnd={() => {
+                        setDragging(null)
+                        setDropTarget(null)
+                        setDropLine(null)
+                      }}
+                    />
+                  </div>
+                ))}
+                {dropLine?.col === col.column && dropLine.before === null && !isNoMove(items, null) && (
+                  <div className="h-0.5 shrink-0 rounded-full bg-grass-400" />
+                )}
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

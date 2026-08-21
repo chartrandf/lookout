@@ -35,3 +35,20 @@ export const clearOverride = async (id: string) => {
     await s.set('overrides', all)
   }
 }
+
+// Manual drag positions on the PR board, keyed by PR id (rank within its column; unranked sorts by default)
+export const getPrOrders = async (): Promise<Record<string, number>> => {
+  const raw = (await (await getStore()).get<Record<string, unknown>>('order')) ?? {}
+  const out: Record<string, number> = {}
+  for (const [id, v] of Object.entries(raw)) if (typeof v === 'number') out[id] = v
+  return out
+}
+
+export const setPrOrders = async (orderedIds: string[]) => {
+  const s = await getStore()
+  const all = (await s.get<Record<string, number>>('order')) ?? {}
+  orderedIds.forEach((id, i) => {
+    all[id] = (i + 1) * 10
+  })
+  await s.set('order', all)
+}

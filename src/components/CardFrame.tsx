@@ -15,7 +15,7 @@ type Props = {
 }
 
 const BASE =
-  'cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-colors duration-150 hover:border-deck-600 hover:bg-white/10'
+  'cursor-pointer rounded-lg border border-deck-700 bg-deck-800/80 p-3 transition-all duration-150 hover:border-deck-600 hover:bg-white/10'
 
 // Shared presentational card shell: title, author + repo#number row, and a tag-row slot.
 // Used by the Reviews board and the Pull Requests board so both cards read identically.

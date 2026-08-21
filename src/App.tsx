@@ -34,7 +34,7 @@ import { syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick } from './lib/notify'
 import { classifyColumn, resolveOverride } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
-import { setOverride } from './lib/proverrides'
+import { setOverride, setPrOrders } from './lib/proverrides'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
@@ -307,6 +307,7 @@ const App = () => {
     prState: pr.state,
     prAuthor: config.githubUser,
     prCreatedAt: pr.createdAt,
+    isDraft: pr.isDraft,
     stage: 'reviewing',
     column: pr.column, // drives PR-board button conditions
     reviewRequested: false,
@@ -330,12 +331,18 @@ const App = () => {
     if (button && !getRun(pr.id)) runButton(myPrToTask(pr), 'pr', button)
   }
 
-  // manual hand-off: pin the card to a column (optimistic) and persist the override against the
-  // GitHub-derived column, so it self-heals once real review state moves past that baseline
-  const moveMyPr = async (id: string, column: PrColumn) => {
-    const pr = myPrs.find((p) => p.id === id)
-    setMyPrs((prev) => prev.map((p) => (p.id === id ? { ...p, column } : p)))
-    await setOverride(id, column, pr?.derivedColumn ?? column)
+  // drag-drop on the PR board (optimistic): persist the new positions, and when the column changed,
+  // pin it as an override against the GitHub-derived column so it self-heals once real state moves
+  const reorderMyPr = async (pr: MyPr, column: PrColumn, orderedIds: string[]) => {
+    const pos = new Map(orderedIds.map((id, i) => [id, (i + 1) * 10]))
+    setMyPrs((prev) =>
+      prev.map((p) => {
+        const sortOrder = pos.get(p.id) ?? p.sortOrder
+        return p.id === pr.id ? { ...p, column, sortOrder } : { ...p, sortOrder }
+      }),
+    )
+    if (pr.column !== column) await setOverride(pr.id, column, pr.derivedColumn)
+    await setPrOrders(orderedIds)
   }
 
   // Per-card refresh on open (PR board): re-derive the opened card from the timeline just fetched for its
@@ -497,7 +504,7 @@ const App = () => {
               setSeenPullSig((prev) => ({ ...prev, [pr.id]: pullSig(pr) })) // clicking clears this card's "new"
             }}
             onHandleReview={onHandleReview}
-            onMove={moveMyPr}
+            onReorder={reorderMyPr}
           />
         )}
         {view === 'discovery' && (

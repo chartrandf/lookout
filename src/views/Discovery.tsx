@@ -103,6 +103,7 @@ export const Discovery = ({
     .sort(
       (a, b) =>
         Number(b.reviewRequested) - Number(a.reviewRequested) ||
+        Number(a.isDraft) - Number(b.isDraft) || // drafts sink to the bottom of the listing
         (b.prCreatedAt ?? '').localeCompare(a.prCreatedAt ?? ''),
     )
   const ignored = tasks.filter((t) => t.stage === 'ignored' && t.prState === 'open')
@@ -146,7 +147,7 @@ export const Discovery = ({
               .map((t) => (
                 <li
                   key={t.id}
-                  className={`flex items-center gap-3 rounded-lg border p-3 ${
+                  className={`flex items-center gap-3 rounded-lg border p-3 transition-all duration-150 ${t.isDraft ? 'card-draft' : ''} ${
                     t.seen ? 'border-deck-700 bg-deck-800/60' : 'border-grass-600/60 bg-grass-600/10'
                   }`}
                 >
@@ -154,6 +155,11 @@ export const Discovery = ({
                     <div className="flex items-center gap-2">
                       {!t.seen && (
                         <span className="h-2 w-2 shrink-0 rounded-full bg-grass-400" title="New — not seen yet" />
+                      )}
+                      {t.isDraft && (
+                        <span className="shrink-0 rounded-full border border-deck-600 px-2 py-0.5 text-xs text-deck-400">
+                          ✎ draft
+                        </span>
                       )}
                       <PrLink
                         url={t.prUrl}
