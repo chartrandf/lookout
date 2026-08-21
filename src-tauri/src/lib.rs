@@ -1,3 +1,33 @@
+use tauri::Manager;
+
+// Open (or focus) a PR browser window. Built from Rust so a navigation toolbar
+// (back/forward/reload + URL bar) can be injected into every page it loads.
+#[tauri::command]
+async fn open_pr_window(app: tauri::AppHandle, label: String, url: String, title: String) -> Result<(), String> {
+    if let Some(existing) = app.get_webview_window(&label) {
+        return existing.set_focus().map_err(|e| e.to_string());
+    }
+    let parsed = tauri::Url::parse(&url).map_err(|e| e.to_string())?;
+    #[allow(unused_mut)]
+    let mut builder = tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::External(parsed))
+        .title(&title)
+        .inner_size(1280.0, 900.0)
+        .initialization_script(include_str!("browser-toolbar.js"));
+    // macOS glass titlebar looks broken over remote pages; overlay = traffic lights only,
+    // repositioned so they center vertically in the injected 46px toolbar
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder
+            .title_bar_style(tauri::TitleBarStyle::Overlay)
+            .hidden_title(true)
+            // y is not a top inset: the effective light center lands at (y + button_height)/2;
+            // 25.5 tuned by eye to center the lights in the 46px toolbar
+            .traffic_light_position(tauri::LogicalPosition::new(16.0, 25.5));
+    }
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // GUI apps launched from Finder get launchd's bare PATH; pull in the login shell's
@@ -78,6 +108,7 @@ pub fn run() {
                 )
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![open_pr_window])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
