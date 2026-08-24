@@ -15,7 +15,11 @@
         "title": "Lookout",
         "width": 1280,
         "height": 800,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 16, "y": 25.5 },
+        "backgroundColor": "#0b1d14"
       }
     ],
     "security": {

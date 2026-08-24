@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pr-windows",
+  "description": "PR browser windows: window dragging from the injected toolbar (remote pages)",
+  "windows": ["pr-*"],
+  "remote": { "urls": ["https://*"] },
+  "permissions": ["core:window:allow-start-dragging", "core:window:allow-internal-toggle-maximize"]
+}

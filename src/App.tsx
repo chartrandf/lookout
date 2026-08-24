@@ -447,10 +447,19 @@ const App = () => {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
-      <header className="flex shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 px-4 py-2.5">
-        <h1 className="font-script mr-3 text-xl text-white">Lookout</h1>
+      {/* doubles as the window titlebar (overlay style): drag region + left inset for traffic lights;
+          h matches the 46px the traffic_light y=25.5 is tuned for */}
+      <header
+        data-tauri-drag-region
+        className="flex h-[46px] shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 pl-[101px] pr-4"
+      >
+        <h1 data-tauri-drag-region className="font-script mr-3 text-xl text-white">
+          Lookout
+        </h1>
         {TAB_ORDER.filter((t) => t.view !== 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
-        <div className="flex min-w-0 flex-1 justify-center px-4">
+        {/* drag region only fires on the element itself, so the wrapper needs it too:
+            clicks on the search input/buttons inside still behave normally */}
+        <div data-tauri-drag-region className="flex min-w-0 flex-1 justify-center px-4">
           <GlobalSearch
             tasks={tasks}
             onOpen={openCard}

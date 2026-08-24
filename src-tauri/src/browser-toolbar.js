@@ -11,6 +11,9 @@
 
     const bar = document.createElement('div')
     bar.id = '__lookout_nav'
+    // empty toolbar space drags the window (buttons/input are separate targets, unaffected);
+    // needs the pr-windows capability granting start-dragging to remote pages
+    bar.setAttribute('data-tauri-drag-region', '')
     bar.style.cssText =
       'position:fixed;left:0;right:0;top:0;z-index:2147483647;display:flex;align-items:center;gap:8px;' +
       `height:${BAR_H}px;padding:0 16px 0 88px;box-sizing:border-box;background:#ececec;border-bottom:1px solid #d0d0d0;` +

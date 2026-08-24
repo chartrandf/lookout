@@ -49,6 +49,7 @@
     "core:image:default",
     "core:app:default",
     "core:webview:allow-create-webview-window",
+    "core:window:allow-start-dragging",
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
