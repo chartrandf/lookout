@@ -68,12 +68,21 @@ export type ReviewTask = {
   updatedAt: string
 }
 
-export type AppNotification = {
-  id: number
+// What the bell shows. Alerts are derived from live PR state on every sync — never logged events:
+//  addressed     the author pushed real work after my review (merges/rebases don't count)
+//  ready_to_send my review session finished but I haven't said anything on GitHub yet
+//  awaiting_me   someone reviewed my own PR and I haven't pushed since
+//  ci_fail       CI is red on a PR I'm involved in
+export type AlertKind = 'addressed' | 'ready_to_send' | 'awaiting_me' | 'ci_fail'
+
+export type Alert = {
+  key: string // kind:taskId[:eventTs] — stable across syncs, changes when the driving event changes
   taskId: string
+  kind: AlertKind
   title: string
   body: string
   read: boolean
+  archived: boolean // hidden by hand — the row is kept so re-deriving can't resurrect this event
   createdAt: string
 }
 

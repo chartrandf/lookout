@@ -1,4 +1,5 @@
 import type { PrState, ReviewFlavor, ReviewTask } from '../types'
+import { reviewFileTs } from './alerts'
 import { fetchPrTimeline, type GhTimelineEvent } from './gh'
 import { isBot, reviewFlavor } from './prboard'
 import { sessionsForBranch } from './sessions'
@@ -28,14 +29,6 @@ const KIND_ICONS = {
   closed: '❌',
   reopened: '♻️',
   force_pushed: '⚠️',
-}
-
-// filename: YYYY-MM-DD-HH-MM-<branch>.md -> local time ISO
-// (branches with "/" nest the file, so match the stamp anywhere after code-review/)
-const reviewFileTs = (path: string): string | null => {
-  const m = path.match(/code-review\/(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-/) ?? null
-  if (!m) return null
-  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).toISOString()
 }
 
 // Merge consecutive commits by the same actor into one "pushed N commits" event

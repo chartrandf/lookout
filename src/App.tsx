@@ -13,14 +13,14 @@ import {
   setReviewButtons,
 } from './lib/config'
 import {
-  addNotification,
   addSessionId,
-  allNotifications,
+  allAlerts,
   allTasks,
-  archiveAllNotifications,
+  archiveAlert,
+  archiveAllAlerts,
   clearNewActivity,
-  markAllNotificationsRead,
-  markNotificationRead,
+  markAlertRead,
+  markAllAlertsRead,
   setFollowupSummary,
   setLinks,
   setOrders,
@@ -31,18 +31,18 @@ import {
 } from './lib/db'
 import type { TimelineSummary } from './lib/feed'
 import { syncMyPrs } from './lib/myprs'
-import { notify, onNotificationClick } from './lib/notify'
+import { onNotificationClick } from './lib/notify'
 import { classifyColumn, resolveOverride } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
 import { setOverride, setPrOrders } from './lib/proverrides'
 import { sortReposByNames } from './lib/repoorder'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
-import { syncAll } from './lib/sync'
+import { syncAll, syncTaskAlerts } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
 import type {
   ActionButton,
-  AppNotification,
+  Alert,
   ButtonBoard,
   Config,
   MyPr,
@@ -99,7 +99,7 @@ const App = () => {
   const [error, setError] = useState<string | null>(null)
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
   // acknowledged PR state signatures (id -> sig); a card is "new" until its current sig is recorded by a click
   const [seenPullSig, setSeenPullSig] = useState<Record<string, string>>({})
 
@@ -111,7 +111,7 @@ const App = () => {
 
   const reload = useCallback(async () => setTasks(await allTasks()), [])
 
-  const reloadNotifications = useCallback(async () => setNotifications(await allNotifications()), [])
+  const reloadAlerts = useCallback(async () => setAlerts(await allAlerts()), [])
 
   // serialize syncs (never overlap) and surface the shared syncing/error/lastSync UI state
   const runSync = useCallback(async (fn: () => Promise<void>) => {
@@ -135,6 +135,7 @@ const App = () => {
     () =>
       runSync(async () => {
         setTasks(await syncAll())
+        setAlerts(await allAlerts())
         tasksSyncedAt.current = Date.now()
       }),
     [runSync],
@@ -145,6 +146,7 @@ const App = () => {
     () =>
       runSync(async () => {
         setMyPrs(await syncMyPrs())
+        setAlerts(await allAlerts())
         pullsSyncedAt.current = Date.now()
       }),
     [runSync],
@@ -158,6 +160,7 @@ const App = () => {
         const cfg = await getConfig()
         setConfig(cfg)
         setMyPrs(await syncMyPrs(cfg))
+        setAlerts(await allAlerts())
         const now = Date.now()
         tasksSyncedAt.current = now
         pullsSyncedAt.current = now
@@ -180,17 +183,17 @@ const App = () => {
     initTray()
     getConfig().then(setConfig)
     reload()
-    reloadNotifications()
+    reloadAlerts()
     refresh()
     const interval = setInterval(refresh, POLL_MS)
     return () => clearInterval(interval)
-  }, [refresh, reload, reloadNotifications])
+  }, [refresh, reload, reloadAlerts])
 
   // OS notification click: mark read + open the card panel (plugin only delivers clicks on mobile today)
   useEffect(() => {
-    const listener = onNotificationClick(async ({ notificationId, taskId }) => {
-      if (notificationId) await markNotificationRead(notificationId)
-      await reloadNotifications()
+    const listener = onNotificationClick(async ({ alertKey, taskId }) => {
+      if (alertKey) await markAlertRead(alertKey)
+      await reloadAlerts()
       await showMainWindow()
       if (taskId) {
         setView('board')
@@ -200,7 +203,7 @@ const App = () => {
     return () => {
       listener.then((l) => l?.unregister())
     }
-  }, [reloadNotifications])
+  }, [reloadAlerts])
 
   // ⌘1..⌘n switch tabs, indexes follow TAB_ORDER
   useEffect(() => {
@@ -248,14 +251,13 @@ const App = () => {
     if (files.length) await setLinks(t.id, t.sessionIds, files)
   }
 
-  const notifySessionDone = async (taskId: string, label: string) => {
+  // A finished run changes what the bell should say about that PR (a report now exists, or the author's
+  // fixes just landed), so re-derive its alerts right away instead of waiting for the next poll.
+  const refreshTaskAlerts = async (taskId: string) => {
     const t = (await allTasks()).find((x) => x.id === taskId)
     if (!t) return
-    const title = `${label} done (${t.repo})`
-    const body = `${t.prTitle} by ${t.prAuthor}`
-    const id = await addNotification(t.id, title, body)
-    notify(title, body, { notificationId: id, taskId: t.id })
-    await reloadNotifications()
+    await syncTaskAlerts(t, config.githubUser)
+    await reloadAlerts()
   }
 
   // Post-run behavior is routed by board, not by a fixed command name.
@@ -278,7 +280,7 @@ const App = () => {
         if (summary) await setFollowupSummary(taskId, summary)
         await linkReviewReport(taskId)
         if (button?.advanceTo) await setStage(taskId, button.advanceTo)
-        await notifySessionDone(taskId, button?.label ?? 'Run')
+        await refreshTaskAlerts(taskId)
         await reload()
       },
     }
@@ -389,10 +391,15 @@ const App = () => {
     setPanelTaskId(t.id)
   }
 
-  const openNotification = async (n: AppNotification) => {
-    await markNotificationRead(n.id)
-    await reloadNotifications()
-    const t = tasks.find((x) => x.id === n.taskId)
+  const openAlert = async (a: Alert) => {
+    await markAlertRead(a.key)
+    await reloadAlerts()
+    if (a.kind === 'awaiting_me') {
+      setView('pulls')
+      setPanelTaskId(a.taskId)
+      return
+    }
+    const t = tasks.find((x) => x.id === a.taskId)
     if (t) openCard(t)
   }
 
@@ -415,7 +422,6 @@ const App = () => {
 
   const badges: Partial<Record<View, number>> = {
     board: awaitingCount,
-    discovery: discoveredCount,
   }
   // PR cards with new events (not yet clicked); tab shows a small dot while any remain
   const newPullIds = new Set(myPrs.filter((p) => pullHasEvent(p) && seenPullSig[p.id] !== pullSig(p)).map((p) => p.id))
@@ -478,15 +484,19 @@ const App = () => {
         </div>
         {TAB_ORDER.filter((t) => t.view === 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
         <NotificationBell
-          notifications={notifications}
-          onOpen={openNotification}
+          alerts={alerts}
+          onOpen={openAlert}
+          onArchive={async (a) => {
+            await archiveAlert(a.key)
+            await reloadAlerts()
+          }}
           onMarkAllRead={async () => {
-            await markAllNotificationsRead()
-            await reloadNotifications()
+            await markAllAlertsRead()
+            await reloadAlerts()
           }}
           onArchiveAll={async () => {
-            await archiveAllNotifications()
-            await reloadNotifications()
+            await archiveAllAlerts()
+            await reloadAlerts()
           }}
         />
       </header>

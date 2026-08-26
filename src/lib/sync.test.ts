@@ -14,12 +14,13 @@ vi.mock('./db', () => ({
   setPrState: vi.fn(),
   setSnoozed: vi.fn(),
   setStage: vi.fn(),
+  syncAlerts: vi.fn(async () => []),
   upsertPr: vi.fn(),
 }))
 vi.mock('./gh', () => ({
   fetchLogin: vi.fn(),
   fetchName: vi.fn(),
-  fetchPrActivity: vi.fn(),
+  fetchPrExchange: vi.fn(async () => ({ count: 0, ciState: null, reviews: [], comments: [], commits: [] })),
   fetchPrState: vi.fn(),
   listCommentedByMe: vi.fn(),
   listOpenPrs: vi.fn(),

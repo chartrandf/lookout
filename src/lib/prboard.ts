@@ -2,7 +2,7 @@ import type { CiState, MyPr, PrColumn, PrOverride, PrState, ReviewFlavor } from 
 import type { GhMyPr } from './gh'
 
 // Collapse a statusCheckRollup array into a single CI verdict (fail > pending > pass; empty = null).
-// Pure so both the classifier and gh.ts (fetchPrActivity) share one source of truth.
+// Pure so both the classifier and gh.ts (fetchPrExchange) share one source of truth.
 export const rollupToCiState = (checks: { conclusion?: string; status?: string; state?: string }[]): CiState => {
   if (!checks.length) return null
   const states = checks.map((c) => (c.conclusion || c.state || c.status || '').toUpperCase())
@@ -11,7 +11,7 @@ export const rollupToCiState = (checks: { conclusion?: string; status?: string; 
   return 'pass'
 }
 
-type ReviewAuthor = { login: string; is_bot?: boolean } | null
+type ReviewAuthor = { login?: string; is_bot?: boolean } | null
 type Review = { author: ReviewAuthor; state: string }
 
 // GitHub's `[bot]` login suffix, or the explicit is_bot flag

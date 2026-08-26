@@ -220,13 +220,19 @@ export const Discovery = ({
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-center justify-between">
-        <h2 className="text-lg font-semibold">
-          Discovery <span className="text-sm font-normal text-deck-400">({discovered.length})</span>
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Discovery</h2>
+          {/* hover hint: keeps the drag affordance discoverable without a permanent line of text */}
+          <span className="group relative flex items-center">
+            <span className="flex h-4 w-4 cursor-help items-center justify-center rounded-full border border-deck-600 text-[10px] text-deck-400 group-hover:border-deck-400 group-hover:text-deck-200">
+              ?
+            </span>
+            <span className="pointer-events-none absolute left-6 top-0 hidden whitespace-nowrap rounded border border-deck-700 bg-deck-800 px-2 py-1 text-xs text-deck-300 shadow-xl group-hover:block">
+              drag a column title to reorder your projects
+            </span>
+          </span>
+        </div>
         <div className="flex items-center gap-3">
-          {columns.length > 1 && (
-            <span className="text-xs text-deck-500">drag a column title to reorder your projects</span>
-          )}
           <button
             type="button"
             onClick={onToggleIgnored}

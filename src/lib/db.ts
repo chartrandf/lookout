@@ -1,5 +1,6 @@
 import Database from '@tauri-apps/plugin-sql'
-import type { AppNotification, ReviewTask, Stage } from '../types'
+import type { Alert, AlertKind, ReviewTask, Stage } from '../types'
+import { type AlertScope, inScope } from './alerts'
 
 let db: Database | null = null
 
@@ -193,54 +194,75 @@ export const setFollowupSummary = async (
   ])
 }
 
-type NotificationRow = {
-  id: number
+type AlertRow = {
+  key: string
   task_id: string
+  kind: string
   title: string
   body: string
   read: number
+  archived: number
   created_at: string
 }
 
-export const allNotifications = async (): Promise<AppNotification[]> => {
+const toAlert = (r: AlertRow): Alert => ({
+  key: r.key,
+  taskId: r.task_id,
+  kind: r.kind as AlertKind,
+  title: r.title,
+  body: r.body,
+  read: r.read === 1,
+  archived: r.archived === 1,
+  createdAt: r.created_at,
+})
+
+export const allAlerts = async (): Promise<Alert[]> => {
   const d = await getDb()
-  const rows = await d.select<NotificationRow[]>(
-    'SELECT * FROM notifications WHERE archived = 0 ORDER BY id DESC LIMIT 100',
-  )
-  return rows.map((r) => ({
-    id: r.id,
-    taskId: r.task_id,
-    title: r.title,
-    body: r.body,
-    read: r.read === 1,
-    createdAt: r.created_at,
-  }))
+  const rows = await d.select<AlertRow[]>('SELECT * FROM alerts WHERE archived = 0 ORDER BY created_at DESC LIMIT 100')
+  return rows.map(toAlert)
 }
 
-export const addNotification = async (taskId: string, title: string, body: string): Promise<number> => {
+// Reconcile the derived set against what's stored: unknown keys are inserted (and returned, so the
+// caller can toast them), in-scope keys that no longer apply are deleted, and keys that persist keep
+// their row — hence their read state and original created_at.
+export const syncAlerts = async (scope: AlertScope, alerts: Alert[]): Promise<Alert[]> => {
   const d = await getDb()
-  const res = await d.execute('INSERT INTO notifications (task_id, title, body, created_at) VALUES ($1, $2, $3, $4)', [
-    taskId,
-    title,
-    body,
-    new Date().toISOString(),
-  ])
-  return res.lastInsertId ?? 0
+  const stored = await d.select<AlertRow[]>('SELECT * FROM alerts')
+  const known = new Set(stored.map((r) => r.key))
+  const wanted = new Set(alerts.map((a) => a.key))
+  const fresh: Alert[] = []
+  for (const a of alerts) {
+    if (known.has(a.key)) continue
+    await d.execute(
+      'INSERT OR IGNORE INTO alerts (key, task_id, kind, title, body, created_at) VALUES ($1, $2, $3, $4, $5, $6)',
+      [a.key, a.taskId, a.kind, a.title, a.body, a.createdAt],
+    )
+    fresh.push(a)
+  }
+  for (const r of stored.map(toAlert))
+    if (!wanted.has(r.key) && inScope(r, scope)) await d.execute('DELETE FROM alerts WHERE key = $1', [r.key])
+  return fresh
 }
 
-export const markNotificationRead = async (id: number) => {
+// Archived keys stay in the table on purpose: they are what stops a still-true alert from coming back.
+export const archiveAlert = async (key: string) => {
   const d = await getDb()
-  await d.execute('UPDATE notifications SET read = 1 WHERE id = $1', [id])
+  await d.execute('UPDATE alerts SET archived = 1, read = 1 WHERE key = $1', [key])
 }
 
-export const markAllNotificationsRead = async () => {
+export const archiveAllAlerts = async () => {
   const d = await getDb()
-  await d.execute('UPDATE notifications SET read = 1 WHERE read = 0')
+  await d.execute('UPDATE alerts SET archived = 1, read = 1 WHERE archived = 0')
 }
 
-export const archiveAllNotifications = async () => {
+export const markAlertRead = async (key: string) => {
   const d = await getDb()
-  await d.execute('UPDATE notifications SET archived = 1')
+  await d.execute('UPDATE alerts SET read = 1 WHERE key = $1', [key])
+}
+
+export const markAllAlertsRead = async () => {
+  const d = await getDb()
+  await d.execute('UPDATE alerts SET read = 1 WHERE read = 0')
 }
 
 export const setLinks = async (id: string, sessionIds: string[], reviewFiles: string[]) => {

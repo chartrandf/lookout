@@ -113,17 +113,39 @@ export const approvePr = async (repo: string, prNumber: number) => {
   await gh(['pr', 'review', String(prNumber), '--repo', repo, '--approve'])
 }
 
-export type PrActivity = { count: number; ciState: CiState }
+export type GhReview = { author: { login?: string; is_bot?: boolean } | null; state: string; submittedAt: string }
+export type GhComment = { author: { login?: string } | null; createdAt: string }
+// authoredDate survives a rebase (committedDate doesn't), so it's what tells real new work from a replay
+export type GhCommit = {
+  authoredDate: string
+  committedDate: string
+  messageHeadline: string
+  authors: { login?: string; name?: string }[]
+}
 
-// Activity = review comments + reviews + issue comments, excluding my own (my actions are not "new" to me);
-// CI from status check rollup
-export const fetchPrActivity = async (repo: string, prNumber: number, me: string): Promise<PrActivity> => {
+// Everything said and pushed on a PR, plus the CI verdict — one gh call feeding both the card's
+// activity badge and the alert rules.
+export type PrExchange = {
+  count: number // comments + reviews that aren't mine (my own actions are not "new" to me)
+  ciState: CiState
+  reviews: GhReview[]
+  comments: GhComment[]
+  commits: GhCommit[]
+}
+
+export const fetchPrExchange = async (repo: string, prNumber: number, me: string): Promise<PrExchange> => {
   const out = JSON.parse(
-    await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,statusCheckRollup']),
+    await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,commits,statusCheckRollup']),
   )
   const notMine = (list?: { author?: { login?: string } }[]) =>
     (list ?? []).filter((c) => c.author?.login !== me).length
-  return { count: notMine(out.comments) + notMine(out.reviews), ciState: rollupToCiState(out.statusCheckRollup ?? []) }
+  return {
+    count: notMine(out.comments) + notMine(out.reviews),
+    ciState: rollupToCiState(out.statusCheckRollup ?? []),
+    reviews: out.reviews ?? [],
+    comments: out.comments ?? [],
+    commits: out.commits ?? [],
+  }
 }
 
 // A PR authored by me, as returned by `gh pr list --author @me` (raw shape before classification)

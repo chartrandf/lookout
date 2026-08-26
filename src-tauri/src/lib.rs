@@ -104,6 +104,18 @@ pub fn run() {
                             sql: include_str!("../migrations/009_is_draft.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 10,
+                            description: "derived alerts",
+                            sql: include_str!("../migrations/010_alerts.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 11,
+                            description: "alert archive",
+                            sql: include_str!("../migrations/011_alert_archive.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

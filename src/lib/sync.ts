@@ -1,7 +1,18 @@
-import type { ReviewTask } from '../types'
+import type { Alert, ReviewTask } from '../types'
+import { type AlertScope, TASK_ALERT_KINDS, taskAlerts } from './alerts'
 import { getConfig, setGithubName, setGithubUser } from './config'
-import { allTasks, pruneRepos, setActivity, setLinks, setPrState, setSnoozed, setStage, upsertPr } from './db'
-import { fetchLogin, fetchName, fetchPrActivity, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
+import {
+  allTasks,
+  pruneRepos,
+  setActivity,
+  setLinks,
+  setPrState,
+  setSnoozed,
+  setStage,
+  syncAlerts,
+  upsertPr,
+} from './db'
+import { fetchLogin, fetchName, fetchPrExchange, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { scanRepoSessions } from './sessions'
@@ -27,7 +38,6 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
   await pruneRepos(config.repos.map((r) => r.repo))
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
-  const firstSync = known.size === 0 // fresh DB: don't blast a notification per existing PR
   // artifacts first seen this pass: only these advance a stage (a manually demoted card stays put)
   const fresh = new Map<string, { session: boolean; report: boolean }>()
   const openIds = new Set<string>()
@@ -82,19 +92,12 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const engaged = myReview || commentedByMe.has(pr.number)
       if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered')
         await setStage(id, myReview?.state === 'CHANGES_REQUESTED' ? 'followup' : 'reviewed')
-
-      if (!known.has(id) && !firstSync && !engaged) {
-        const requested = pr.reviewRequests.some((r) => r.login === me)
-        await notify(
-          requested ? 'Review requested' : 'New PR',
-          `${repo}#${pr.number} — ${pr.title} (${pr.author.login})`,
-        )
-      }
     }
   }
 
   // Advance stages + auto-clear
   const tasks = await allTasks()
+  const derived: Alert[] = [] // alerts recomputed this pass
   for (const t of tasks) {
     // reconcile PR state even for cards already in Done: a card manually moved to Done while its
     // PR was still open would otherwise never pick up a later merge/close (it's skipped below).
@@ -114,23 +117,42 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     else if ((t.stage === 'watching' || t.stage === 'inbox') && fresh.get(t.id)?.session)
       await setStage(t.id, 'reviewing')
 
-    // watch boarded PRs for new comments / CI failures
+    // watch boarded PRs: refresh the activity/CI badges and re-derive this PR's alerts
     if (ACTIVE_STAGES.has(t.stage) && polledRepos.has(t.repo) && openIds.has(t.id)) {
       try {
-        const { count, ciState } = await fetchPrActivity(t.repo, t.prNumber, me)
+        const x = await fetchPrExchange(t.repo, t.prNumber, me)
         const baseline = t.activityCount === null // first fetch: set silently
-        const isNew = !baseline && count > (t.activityCount ?? 0)
-        await setActivity(t.id, count, ciState, isNew)
-        if (isNew) await notify('New PR activity', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
-        if (ciState === 'fail' && t.ciState !== 'fail' && !baseline) {
-          await notify('CI failed', `${t.repo}#${t.prNumber} — ${t.prTitle}`)
-          if (t.snoozed) await setSnoozed(t.id, false) // CI failure also wakes a hidden card
-        }
+        const isNew = !baseline && x.count > (t.activityCount ?? 0)
+        await setActivity(t.id, x.count, x.ciState, isNew)
+        if (x.ciState === 'fail' && t.snoozed) await setSnoozed(t.id, false) // a red build wakes a hidden card
+        derived.push(...taskAlerts(t, x, me))
       } catch (e) {
         console.error(`activity poll failed for ${t.id}:`, e)
       }
     }
   }
 
+  // scoped by repo, not by task: a card that just left the polled set (done, merged, ignored) derives
+  // nothing this pass, and that's exactly what should drop its alerts
+  await publishAlerts({ kinds: TASK_ALERT_KINDS, repos: [...polledRepos] }, derived)
   return allTasks()
+}
+
+// Insert what's new, drop what no longer applies, and toast only the freshly-inserted alerts.
+// A first fill (fresh install, or the first pass after a long absence) collapses into one toast
+// instead of a dozen.
+const publishAlerts = async (scope: AlertScope, derived: Alert[]) => {
+  const fresh = await syncAlerts(scope, derived)
+  if (fresh.length > 3) {
+    await notify(`${fresh.length} pull requests need you`, 'Open Lookout to see what changed')
+    return
+  }
+  for (const a of fresh) await notify(a.title, a.body, { alertKey: a.key, taskId: a.taskId })
+}
+
+// One PR's alerts, re-derived on demand (e.g. right after a review session finishes) so the bell
+// doesn't wait for the next full sync.
+export const syncTaskAlerts = async (task: ReviewTask, me: string) => {
+  const x = await fetchPrExchange(task.repo, task.prNumber, me).catch(() => null)
+  if (x) await publishAlerts({ kinds: TASK_ALERT_KINDS, taskIds: [task.id] }, taskAlerts(task, x, me))
 }

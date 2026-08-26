@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { timeAgo } from '../lib/time'
-import type { AppNotification } from '../types'
+import type { Alert, AlertKind } from '../types'
 
 const svgAttrs = {
   width: 16,
@@ -34,20 +34,29 @@ const ArchiveIcon = () => (
   </svg>
 )
 
+// one glyph per rule, so the list is scannable without reading the titles
+const KIND_ICON: Record<AlertKind, string> = {
+  addressed: '🔁',
+  ready_to_send: '📤',
+  awaiting_me: '👀',
+  ci_fail: '🔴',
+}
+
 type Props = {
-  notifications: AppNotification[]
-  onOpen: (n: AppNotification) => void
+  alerts: Alert[]
+  onOpen: (a: Alert) => void
+  onArchive: (a: Alert) => void
   onMarkAllRead: () => void
   onArchiveAll: () => void
 }
 
-export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchiveAll }: Props) => {
+export const NotificationBell = ({ alerts, onOpen, onArchive, onMarkAllRead, onArchiveAll }: Props) => {
   const [open, setOpen] = useState(false) // mounted (kept during exit animation)
   const [shown, setShown] = useState(false) // drives the fade/collapse transition
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  const unread = notifications.filter((n) => !n.read).length
-  const hasAny = notifications.length > 0
+  const unread = alerts.filter((a) => !a.read).length
+  const hasAny = alerts.length > 0
 
   // once mounted, flip to shown on the next frame so the enter transition runs
   useEffect(() => {
@@ -108,7 +117,7 @@ export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchi
             className={`absolute right-0 top-full z-30 mt-1 w-96 origin-top rounded-lg border border-deck-700 bg-deck-900 shadow-xl transition-all duration-200 ease-out ${shown ? 'scale-100 opacity-100' : '-translate-y-1 scale-95 opacity-0'}`}
           >
             <div className="flex items-center justify-between border-b border-deck-800 px-3 py-2">
-              <span className="text-sm text-deck-300">Notifications</span>
+              <span className="text-sm text-deck-300">Needs your attention</span>
               {hasAny && (
                 <div className="flex items-center gap-1">
                   <button
@@ -123,7 +132,7 @@ export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchi
                   <button
                     type="button"
                     onClick={onArchiveAll}
-                    title="Archive all notifications"
+                    title="Archive all"
                     className="cursor-pointer rounded p-1 text-deck-400 hover:bg-deck-800 hover:text-deck-200"
                   >
                     <ArchiveIcon />
@@ -132,30 +141,41 @@ export const NotificationBell = ({ notifications, onOpen, onMarkAllRead, onArchi
               )}
             </div>
             <div className="max-h-96 overflow-y-auto">
-              {notifications.length === 0 && (
-                <div className="px-3 py-6 text-center text-sm text-deck-500">No notifications</div>
+              {alerts.length === 0 && (
+                <div className="px-3 py-6 text-center text-sm text-deck-500">Nothing waiting on you</div>
               )}
-              {notifications.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => {
-                    close()
-                    onOpen(n)
-                  }}
-                  className="flex w-full cursor-pointer items-start gap-2 border-b border-deck-800 px-3 py-2 text-left last:border-b-0 hover:bg-deck-800"
-                >
-                  <span
-                    className={`mt-1.5 size-1.5 shrink-0 rounded-full ${n.read ? 'bg-transparent' : 'bg-amber-500'}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-sm ${n.read ? 'text-deck-400' : 'text-deck-100'}`}>
-                      {n.title}
+              {alerts.map((a) => (
+                <div key={a.key} className="group relative border-b border-deck-800 last:border-b-0 hover:bg-deck-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      close()
+                      onOpen(a)
+                    }}
+                    className="flex w-full cursor-pointer items-start gap-2 px-3 py-2 text-left"
+                  >
+                    <span
+                      className={`mt-1.5 size-1.5 shrink-0 rounded-full ${a.read ? 'bg-transparent' : 'bg-amber-500'}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-sm ${a.read ? 'text-deck-400' : 'text-deck-100'}`}>
+                        {KIND_ICON[a.kind]} {a.title}
+                      </span>
+                      <span className="block truncate text-xs text-deck-500">{a.body}</span>
                     </span>
-                    <span className="block truncate text-xs text-deck-500">{n.body}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-deck-600">{timeAgo(n.createdAt)}</span>
-                </button>
+                    <span className="shrink-0 text-xs text-deck-600">{timeAgo(a.createdAt)}</span>
+                  </button>
+                  {/* overlays the row rather than reserving a column: it fades in over the content,
+                      the gradient keeping the icon readable on top of whatever text it covers */}
+                  <button
+                    type="button"
+                    onClick={() => onArchive(a)}
+                    title="Archive — hides this one until something new happens on the PR"
+                    className="absolute inset-y-0 right-0 flex cursor-pointer items-center bg-gradient-to-l from-deck-800 from-60% to-transparent pl-12 pr-4 text-deck-400 opacity-0 transition-opacity hover:text-deck-100 focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <ArchiveIcon />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
