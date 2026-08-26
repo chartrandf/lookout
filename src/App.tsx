@@ -35,6 +35,7 @@ import { notify, onNotificationClick } from './lib/notify'
 import { classifyColumn, resolveOverride } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
 import { setOverride, setPrOrders } from './lib/proverrides'
+import { sortReposByNames } from './lib/repoorder'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { syncAll } from './lib/sync'
@@ -223,6 +224,12 @@ const App = () => {
   const markSeen = async (id: string, seen: boolean) => {
     await setSeen(id, seen)
     await reload()
+  }
+
+  // Discovery column drag = the watched-repo order in settings; no re-sync needed, just persist + re-read
+  const reorderRepos = async (repoNames: string[]) => {
+    await setRepos(sortReposByNames(config.repos, repoNames))
+    setConfig(await getConfig())
   }
 
   const saveRepos = async (repos: WatchedRepo[]) => {
@@ -501,7 +508,7 @@ const App = () => {
 
       {/* board: columns scroll individually and stop 50px above the bottom (sync pill stays clear) */}
       <main
-        className={`flex-1 p-4 ${view === 'board' || view === 'pulls' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
+        className={`flex-1 p-4 ${view === 'board' || view === 'pulls' || view === 'discovery' ? 'overflow-hidden pb-[50px]' : 'overflow-y-auto'}`}
       >
         {view === 'pulls' && (
           <PullRequests
@@ -519,6 +526,7 @@ const App = () => {
         {view === 'discovery' && (
           <Discovery
             tasks={tasks}
+            repos={config.repos}
             onReview={startReview}
             onWatch={(id) => moveStage(id, 'watching')}
             onIgnore={(id) => moveStage(id, 'ignored')}
@@ -526,6 +534,7 @@ const App = () => {
             showIgnored={showIgnored}
             onToggleIgnored={() => setShowIgnored((s) => !s)}
             onSetSeen={markSeen}
+            onReorderRepos={reorderRepos}
           />
         )}
         {view === 'board' && (

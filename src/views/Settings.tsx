@@ -438,7 +438,10 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-semibold text-deck-300">Watched repositories</h3>
+        <h3 className="text-sm font-semibold text-deck-300">Watched repositories</h3>
+        <p className="mb-2 text-xs text-deck-500">
+          This order drives the Discovery columns — drag a column title there to reorder.
+        </p>
         <ul className="flex flex-col gap-1">
           {config.repos.map((r) => (
             <li

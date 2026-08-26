@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { PrLink } from '../components/PrLink'
-import { avatarUrl } from '../lib/avatar'
+import { CardFrame } from '../components/CardFrame'
+import { openPrWindow } from '../lib/prwindow'
+import { moveRepoBefore } from '../lib/repoorder'
 import { timeAgo } from '../lib/time'
-import type { ReviewTask } from '../types'
+import type { ReviewTask, WatchedRepo } from '../types'
 
 type Props = {
   tasks: ReviewTask[]
+  repos: WatchedRepo[] // watched repos, in the configured order — drives the column order
   onReview: (id: string) => void
   onWatch: (id: string) => void
   onIgnore: (id: string) => void
@@ -13,9 +15,10 @@ type Props = {
   onToggleIgnored: () => void
   onUnignore: (id: string) => void
   onSetSeen: (id: string, seen: boolean) => void
+  onReorderRepos: (repoNames: string[]) => void
 }
 
-// per-row "⋯" menu: mark seen/unseen + ignore/unignore, the option shown depending on the row's state
+// per-card "⋯" menu: mark seen/unseen + ignore/unignore, the option shown depending on the card's state
 const RowMenu = ({
   task,
   onIgnore,
@@ -33,9 +36,12 @@ const RowMenu = ({
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
         title="More options"
-        className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border border-deck-600 text-deck-300 hover:bg-deck-700"
+        className="flex h-5 cursor-pointer items-center rounded border border-deck-600 px-1.5 text-deck-300 hover:bg-deck-700"
       >
         ⋯
       </button>
@@ -44,13 +50,17 @@ const RowMenu = ({
           <button
             type="button"
             aria-label="Close menu"
-            onClick={() => setOpen(false)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setOpen(false)
+            }}
             className="fixed inset-0 z-30 cursor-default"
           />
           <div className="absolute right-0 top-full z-40 mt-1 flex w-44 flex-col rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl">
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation()
                 onSetSeen(task.id, !task.seen)
                 setOpen(false)
               }}
@@ -61,7 +71,8 @@ const RowMenu = ({
             {task.stage === 'ignored' ? (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   onUnignore(task.id)
                   setOpen(false)
                 }}
@@ -72,7 +83,8 @@ const RowMenu = ({
             ) : (
               <button
                 type="button"
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation()
                   onIgnore(task.id)
                   setOpen(false)
                 }}
@@ -88,8 +100,66 @@ const RowMenu = ({
   )
 }
 
+const DiscoveryCard = ({
+  t,
+  onReview,
+  onWatch,
+  onIgnore,
+  onUnignore,
+  onSetSeen,
+}: {
+  t: ReviewTask
+  onReview: (id: string) => void
+  onWatch: (id: string) => void
+  onIgnore: (id: string) => void
+  onUnignore: (id: string) => void
+  onSetSeen: (id: string, seen: boolean) => void
+}) => (
+  <CardFrame
+    title={t.prTitle}
+    author={t.prAuthor}
+    repo={t.repo}
+    prNumber={t.prNumber}
+    onClick={(e) => {
+      onSetSeen(t.id, true)
+      openPrWindow(t.prUrl, t.repo, t.prNumber, e.metaKey)
+    }}
+    className={`${t.isDraft ? 'card-draft' : ''} ${t.seen ? '' : 'ring-1 ring-grass-500/60'}`}
+  >
+    {!t.seen && <span className="h-2 w-2 rounded-full bg-grass-400" title="New — not seen yet" />}
+    {t.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ draft</span>}
+    {t.reviewRequested && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">review requested</span>}
+    <span className="rounded bg-grass-600/20 px-1 py-0.5 font-medium text-grass-300">{timeAgo(t.prCreatedAt)}</span>
+    <div className="ml-auto flex items-center gap-1">
+      <button
+        type="button"
+        title="Add to board + start /do-review now"
+        onClick={(e) => {
+          e.stopPropagation()
+          onReview(t.id)
+        }}
+        className="h-5 cursor-pointer rounded bg-grass-600 px-1.5 font-medium text-white hover:bg-grass-500"
+      >
+        review
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onWatch(t.id)
+        }}
+        className="h-5 cursor-pointer rounded border border-grass-600 px-1.5 text-grass-300 hover:bg-grass-600/20"
+      >
+        watch
+      </button>
+      <RowMenu task={t} onIgnore={onIgnore} onUnignore={onUnignore} onSetSeen={onSetSeen} />
+    </div>
+  </CardFrame>
+)
+
 export const Discovery = ({
   tasks,
+  repos,
   onReview,
   onWatch,
   onIgnore,
@@ -97,135 +167,188 @@ export const Discovery = ({
   onToggleIgnored,
   onUnignore,
   onSetSeen,
+  onReorderRepos,
 }: Props) => {
+  // the repo whose column is being dragged, and the column its insertion line sits before (null = last)
+  const [dragging, setDragging] = useState<string | null>(null)
+  const [dropBefore, setDropBefore] = useState<string | null | undefined>(undefined)
+
   const discovered = tasks
     .filter((t) => t.stage === 'discovered' && t.prState === 'open')
     .sort(
       (a, b) =>
         Number(b.reviewRequested) - Number(a.reviewRequested) ||
-        Number(a.isDraft) - Number(b.isDraft) || // drafts sink to the bottom of the listing
+        Number(a.isDraft) - Number(b.isDraft) || // drafts sink to the bottom of the column
         (b.prCreatedAt ?? '').localeCompare(a.prCreatedAt ?? ''),
     )
   const ignored = tasks.filter((t) => t.stage === 'ignored' && t.prState === 'open')
 
-  const repos = [...new Set(discovered.map((t) => t.repo))].sort()
+  // configured order first, then any repo with PRs that isn't watched anymore (kept visible, alphabetical)
+  const configured = repos.map((r) => r.repo).filter((r, i, all) => all.indexOf(r) === i)
+  const extra = [...new Set(discovered.map((t) => t.repo))].filter((r) => !configured.includes(r)).sort()
+  // every watched repo gets a column (empty ones show an empty state), so the ordering is always complete
+  const columns = [...configured, ...extra]
+
+  // dropping a column onto itself, or onto the column right after it, wouldn't move anything
+  const isNoMove = (before: string | null) => {
+    if (!dragging) return true
+    const idx = columns.indexOf(dragging)
+    if (before === null) return idx === columns.length - 1
+    const beforeIdx = columns.indexOf(before)
+    return beforeIdx === idx || beforeIdx === idx + 1
+  }
+
+  const drop = (before: string | null) => {
+    if (dragging && !isNoMove(before)) onReorderRepos(moveRepoBefore(columns, dragging, before))
+    setDragging(null)
+    setDropBefore(undefined)
+  }
+
+  const dragOver = (before: string | null) => (e: React.DragEvent) => {
+    if (!dragging) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    setDropBefore((cur) => (cur === before ? cur : before))
+  }
+
+  const DropLine = ({ before }: { before: string | null }) =>
+    dropBefore === before && !isNoMove(before) ? (
+      <div className="w-0.5 shrink-0 self-stretch rounded-full bg-grass-400" />
+    ) : null
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col gap-3">
+      <div className="flex shrink-0 items-center justify-between">
         <h2 className="text-lg font-semibold">
-          New pull requests <span className="text-sm font-normal text-deck-400">({discovered.length})</span>
+          Discovery <span className="text-sm font-normal text-deck-400">({discovered.length})</span>
         </h2>
-        <button
-          type="button"
-          onClick={onToggleIgnored}
-          className="cursor-pointer text-xs text-deck-400 hover:text-deck-200"
-        >
-          {showIgnored ? 'hide ignored' : `show ignored (${ignored.length})`}
-        </button>
+        <div className="flex items-center gap-3">
+          {columns.length > 1 && (
+            <span className="text-xs text-deck-500">drag a column title to reorder your projects</span>
+          )}
+          <button
+            type="button"
+            onClick={onToggleIgnored}
+            className="cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+          >
+            {showIgnored ? 'hide ignored' : `show ignored (${ignored.length})`}
+          </button>
+        </div>
       </div>
 
-      {discovered.length === 0 && (
+      {discovered.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-24 text-center">
           <span className="text-6xl">🎉</span>
           <p className="font-script text-3xl text-grass-300">All caught up!</p>
           <p className="text-sm text-deck-400">No new pull requests waiting for you. Go grab a coffee ☕</p>
         </div>
-      )}
-
-      {repos.map((repo) => (
-        <section key={repo}>
-          <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-deck-200">
-            {repo}
-            <span className="rounded bg-deck-700 px-1.5 py-0.5 text-xs font-normal text-deck-400">
-              {discovered.filter((t) => t.repo === repo).length}
-            </span>
-          </h3>
-          <ul className="flex flex-col gap-2">
-            {discovered
-              .filter((t) => t.repo === repo)
-              .map((t) => (
-                <li
-                  key={t.id}
-                  className={`flex items-center gap-3 rounded-lg border p-3 transition-all duration-150 ${t.isDraft ? 'card-draft' : ''} ${
-                    t.seen ? 'border-deck-700 bg-deck-800/60' : 'border-grass-600/60 bg-grass-600/10'
+      ) : (
+        // biome-ignore lint/a11y/noStaticElementInteractions: drop target for the column dnd
+        <div
+          className="flex min-h-0 flex-1 gap-3 overflow-x-auto p-px"
+          onDragOver={dragOver(null)}
+          onDrop={(e) => {
+            e.preventDefault()
+            drop(null)
+          }}
+        >
+          {columns.map((repo) => {
+            const items = discovered.filter((t) => t.repo === repo)
+            return (
+              // biome-ignore lint/a11y/noStaticElementInteractions: drop target for the column dnd
+              <div
+                key={repo}
+                className="flex min-h-0 gap-3"
+                onDragOver={dragOver(repo)}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  drop(repo)
+                }}
+              >
+                <DropLine before={repo} />
+                <div
+                  className={`flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+                    dragging === repo ? 'bg-grass-600/30 ring-1 ring-grass-500' : 'bg-grass-600/10'
                   }`}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {!t.seen && (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-grass-400" title="New — not seen yet" />
-                      )}
-                      {t.isDraft && (
-                        <span className="shrink-0 rounded-full border border-deck-600 px-2 py-0.5 text-xs text-deck-400">
-                          ✎ draft
-                        </span>
-                      )}
-                      <PrLink
-                        url={t.prUrl}
-                        repo={t.repo}
-                        prNumber={t.prNumber}
-                        onClick={() => onSetSeen(t.id, true)}
-                        className="truncate font-medium"
-                      >
-                        {t.prTitle}
-                      </PrLink>
-                      <span className="shrink-0 text-xs text-deck-500">#{t.prNumber}</span>
-                      {t.reviewRequested && (
-                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-300">
-                          review requested
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2 text-xs text-deck-400">
-                      <img src={avatarUrl(t.prAuthor)} alt={t.prAuthor} className="h-5 w-5 rounded-full" />
-                      <span className="font-medium text-deck-300">{t.prAuthor}</span>
-                      <span className="rounded bg-grass-600/20 px-1.5 py-0.5 font-medium text-grass-300">
-                        opened {timeAgo(t.prCreatedAt)}
-                      </span>
-                      <span className="truncate rounded bg-deck-700 px-1.5 py-0.5 font-mono">{t.branch}</span>
-                    </div>
+                  {/* the header is the drag handle: cards keep their own click/menu affordances */}
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: column drag handle */}
+                  <div
+                    draggable
+                    onDragStart={(e) => {
+                      // WebKit requires setData for the drag to actually start
+                      e.dataTransfer.setData('text/plain', repo)
+                      e.dataTransfer.effectAllowed = 'move'
+                      setDragging(repo)
+                    }}
+                    onDragEnd={() => {
+                      setDragging(null)
+                      setDropBefore(undefined)
+                    }}
+                    title="Drag to reorder projects"
+                    className="mb-1 flex shrink-0 cursor-grab items-center gap-2 px-1 pb-1 text-sm active:cursor-grabbing"
+                  >
+                    {/* GitHub-style repo label: muted owner, bold repo, count in a pill */}
+                    <span className="min-w-0 truncate">
+                      <span className="text-deck-400">{repo.split('/')[0]}/</span>
+                      <span className="font-semibold text-deck-100">{repo.split('/')[1]}</span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-deck-700 px-1.5 py-0.5 text-xs text-deck-300">
+                      {items.length}
+                    </span>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      title="Add to board + start /do-review now"
-                      onClick={() => onReview(t.id)}
-                      className="cursor-pointer rounded-md bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500"
-                    >
-                      Review
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onWatch(t.id)}
-                      className="cursor-pointer rounded-md border border-grass-600 px-3 py-1.5 text-sm text-grass-300 hover:bg-grass-600/20"
-                    >
-                      Watch
-                    </button>
+                  {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
+                      (fractional-width) clip edge — give them 1px of breathing room */}
+                  <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+                    {items.length === 0 ? (
+                      <p className="rounded-lg border border-dashed border-deck-700 p-3 text-center text-xs text-deck-500">
+                        Nothing new
+                      </p>
+                    ) : (
+                      items.map((t) => (
+                        <DiscoveryCard
+                          key={t.id}
+                          t={t}
+                          onReview={onReview}
+                          onWatch={onWatch}
+                          onIgnore={onIgnore}
+                          onUnignore={onUnignore}
+                          onSetSeen={onSetSeen}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+          <DropLine before={null} />
+
+          {showIgnored && ignored.length > 0 && (
+            <div className="flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg bg-deck-800/40 p-2">
+              <h3 className="mb-1 flex shrink-0 items-center gap-2 px-1 pb-1 text-sm font-semibold text-deck-400">
+                Ignored
+                <span className="rounded-full bg-deck-800 px-1.5 py-0.5 text-xs font-normal text-deck-500">
+                  {ignored.length}
+                </span>
+              </h3>
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+                {ignored.map((t) => (
+                  <div
+                    key={t.id}
+                    className="flex items-center gap-2 rounded border border-deck-800 p-2 text-xs text-deck-500"
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      {t.repo.split('/')[1]}#{t.prNumber} — {t.prTitle}
+                    </span>
                     <RowMenu task={t} onIgnore={onIgnore} onUnignore={onUnignore} onSetSeen={onSetSeen} />
                   </div>
-                </li>
-              ))}
-          </ul>
-        </section>
-      ))}
-
-      {showIgnored && ignored.length > 0 && (
-        <div className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-deck-400">Ignored</h3>
-          <ul className="flex flex-col gap-1">
-            {ignored.map((t) => (
-              <li
-                key={t.id}
-                className="flex items-center gap-3 rounded border border-deck-800 p-2 text-sm text-deck-500"
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {t.repo}#{t.prNumber} — {t.prTitle}
-                </span>
-                <RowMenu task={t} onIgnore={onIgnore} onUnignore={onUnignore} onSetSeen={onSetSeen} />
-              </li>
-            ))}
-          </ul>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

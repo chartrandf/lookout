@@ -1,4 +1,4 @@
-import type { DragEvent, ReactNode } from 'react'
+import type { DragEvent, MouseEvent, ReactNode } from 'react'
 import { avatarUrl } from '../lib/avatar'
 
 type Props = {
@@ -7,7 +7,7 @@ type Props = {
   repo: string // owner/repo
   prNumber: number
   className?: string // extra classes layered on the base card style
-  onClick?: () => void
+  onClick?: (e: MouseEvent) => void
   draggable?: boolean
   onDragStart?: (e: DragEvent) => void
   onDragEnd?: () => void
