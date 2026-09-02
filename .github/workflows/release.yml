@@ -47,8 +47,15 @@ jobs:
           releaseBody: |
             Universal macOS build (Apple Silicon + Intel).
 
-            The app is ad-hoc signed but **not notarized**, so macOS blocks the
-            first launch. No Terminal needed:
+            ```
+            brew tap chartrandf/lookout https://github.com/chartrandf/lookout
+            brew trust chartrandf/lookout
+            brew install --cask lookout
+            ```
+
+            Homebrew doesn't quarantine casks, so that install has no Gatekeeper
+            prompt. Installing the `.dmg` by hand does — the app is ad-hoc signed
+            but **not notarized**. No Terminal needed:
 
             1. Open the `.dmg` and drag **Lookout** to Applications.
             2. Double-click it — the launch is blocked.

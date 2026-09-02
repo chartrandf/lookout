@@ -8,8 +8,9 @@ cask "lookout" do
   desc "Desktop overview of your Claude Code review sessions"
   homepage "https://github.com/chartrandf/lookout"
 
-  # The build is ad-hoc signed, not notarized: install with --no-quarantine to skip Gatekeeper's
-  # first-launch block (otherwise: System Settings > Privacy & Security > Open Anyway).
+  # The build is ad-hoc signed, not notarized. Homebrew no longer quarantines cask artifacts, so a
+  # brew install lands without Gatekeeper's first-launch block; a manual .dmg install still needs
+  # System Settings > Privacy & Security > Open Anyway.
   livecheck do
     url :url
     strategy :github_latest
