@@ -6,6 +6,7 @@ type Props = {
   author: string
   repo: string // owner/repo
   prNumber: number
+  wide?: boolean // full-width layout (Discovery focus mode): repo#number sits under the action row
   className?: string // extra classes layered on the base card style
   onClick?: (e: MouseEvent) => void
   draggable?: boolean
@@ -24,6 +25,7 @@ export const CardFrame = ({
   author,
   repo,
   prNumber,
+  wide,
   className,
   onClick,
   draggable,
@@ -44,10 +46,17 @@ export const CardFrame = ({
     <div className="mt-1.5 flex items-center gap-1.5 text-xs text-deck-400">
       <img src={avatarUrl(author)} alt={author} className="h-4 w-4 rounded-full" />
       <span className="truncate font-medium text-deck-300">{author}</span>
-      <span className="ml-auto shrink-0">
-        {repo.split('/')[1]}#{prNumber}
-      </span>
+      {!wide && (
+        <span className="ml-auto shrink-0">
+          {repo.split('/')[1]}#{prNumber}
+        </span>
+      )}
     </div>
     <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">{children}</div>
+    {wide && (
+      <p className="mt-1.5 text-right text-xs text-deck-400">
+        {repo.split('/')[1]}#{prNumber}
+      </p>
+    )}
   </div>
 )
