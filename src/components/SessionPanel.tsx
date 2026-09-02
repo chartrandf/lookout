@@ -7,6 +7,7 @@ import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
 import type { Run, RunLine } from '../lib/runs'
+import { canApproveFrom } from '../lib/stages'
 import { timeAgo } from '../lib/time'
 import type { ActionButton, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
@@ -351,10 +352,11 @@ export const SessionPanel = ({
     setTimeout(() => setCopiedBranch(false), 1500)
   }
 
-  // one-click approval: follow-up all green (nothing pending/partial), or card already in reviewed
+  // one-click approval: once I've had my say (reviewed / follow-up / done), or a follow-up came back
+  // all green (nothing pending/partial) from an earlier stage
   const allGreen = !!task.followupSummary && task.followupSummary.pending === 0 && task.followupSummary.partial === 0
   const alreadyApproved = feed?.some((e) => e.mine && e.text === 'review: approved') ?? true // hidden until feed loads
-  const canApprove = (allGreen || task.stage === 'reviewed') && !alreadyApproved
+  const canApprove = (allGreen || canApproveFrom(task.stage)) && !alreadyApproved
 
   const approve = async () => {
     setApproving(true)

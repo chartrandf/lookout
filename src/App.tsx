@@ -38,6 +38,7 @@ import { setOverride, setPrOrders } from './lib/proverrides'
 import { sortReposByNames } from './lib/repoorder'
 import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
+import { advanceStage } from './lib/stages'
 import { syncAll, syncTaskAlerts } from './lib/sync'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
 import type {
@@ -279,7 +280,12 @@ const App = () => {
         const summary = parseFollowupSummary(result)
         if (summary) await setFollowupSummary(taskId, summary)
         await linkReviewReport(taskId)
-        if (button?.advanceTo) await setStage(taskId, button.advanceTo)
+        // forward-only: a re-review on a follow-up card leaves it in Follow-up
+        if (button?.advanceTo) {
+          const cur = (await allTasks()).find((x) => x.id === taskId)?.stage
+          const next = cur ? advanceStage(cur, button.advanceTo) : button.advanceTo
+          if (next !== cur) await setStage(taskId, next)
+        }
         await refreshTaskAlerts(taskId)
         await reload()
       },
@@ -299,9 +305,10 @@ const App = () => {
     const t = tasks.find((x) => x.id === id)
     const button = config.reviewButtons[0]
     if (!t || !button) return
-    await setStage(t.id, 'reviewing')
+    const stage = advanceStage(t.stage, 'reviewing')
+    if (stage !== t.stage) await setStage(t.id, stage)
     await reload()
-    await runButton({ ...t, stage: 'reviewing' }, 'review', button)
+    await runButton({ ...t, stage }, 'review', button)
   }
 
   // adapt a MyPr into the ReviewTask shape SessionPanel consumes (my PRs aren't in the tasks DB)
