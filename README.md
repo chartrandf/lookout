@@ -16,12 +16,13 @@ This repo doubles as its own Homebrew tap:
 
 ```bash
 brew tap chartrandf/lookout https://github.com/chartrandf/lookout
+brew trust chartrandf/lookout            # Homebrew 6+ gates third-party taps
 brew install --cask --no-quarantine lookout
 ```
 
 `--no-quarantine` is what skips the first-launch block — the flag has to come from you, a cask can't
 ask for it. `brew upgrade --cask lookout` picks up later releases (the cask is bumped by the release
-workflow).
+workflow), and `brew uninstall --cask --zap lookout` removes the app plus its stored data.
 
 ### Manual
 
