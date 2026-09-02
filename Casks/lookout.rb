@@ -8,9 +8,6 @@ cask "lookout" do
   desc "Desktop overview of your Claude Code review sessions"
   homepage "https://github.com/chartrandf/lookout"
 
-  # The build is ad-hoc signed, not notarized. Homebrew no longer quarantines cask artifacts, so a
-  # brew install lands without Gatekeeper's first-launch block; a manual .dmg install still needs
-  # System Settings > Privacy & Security > Open Anyway.
   livecheck do
     url :url
     strategy :github_latest
@@ -19,6 +16,15 @@ cask "lookout" do
   depends_on macos: :catalina
 
   app "Lookout.app"
+
+  # The build is ad-hoc signed but not notarized, and the downloaded DMG arrives quarantined (the
+  # flag propagates to everything copied out of the mounted image), so Gatekeeper would block the
+  # first launch. Clear it here — a third-party tap has to be `brew trust`ed to run this, which is
+  # the consent that makes it acceptable.
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Lookout.app"]
+  end
 
   zap trash: [
     "~/Library/Application Support/com.francischartrand.lookout",

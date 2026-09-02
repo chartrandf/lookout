@@ -49,7 +49,7 @@ jobs:
 
             ```
             brew tap chartrandf/lookout https://github.com/chartrandf/lookout
-            brew trust chartrandf/lookout
+            brew trust --cask chartrandf/lookout/lookout
             brew install --cask lookout
             ```
 

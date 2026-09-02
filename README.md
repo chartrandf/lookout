@@ -16,17 +16,21 @@ This repo doubles as its own Homebrew tap:
 
 ```bash
 brew tap chartrandf/lookout https://github.com/chartrandf/lookout
-brew trust chartrandf/lookout            # Homebrew 6+ gates third-party taps
-brew install --cask lookout              # add --force to replace a hand-installed copy
+brew trust --cask chartrandf/lookout/lookout   # Homebrew 6+ gates third-party casks
+brew install --cask lookout                    # --force to replace a hand-installed copy
 ```
 
-No Gatekeeper prompt, and no flag needed for it: since [July 2026][brew-quarantine] Homebrew no
-longer stamps `com.apple.quarantine` on cask artifacts (that's also why `--no-quarantine` is gone —
-it errors on Homebrew 6+).
+No Gatekeeper prompt: the cask's `postflight` clears `com.apple.quarantine` from the installed app.
+The flag rides along on the downloaded `.dmg` and propagates to everything copied out of it, so
+without that step the first launch is blocked. Trusting the cask is what authorises it to run —
+`brew trust` exists for exactly this, so read the cask before trusting it (it's 30 lines).
 
 `brew update && brew upgrade --cask lookout` picks up later releases (the cask is bumped by the
 release workflow — `brew update` is what pulls it), and `brew uninstall --cask --zap lookout`
 removes the app plus its stored data.
+
+`--no-quarantine` no longer exists: Homebrew [dropped its quarantine machinery][brew-quarantine] in
+July 2026, which is why the cask has to do it.
 
 [brew-quarantine]: https://github.com/Homebrew/brew/commit/594fcc12ce
 
