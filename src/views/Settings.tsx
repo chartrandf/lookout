@@ -22,7 +22,40 @@ type Props = {
   onSave: (repos: WatchedRepo[]) => void
   onSaveReviewButtons: (buttons: ActionButton[]) => void
   onSavePrButtons: (buttons: ActionButton[]) => void
+  onSaveAnimations: (on: boolean) => void
 }
+
+// one settings row: label, hint, and the pill switch on the right
+const ToggleRow = ({
+  label,
+  hint,
+  on,
+  onToggle,
+}: {
+  label: string
+  hint: string
+  on: boolean
+  onToggle: () => void
+}) => (
+  <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
+    <div>
+      <p className="text-sm font-medium text-deck-200">{label}</p>
+      <p className="text-xs text-deck-500">{hint}</p>
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onToggle}
+      className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${on ? 'bg-grass-500' : 'bg-deck-600'}`}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${on ? 'translate-x-5' : ''}`}
+      />
+    </button>
+  </div>
+)
 
 const STAGE_OPTIONS: Stage[] = [
   'discovered',
@@ -324,7 +357,7 @@ const ActionsPreview = ({
   </div>
 )
 
-export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons }: Props) => {
+export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrButtons, onSaveAnimations }: Props) => {
   const [path, setPath] = useState('')
   const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
   const [reviewBtns, setReviewBtns] = useState<ActionButton[]>(config.reviewButtons)
@@ -505,23 +538,19 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
         onEdit={() => setEditing('pr')}
       />
 
-      <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">
-        <div>
-          <p className="text-sm font-medium text-deck-200">Launch at login</p>
-          <p className="text-xs text-deck-500">Start Lookout automatically when you log in.</p>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={autostart}
-          onClick={toggleAutostart}
-          className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${autostart ? 'bg-grass-500' : 'bg-deck-600'}`}
-        >
-          <span
-            className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${autostart ? 'translate-x-5' : ''}`}
-          />
-        </button>
-      </div>
+      <ToggleRow
+        label="Launch at login"
+        hint="Start Lookout automatically when you log in."
+        on={autostart}
+        onToggle={toggleAutostart}
+      />
+
+      <ToggleRow
+        label="Animations"
+        hint="Motion effects: the wordmark sheen and card glow while a claude run is live."
+        on={config.animations}
+        onToggle={() => onSaveAnimations(!config.animations)}
+      />
 
       {import.meta.env.DEV && (
         <div className="flex items-center justify-between rounded-lg border border-deck-700 p-3">

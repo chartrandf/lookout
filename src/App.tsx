@@ -8,6 +8,7 @@ import {
   DEFAULT_PR_BUTTONS,
   DEFAULT_REVIEW_BUTTONS,
   getConfig,
+  setAnimations,
   setPrButtons,
   setRepos,
   setReviewButtons,
@@ -85,6 +86,7 @@ const App = () => {
     repos: [],
     reviewButtons: DEFAULT_REVIEW_BUTTONS,
     prButtons: DEFAULT_PR_BUTTONS,
+    animations: true,
   })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])
@@ -457,16 +459,29 @@ const App = () => {
     )
   }
 
+  // any live claude run makes the wordmark shimmer (Settings > Animations turns the motion off)
+  const anyRunning = runs.some((r) => r.status === 'running')
+
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100">
+    <div
+      className={`flex h-screen flex-col overflow-hidden bg-deck-900 text-deck-100 ${config.animations ? '' : 'no-anim'}`}
+    >
       {/* doubles as the window titlebar (overlay style): drag region + left inset for traffic lights;
           h matches the 46px the traffic_light y=25.5 is tuned for */}
       <header
         data-tauri-drag-region
         className="flex h-[46px] shrink-0 items-center gap-2 border-b border-deck-800 bg-deck-900 pl-[101px] pr-4"
       >
-        <h1 data-tauri-drag-region className="font-script mr-3 text-xl text-white">
-          Lookout
+        {/* the wordmark doubles as a home button: back to the first tab */}
+        <h1 data-tauri-drag-region className="mr-3">
+          <button
+            type="button"
+            onClick={() => switchView(TAB_ORDER[0].view)}
+            title={anyRunning ? 'A claude run is live' : `Back to ${TAB_ORDER[0].label}`}
+            className={`font-script cursor-default select-none text-xl text-white transition-transform duration-200 hover:-rotate-2 hover:scale-105 ${anyRunning ? 'wordmark-running' : ''}`}
+          >
+            Lookout
+          </button>
         </h1>
         {TAB_ORDER.filter((t) => t.view !== 'settings').map((t) => tab(t, TAB_ORDER.indexOf(t)))}
         {/* drag region only fires on the element itself, so the wrapper needs it too:
@@ -582,6 +597,10 @@ const App = () => {
             }}
             onSavePrButtons={async (buttons) => {
               await setPrButtons(buttons)
+              setConfig(await getConfig())
+            }}
+            onSaveAnimations={async (on) => {
+              await setAnimations(on)
               setConfig(await getConfig())
             }}
           />

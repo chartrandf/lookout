@@ -120,4 +120,5 @@ export type Config = {
   repos: WatchedRepo[]
   reviewButtons: ActionButton[]
   prButtons: ActionButton[]
+  animations: boolean // motion effects (running glow/sheen); colors stay either way
 }

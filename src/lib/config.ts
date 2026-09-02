@@ -42,7 +42,13 @@ export const getConfig = async (): Promise<Config> => {
     repos: (await s.get<WatchedRepo[]>('repos')) ?? [],
     reviewButtons: (await s.get<ActionButton[]>('reviewButtons')) ?? DEFAULT_REVIEW_BUTTONS,
     prButtons: (await s.get<ActionButton[]>('prButtons')) ?? DEFAULT_PR_BUTTONS,
+    animations: (await s.get<boolean>('animations')) ?? true,
   }
+}
+
+export const setAnimations = async (animations: boolean) => {
+  const s = await getStore()
+  await s.set('animations', animations)
 }
 
 export const setReviewButtons = async (buttons: ActionButton[]) => {

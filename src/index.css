@@ -187,3 +187,35 @@
   /* biome-ignore lint/complexity/noImportantStyles: must beat tailwind utilities on the element */
   background-color: rgb(78 207 135 / 0.08) !important;
 }
+
+/* a claude run is live somewhere: a soft amber sheen sweeps across the wordmark. The text keeps its
+   white ink — the gradient only lightens/warms the stops it passes over, so it reads as a shimmer
+   rather than a color change */
+@keyframes wordmark-sheen {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+.wordmark-running {
+  background: linear-gradient(100deg, #fff 42%, rgb(251 191 36 / 0.85) 50%, #fff 58%);
+  background-size: 250% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: wordmark-sheen 1.4s linear infinite;
+}
+
+/* Settings > Animations off: keep every state color, drop the motion */
+.no-anim .wordmark-running,
+.no-anim .card-running,
+.no-anim .animate-pulse {
+  animation: none;
+}
+/* motion off: the wordmark just sits amber while a run is live */
+.no-anim .wordmark-running {
+  background: none;
+  -webkit-text-fill-color: rgb(251 191 36 / 0.9);
+}
