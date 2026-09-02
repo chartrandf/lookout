@@ -65,3 +65,27 @@ jobs:
           app=src-tauri/target/universal-apple-darwin/release/bundle/macos/Lookout.app
           codesign -dv --verbose=2 "$app"
           codesign --verify --deep --strict --verbose=2 "$app"
+
+      # This repo doubles as the Homebrew tap: point the cask at the release we just cut. The sha256
+      # is only knowable now, so it lands on main right after the build (the version came from
+      # `pnpm version`, so usually only the hash actually changes).
+      - name: update the Homebrew cask
+        run: |
+          version="${TAG#v}"
+          dmg=$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)
+          sha=$(shasum -a 256 "$dmg" | awk '{print $1}')
+          echo "$dmg -> $sha"
+          git fetch --depth 1 origin main
+          git checkout -B main FETCH_HEAD
+          sed -i '' -E "s/^  version \".*\"$/  version \"${version}\"/" Casks/lookout.rb
+          sed -i '' -E "s/^  sha256 \".*\"$/  sha256 \"${sha}\"/" Casks/lookout.rb
+          if git diff --quiet Casks/lookout.rb; then
+            echo "cask already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "chore(cask): lookout ${version}" Casks/lookout.rb
+          git push origin main
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}

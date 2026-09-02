@@ -14,3 +14,5 @@ const sync = (file, pattern) => {
 sync('src-tauri/tauri.conf.json', /("version":\s*")[^"]+(")/)
 sync('src-tauri/Cargo.toml', /^(version = ")[^"]+(")/m)
 sync('src-tauri/Cargo.lock', /(name = "lookout"\nversion = ")[^"]+(")/)
+// the cask's sha256 can only be known once the release DMG exists — CI fills that in
+sync('Casks/lookout.rb', /^(  version ")[^"]+(")/m)

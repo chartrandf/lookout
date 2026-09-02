@@ -10,6 +10,21 @@ Tauri v2 + React + TypeScript + Tailwind. No server — the app polls `gh`, scan
 
 ## Install
 
+### Homebrew (no Gatekeeper prompt)
+
+This repo doubles as its own Homebrew tap:
+
+```bash
+brew tap chartrandf/lookout https://github.com/chartrandf/lookout
+brew install --cask --no-quarantine lookout
+```
+
+`--no-quarantine` is what skips the first-launch block — the flag has to come from you, a cask can't
+ask for it. `brew upgrade --cask lookout` picks up later releases (the cask is bumped by the release
+workflow).
+
+### Manual
+
 Grab the latest `.dmg` from [Releases](https://github.com/chartrandf/lookout/releases) (universal — Apple Silicon + Intel) and drag **Lookout** to Applications.
 
 The bundle is ad-hoc signed (`signingIdentity: "-"`, so its signature verifies with
