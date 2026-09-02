@@ -12,13 +12,21 @@ Tauri v2 + React + TypeScript + Tailwind. No server — the app polls `gh`, scan
 
 Grab the latest `.dmg` from [Releases](https://github.com/chartrandf/lookout/releases) (universal — Apple Silicon + Intel) and drag **Lookout** to Applications.
 
-The app is unsigned, so macOS quarantines it. Clear the flag once:
+The bundle is ad-hoc signed (`signingIdentity: "-"`, so its signature verifies with
+`codesign --verify --deep --strict`) but it carries no Developer ID and isn't notarized, so
+Gatekeeper still rejects it (`spctl -a` → rejected). Nothing to do in Terminal:
+
+1. Double-click **Lookout** — the launch is blocked.
+2. **System Settings → Privacy & Security → Open Anyway**.
+
+That's a one-time click. (Right-click → Open no longer bypasses Gatekeeper on macOS 15+.) If you'd
+rather clear the quarantine flag yourself:
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Lookout.app
 ```
 
-Right-click → Open no longer bypasses this on macOS 15+. The GUI alternative is **System Settings → Privacy & Security → Open Anyway**, after a blocked launch.
+A signature alone can't remove that prompt — only a paid Apple Developer ID plus notarization can.
 
 ## Dev
 
