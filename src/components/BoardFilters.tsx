@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BoardFilter } from '../lib/filters'
+import { type BoardFilter, type RepoOption, repoTitle } from '../lib/filters'
 
 const CI_OPTIONS = [
   { value: 'pass', label: '✓ pass' },
@@ -8,9 +8,11 @@ const CI_OPTIONS = [
   { value: 'none', label: 'none' },
 ]
 
+type Option = { value: string; label: string; title?: string; count?: number }
+
 type MultiSelectProps = {
   label: string
-  options: { value: string; label: string }[]
+  options: Option[]
   selected: string[]
   onChange: (v: string[]) => void
 }
@@ -50,6 +52,7 @@ const MultiSelect = ({ label, options, selected, onChange }: MultiSelectProps) =
             <button
               key={o.value}
               type="button"
+              title={o.title}
               onClick={() => toggle(o.value)}
               className="flex cursor-pointer items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-xs text-deck-200 hover:bg-deck-700"
             >
@@ -61,6 +64,7 @@ const MultiSelect = ({ label, options, selected, onChange }: MultiSelectProps) =
                 {selected.includes(o.value) && '✓'}
               </span>
               {o.label}
+              {o.count !== undefined && <span className="ml-auto pl-2 text-deck-500">({o.count})</span>}
             </button>
           ))}
           {on && (
@@ -79,22 +83,33 @@ const MultiSelect = ({ label, options, selected, onChange }: MultiSelectProps) =
 }
 
 // Project (repo) + CI-state filters, shared by the Reviews and Pull Requests boards.
+// `authors` is optional: only the Reviews board has PRs from more than one author.
 export const BoardFilters = ({
   repos,
+  authors,
   filter,
   onChange,
 }: {
-  repos: string[]
+  repos: RepoOption[]
+  authors?: string[]
   filter: BoardFilter
   onChange: (f: BoardFilter) => void
 }) => (
   <div className="flex items-center gap-2">
     <MultiSelect
       label="Projects"
-      options={repos.map((r) => ({ value: r, label: r }))}
+      options={repos.map((r) => ({ value: r.repo, label: repoTitle(r.repo), title: r.repo, count: r.count }))}
       selected={filter.repos}
       onChange={(repos) => onChange({ ...filter, repos })}
     />
+    {authors && (
+      <MultiSelect
+        label="Author"
+        options={authors.map((a) => ({ value: a, label: a }))}
+        selected={filter.authors}
+        onChange={(authors) => onChange({ ...filter, authors })}
+      />
+    )}
     <MultiSelect label="CI" options={CI_OPTIONS} selected={filter.ci} onChange={(ci) => onChange({ ...filter, ci })} />
   </div>
 )

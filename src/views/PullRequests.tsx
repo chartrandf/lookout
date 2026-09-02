@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
-import { type BoardFilter, emptyFilter, matchesFilter } from '../lib/filters'
+import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
 import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 type Props = {
@@ -119,7 +119,7 @@ export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onReorde
   const [dropTarget, setDropTarget] = useState<PrColumn | null>(null)
   // insertion indicator: line above card `before`, or at the column end when before is null
   const [dropLine, setDropLine] = useState<{ col: PrColumn; before: string | null } | null>(null)
-  const repoOptions = [...new Set(prs.map((p) => p.repo))].sort()
+  const repoOptions = openRepoOptions(prs.map((p) => ({ repo: p.repo, open: p.state === 'open' })))
   const byColumn = (c: PrColumn) =>
     prs
       .filter((p) => p.column === c && matchesFilter(filter, p.repo, p.ciState))

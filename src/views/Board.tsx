@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
-import { type BoardFilter, emptyFilter, matchesFilter } from '../lib/filters'
+import { type BoardFilter, emptyFilter, matchesFilter, openAuthorOptions, openRepoOptions } from '../lib/filters'
 import type { Run } from '../lib/runs'
 import type { ReviewTask, Stage } from '../types'
 
@@ -113,10 +113,12 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   const active = tasks.filter(
     (t) => !(t.stage === 'done' && t.doneAt && now - new Date(t.doneAt).getTime() > DONE_TTL_MS),
   )
-  const repoOptions = [...new Set(active.map((t) => t.repo))].sort()
+  const openRows = active.map((t) => ({ repo: t.repo, author: t.prAuthor, open: t.prState === 'open' }))
+  const repoOptions = openRepoOptions(openRows)
+  const authorOptions = openAuthorOptions(openRows)
   // snoozed cards stay hidden until new activity; Done column always shows
   const visible = active.filter(
-    (t) => (showSnoozed || !t.snoozed || t.stage === 'done') && matchesFilter(filter, t.repo, t.ciState),
+    (t) => (showSnoozed || !t.snoozed || t.stage === 'done') && matchesFilter(filter, t.repo, t.ciState, t.prAuthor),
   )
   const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
@@ -152,7 +154,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-center gap-2">
-        <BoardFilters repos={repoOptions} filter={filter} onChange={setFilter} />
+        <BoardFilters repos={repoOptions} authors={authorOptions} filter={filter} onChange={setFilter} />
         {snoozedCount > 0 && (
           <button
             type="button"
