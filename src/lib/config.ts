@@ -10,7 +10,7 @@ export const DEFAULT_REVIEW_BUTTONS: ActionButton[] = [
     icon: 'play',
     prompt: '/review <pr_id>',
     conditions: [],
-    advanceTo: 'reviewed',
+    advanceTo: 'reviewing', // a finished session is "Needs Review" — Reviewed means sent on GitHub
   },
   {
     id: 'do-followup',

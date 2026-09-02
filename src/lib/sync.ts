@@ -1,5 +1,5 @@
 import type { Alert, ReviewTask } from '../types'
-import { type AlertScope, TASK_ALERT_KINDS, taskAlerts } from './alerts'
+import { type AlertScope, myLastWordAt, TASK_ALERT_KINDS, taskAlerts } from './alerts'
 import { getConfig, setGithubName, setGithubUser } from './config'
 import {
   allTasks,
@@ -15,6 +15,7 @@ import {
 import { fetchLogin, fetchName, fetchPrExchange, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
+import { approvedByMe, deriveStage } from './reviewstage'
 import { scanRepoSessions } from './sessions'
 
 // Stages whose PRs we actively watch for new comments / CI
@@ -38,8 +39,6 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
   await pruneRepos(config.repos.map((r) => r.repo))
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
-  // artifacts first seen this pass: only these advance a stage (a manually demoted card stays put)
-  const fresh = new Map<string, { session: boolean; report: boolean }>()
   const openIds = new Set<string>()
   const polledRepos = new Set<string>()
   for (const { repo, path } of config.repos) {
@@ -81,17 +80,11 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const reviewFiles =
         reviewsByBranch.get(pr.headRefName) ?? reviewsByBranch.get(pr.headRefName.replace(/\//g, '-')) ?? []
       if (sessionIds.length || reviewFiles.length) await setLinks(id, sessionIds, reviewFiles)
-      const prev = known.get(id)
-      fresh.set(id, {
-        session: sessionIds.some((s) => !prev?.sessionIds.includes(s)),
-        report: reviewFiles.some((f) => !prev?.reviewFiles.includes(f)),
-      })
 
-      // already reviewed or commented on GitHub -> skip Discovery, board it in the right column
-      const myReview = pr.latestReviews.find((r) => r.author.login === me)
-      const engaged = myReview || commentedByMe.has(pr.number)
-      if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered')
-        await setStage(id, myReview?.state === 'CHANGES_REQUESTED' ? 'followup' : 'reviewed')
+      // already reviewed or commented on GitHub -> skip Discovery, board it as Reviewed (the poll
+      // below refines that: an approval of mine lands it in Done)
+      const engaged = pr.latestReviews.some((r) => r.author.login === me) || commentedByMe.has(pr.number)
+      if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered') await setStage(id, 'reviewed')
     }
   }
 
@@ -110,14 +103,10 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         continue
       }
     }
-    if (t.stage === 'done') continue
-    // auto-advance triaged tasks when NEW review artifacts appear (forward-only; respects manual demotion)
-    const active = t.stage === 'watching' || t.stage === 'inbox' || t.stage === 'reviewing'
-    if (active && fresh.get(t.id)?.report) await setStage(t.id, 'reviewed')
-    else if ((t.stage === 'watching' || t.stage === 'inbox') && fresh.get(t.id)?.session)
-      await setStage(t.id, 'reviewing')
+    if (t.stage === 'done') continue // Done is terminal: an approval, a merge, or a manual park
 
-    // watch boarded PRs: refresh the activity/CI badges and re-derive this PR's alerts
+    // watch boarded PRs: refresh the activity/CI badges, re-derive the column from the PR's facts,
+    // and re-derive this PR's alerts
     if (ACTIVE_STAGES.has(t.stage) && polledRepos.has(t.repo) && openIds.has(t.id)) {
       try {
         const x = await fetchPrExchange(t.repo, t.prNumber, me)
@@ -125,7 +114,15 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         const isNew = !baseline && x.count > (t.activityCount ?? 0)
         await setActivity(t.id, x.count, x.ciState, isNew)
         if (x.ciState === 'fail' && t.snoozed) await setSnoozed(t.id, false) // a red build wakes a hidden card
-        derived.push(...taskAlerts(t, x, me))
+        const stage = deriveStage(t.stage, {
+          hasSession: t.sessionIds.length > 0 || t.reviewFiles.length > 0,
+          spoke: myLastWordAt(x, me) !== '',
+          approvedByMe: approvedByMe(x.reviews, me),
+          followupRan: t.followupSummary !== null,
+          merged: false, // a merge is reconciled above, off the PR's own state
+        })
+        if (stage !== t.stage) await setStage(t.id, stage)
+        derived.push(...taskAlerts({ ...t, stage }, x, me)) // alerts read the column we just derived
       } catch (e) {
         console.error(`activity poll failed for ${t.id}:`, e)
       }

@@ -14,15 +14,17 @@ type Props = {
   onReorder: (t: ReviewTask, stage: Stage, orderedIds: string[]) => void
 }
 
-const COLUMNS: { stage: Stage[]; title: string }[] = [
-  { stage: ['watching'], title: 'Watching' },
-  // assigned to me, no comment sent yet (claude may be reviewing)
-  { stage: ['inbox', 'reviewing'], title: 'Needs Review' },
-  // review sent: ball is in the author's camp
-  { stage: ['reviewed'], title: 'Reviewed' },
-  // waiting on my re-review / approval
-  { stage: ['followup'], title: 'Follow-up' },
-  { stage: ['done'], title: 'Done' },
+// hint doubles as the column's tooltip: what a card in it actually means
+const COLUMNS: { stage: Stage[]; title: string; hint: string }[] = [
+  { stage: ['watching'], title: 'Watching', hint: 'On the board, nothing done yet.' },
+  {
+    stage: ['inbox', 'reviewing'],
+    title: 'Needs Review',
+    hint: 'A review session ran, but nothing was sent to the PR yet.',
+  },
+  { stage: ['reviewed'], title: 'Reviewed', hint: 'I sent at least one comment on the PR.' },
+  { stage: ['followup'], title: 'Follow-up', hint: 'A follow-up run happened.' },
+  { stage: ['done'], title: 'Done', hint: 'I approved the PR, or it merged.' },
 ]
 
 const DONE_TTL_MS = 24 * 60 * 60 * 1000
@@ -212,7 +214,10 @@ export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorde
                     : 'bg-grass-600/10'
               }`}
             >
-              <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+              <h3
+                title={col.hint}
+                className="shrink-0 cursor-help px-1 text-xs font-semibold uppercase tracking-wide text-deck-300"
+              >
                 {col.title} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
               {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
