@@ -77,13 +77,6 @@ const parseFollowupSummary = (text: string) => {
   return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
 }
 
-// a PR carries "new events" once something happened to it (a review, CI, or it left Waiting), but never
-// once it's Done — merged PRs need no action. The signature changes whenever that state moves, so a click
-// that records it clears "new" until the next change.
-const pullHasEvent = (p: MyPr) =>
-  p.column !== 'done' && (p.column !== 'waiting' || p.humanReview !== null || p.botReview !== null)
-const pullSig = (p: MyPr) => `${p.column}|${p.humanReview}|${p.botReview}|${p.ciState}`
-
 const App = () => {
   const [view, setView] = useState<View>('board')
   const [config, setConfig] = useState<Config>({
@@ -101,8 +94,6 @@ const App = () => {
   const [showIgnored, setShowIgnored] = useState(false)
   const [panelTaskId, setPanelTaskId] = useState<string | null>(null)
   const [alerts, setAlerts] = useState<Alert[]>([])
-  // acknowledged PR state signatures (id -> sig); a card is "new" until its current sig is recorded by a click
-  const [seenPullSig, setSeenPullSig] = useState<Record<string, string>>({})
 
   const runs = useSyncExternalStore(subscribeRuns, getRuns)
   // last successful sync per data source, to throttle the on-tab-change partial syncs
@@ -416,8 +407,6 @@ const App = () => {
   const panelTask = panelReviewTask ?? (panelPr ? myPrToTask(panelPr) : null)
 
   const discoveredCount = tasks.filter((t) => t.stage === 'discovered' && t.prState === 'open' && !t.seen).length
-  // board badge = sessions done and waiting on my feedback (not in-progress runs)
-  const awaitingCount = runs.filter((r) => r.status === 'awaiting-input').length
   const attentionCount =
     discoveredCount +
     runs.filter((r) => r.status === 'awaiting-input').length +
@@ -427,12 +416,21 @@ const App = () => {
     setTrayCount(attentionCount)
   }, [attentionCount])
 
+  // The notification center is the single source of truth for "needs my attention": a card glows and a
+  // tab is badged exactly while it has an unread alert, so the bell, the tabs and the boards never disagree.
+  const alertedIds = new Set(alerts.filter((a) => !a.read).map((a) => a.taskId))
   const badges: Partial<Record<View, number>> = {
-    board: awaitingCount,
+    board: tasks.filter((t) => alertedIds.has(t.id)).length,
+    pulls: myPrs.filter((p) => alertedIds.has(p.id)).length,
   }
-  // PR cards with new events (not yet clicked); tab shows a small dot while any remain
-  const newPullIds = new Set(myPrs.filter((p) => pullHasEvent(p) && seenPullSig[p.id] !== pullSig(p)).map((p) => p.id))
-  const pullsDot = newPullIds.size > 0
+
+  // clicking a card is reading its notifications
+  const markCardRead = async (id: string) => {
+    const keys = alerts.filter((a) => a.taskId === id && !a.read).map((a) => a.key)
+    if (!keys.length) return
+    for (const k of keys) await markAlertRead(k)
+    await reloadAlerts()
+  }
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
@@ -444,15 +442,9 @@ const App = () => {
         className={`group cursor-pointer rounded-md px-3 py-1.5 text-sm ${view === v ? 'bg-deck-700 text-white' : 'text-deck-400 hover:text-deck-200'}`}
       >
         {label}
-        {v === 'pulls' ? (
-          pullsDot ? (
-            <span
-              className="ml-1.5 inline-block h-2 w-2 rounded-full bg-amber-500 align-middle"
-              title="New in-review pull requests"
-            />
-          ) : null
-        ) : badge ? (
+        {badge ? (
           <span
+            title="Unread notifications on this board"
             className={`ml-1.5 rounded-full px-1.5 text-xs ${v === 'discovery' ? 'bg-deck-700 text-deck-300' : 'bg-amber-500 text-black'}`}
           >
             {badge}
@@ -531,10 +523,11 @@ const App = () => {
           <PullRequests
             prs={myPrs}
             me={config.githubUser}
-            newIds={newPullIds}
-            onOpen={(pr) => {
+            runs={runs}
+            alertedIds={alertedIds}
+            onOpen={async (pr) => {
               setPanelTaskId(pr.id)
-              setSeenPullSig((prev) => ({ ...prev, [pr.id]: pullSig(pr) })) // clicking clears this card's "new"
+              await markCardRead(pr.id)
             }}
             onHandleReview={onHandleReview}
             onReorder={reorderMyPr}
@@ -558,6 +551,7 @@ const App = () => {
           <Board
             tasks={tasks}
             runs={runs}
+            alertedIds={alertedIds}
             onReorder={async (t, stage, orderedIds) => {
               if (t.stage !== stage) await setStage(t.id, stage)
               await setOrders(orderedIds)
@@ -565,6 +559,7 @@ const App = () => {
             }}
             onOpenSession={async (t) => {
               setPanelTaskId(t.id)
+              await markCardRead(t.id)
               if (t.hasNewActivity) {
                 await clearNewActivity(t.id) // clicking a card clears its "new" (same as the 💬 new button)
                 await reload()

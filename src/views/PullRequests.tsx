@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
 import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
+import type { Run } from '../lib/runs'
 import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 type Props = {
   prs: MyPr[]
   me: string
-  newIds: Set<string> // PR ids with new events (show a "new" tag until clicked)
+  runs: Run[]
+  alertedIds: Set<string> // PRs with an unread notification (same set the bell shows)
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
@@ -51,7 +53,8 @@ const CiTag = ({ ci }: { ci: CiState }) => {
 const PrCard = ({
   pr,
   me,
-  isNew,
+  run,
+  alerted,
   onOpen,
   onHandleReview,
   onDragStart,
@@ -59,7 +62,8 @@ const PrCard = ({
 }: {
   pr: MyPr
   me: string
-  isNew: boolean
+  run: Run | undefined
+  alerted: boolean
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onDragStart: () => void
@@ -79,14 +83,19 @@ const PrCard = ({
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    className={`${pr.isDraft ? 'card-draft' : ''} ${isNew ? 'card-awaiting' : ''}`}
+    className={`${pr.isDraft ? 'card-draft' : ''} ${
+      run?.status === 'running' ? 'card-running' : alerted ? 'card-awaiting' : ''
+    }`}
   >
     {pr.column === 'done' ? (
       // Done = merged: the review/CI detail no longer matters, just show the outcome
       <span className="rounded bg-purple-500/20 px-1 py-0.5 text-purple-300">merged</span>
     ) : (
       <>
-        {isNew && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
+        {run?.status === 'running' && (
+          <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
+        )}
+        {alerted && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
         {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ draft</span>}
         <ReviewTag flavor={pr.humanReview} />
         <ReviewTag flavor={pr.botReview} bot />
@@ -112,7 +121,7 @@ const PrCard = ({
 // default (unranked) position: manual drag order first, then non-drafts, drafts at the bottom
 const orderKey = (p: MyPr) => p.sortOrder ?? (p.isDraft ? 2e9 : 1e9)
 
-export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onReorder }: Props) => {
+export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview, onReorder }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragging, setDragging] = useState<MyPr | null>(null)
@@ -120,6 +129,7 @@ export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onReorde
   // insertion indicator: line above card `before`, or at the column end when before is null
   const [dropLine, setDropLine] = useState<{ col: PrColumn; before: string | null } | null>(null)
   const repoOptions = openRepoOptions(prs.map((p) => ({ repo: p.repo, open: p.state === 'open' })))
+  const runByPr = new Map(runs.map((r) => [r.taskId, r]))
   const byColumn = (c: PrColumn) =>
     prs
       .filter((p) => p.column === c && matchesFilter(filter, p.repo, p.ciState))
@@ -239,7 +249,8 @@ export const PullRequests = ({ prs, me, newIds, onOpen, onHandleReview, onReorde
                     <PrCard
                       pr={pr}
                       me={me}
-                      isNew={newIds.has(pr.id)}
+                      run={runByPr.get(pr.id)}
+                      alerted={alertedIds.has(pr.id)}
                       onOpen={onOpen}
                       onHandleReview={onHandleReview}
                       onDragStart={() => setDragging(pr)}

@@ -8,6 +8,7 @@ import type { ReviewTask, Stage } from '../types'
 type Props = {
   tasks: ReviewTask[]
   runs: Run[]
+  alertedIds: Set<string> // cards with an unread notification (same set the bell shows)
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
   onReorder: (t: ReviewTask, stage: Stage, orderedIds: string[]) => void
@@ -29,13 +30,14 @@ const DONE_TTL_MS = 24 * 60 * 60 * 1000
 type CardProps = {
   t: ReviewTask
   run: Run | undefined
+  alerted: boolean
   onOpen: () => void
   onSeen: () => void
   onDragStart: () => void
   onDragEnd: () => void
 }
 
-const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
+const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
   <CardFrame
     title={t.prTitle}
     author={t.prAuthor}
@@ -50,7 +52,9 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    className={`${t.isDraft ? 'card-draft' : ''} ${t.snoozed ? 'opacity-50' : ''} ${run?.status === 'running' ? 'card-running' : run?.status === 'awaiting-input' || t.hasNewActivity ? 'card-awaiting' : ''}`}
+    className={`${t.isDraft ? 'card-draft' : ''} ${t.snoozed ? 'opacity-50' : ''} ${
+      run?.status === 'running' ? 'card-running' : alerted ? 'card-awaiting' : ''
+    }`}
   >
     {(t.prState !== 'open' || t.stage === 'done') && (
       <span
@@ -102,7 +106,7 @@ const Card = ({ t, run, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => 
   </CardFrame>
 )
 
-export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) => {
+export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorder }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragging, setDragging] = useState<ReviewTask | null>(null)
@@ -242,6 +246,7 @@ export const Board = ({ tasks, runs, onOpenSession, onSeen, onReorder }: Props) 
                     <Card
                       t={t}
                       run={runByTask.get(t.id)}
+                      alerted={alertedIds.has(t.id)}
                       onOpen={() => onOpenSession(t)}
                       onSeen={() => onSeen(t)}
                       onDragStart={() => setDragging(t)}
