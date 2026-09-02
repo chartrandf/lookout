@@ -1,3 +1,4 @@
+import { getVersion } from '@tauri-apps/api/app'
 import { homeDir } from '@tauri-apps/api/path'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
 import { open } from '@tauri-apps/plugin-dialog'
@@ -380,11 +381,15 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [autostart, setAutostart] = useState(false)
+  const [version, setVersion] = useState('')
 
   useEffect(() => {
     isEnabled()
       .then(setAutostart)
       .catch(() => {})
+    getVersion()
+      .then(setVersion)
+      .catch(() => {}) // browser preview (no tauri): just leave it out
   }, [])
 
   const toggleAutostart = async () => {
@@ -452,7 +457,8 @@ export const Settings = ({ config, tasks, onSave, onSaveReviewButtons, onSavePrB
     <div className="flex max-w-[1000px] flex-col gap-8">
       <div>
         <h2 className="text-2xl font-bold">Settings</h2>
-        <p className="mt-1 flex items-center gap-2 text-sm text-deck-400">
+        {version && <p className="mt-0.5 text-xs font-light text-deck-500">v{version}</p>}
+        <p className="mt-5 flex items-center gap-2 text-sm text-deck-400">
           {config.githubUser ? (
             <button
               type="button"
