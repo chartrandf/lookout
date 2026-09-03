@@ -11,6 +11,15 @@ export const rollupToCiState = (checks: { conclusion?: string; status?: string; 
   return 'pass'
 }
 
+// Every PR board column, in order, with the label the UI shows for it. Single source of truth for the
+// board's headers and the Settings action editor.
+export const PR_COLUMNS: { value: PrColumn; label: string }[] = [
+  { value: 'waiting', label: 'Waiting' },
+  { value: 'in_review', label: 'In Review' },
+  { value: 'ready', label: 'Ready to merge' },
+  { value: 'done', label: 'Done' },
+]
+
 type ReviewAuthor = { login?: string; is_bot?: boolean } | null
 type Review = { author: ReviewAuthor; state: string }
 

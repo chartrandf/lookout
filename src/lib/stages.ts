@@ -1,5 +1,25 @@
 import type { Stage } from '../types'
 
+// The label the UI shows for each stage, in the order menus list them. Single source of truth: the
+// board columns, the card's stage picker, global search and the Settings action editor all read from
+// here — nothing renders a raw stage id. A Record, so a new Stage can't be forgotten.
+export const STAGE_LABEL: Record<Stage, string> = {
+  discovered: 'Discovery',
+  watching: 'Watching',
+  inbox: 'Needs Review',
+  reviewing: 'In Review',
+  reviewed: 'Reviewed',
+  followup: 'Follow-up',
+  done: 'Done',
+  ignored: 'Ignored',
+}
+
+// Same thing as a list, for the pickers that render every stage as an option.
+export const STAGES = (Object.keys(STAGE_LABEL) as Stage[]).map((value) => ({ value, label: STAGE_LABEL[value] }))
+
+// The stages that get a column on the review board — Discovery and Ignored live off it.
+export const BOARD_STAGES: Stage[] = ['watching', 'inbox', 'reviewing', 'reviewed', 'followup', 'done']
+
 // How far along the review pipeline each stage sits. Off-board stages rank below the pipeline.
 const RANK: Record<Stage, number> = {
   ignored: -1,

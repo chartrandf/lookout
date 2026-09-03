@@ -14,6 +14,7 @@ import { listSlashCommands } from '../lib/commands'
 import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
 import { repoFromPath } from '../lib/gh'
 import { notify } from '../lib/notify'
+import { STAGES } from '../lib/stages'
 import type { ActionButton, ButtonBoard, Config, ReviewTask, Stage, WatchedRepo } from '../types'
 import { History } from './History'
 
@@ -57,17 +58,6 @@ const ToggleRow = ({
     </button>
   </div>
 )
-
-const STAGE_OPTIONS: Stage[] = [
-  'discovered',
-  'watching',
-  'inbox',
-  'reviewing',
-  'reviewed',
-  'followup',
-  'done',
-  'ignored',
-]
 
 const BOARD_META: Record<ButtonBoard, { title: string; hint: string }> = {
   review: {
@@ -219,14 +209,14 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
                   </select>
                   <span className="shrink-0 pt-1 text-xs text-deck-500">is any of</span>
                   <div className="flex flex-1 flex-wrap gap-1">
-                    {field.values.map((v) => {
-                      const on = c.values.includes(v)
+                    {field.values.map(({ value, label }) => {
+                      const on = c.values.includes(value)
                       return (
                         <button
-                          key={v}
+                          key={value}
                           type="button"
                           onClick={() => {
-                            const values = on ? c.values.filter((x) => x !== v) : [...c.values, v]
+                            const values = on ? c.values.filter((x) => x !== value) : [...c.values, value]
                             const nextConds = b.conditions.map((x, j) => (j === idx ? { ...x, values } : x))
                             patch(b.id, { conditions: nextConds }, true)
                           }}
@@ -234,7 +224,7 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
                             on ? 'bg-grass-600 text-white' : 'border border-deck-600 text-deck-400 hover:bg-deck-700'
                           }`}
                         >
-                          {v}
+                          {label}
                         </button>
                       )
                     })}
@@ -273,9 +263,9 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
                   className="w-48 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
                 >
                   <option value="">— leave unchanged —</option>
-                  {STAGE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
+                  {STAGES.map((s) => (
+                    <option key={s.value} value={s.value}>
+                      {s.label}
                     </option>
                   ))}
                 </select>

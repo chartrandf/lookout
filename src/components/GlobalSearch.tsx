@@ -1,19 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { avatarUrl } from '../lib/avatar'
-import type { ReviewTask, Stage } from '../types'
-
-const BOARD_STAGES: Stage[] = ['watching', 'inbox', 'reviewing', 'reviewed', 'followup', 'done']
-
-const STAGE_LABEL: Record<Stage, string> = {
-  discovered: 'Discovery',
-  ignored: 'Ignored',
-  watching: 'Watching',
-  inbox: 'Needs Review',
-  reviewing: 'In Review',
-  reviewed: 'Reviewed',
-  followup: 'Follow-up',
-  done: 'Done',
-}
+import { BOARD_STAGES, STAGE_LABEL } from '../lib/stages'
+import type { ReviewTask } from '../types'
 
 type Props = {
   tasks: ReviewTask[]

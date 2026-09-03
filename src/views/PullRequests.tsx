@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
 import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
+import { PR_COLUMNS } from '../lib/prboard'
 import type { Run } from '../lib/runs'
 import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
@@ -15,11 +16,8 @@ type Props = {
   onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
 }
 
-const COLUMNS: { column: PrColumn; title: string }[] = [
-  { column: 'waiting', title: 'Waiting' },
-  { column: 'in_review', title: 'In Review' },
-  { column: 'ready', title: 'Ready to merge' },
-]
+// the board shows the pipeline columns; Done is appended on demand
+const COLUMNS = PR_COLUMNS.filter((c) => c.value !== 'done')
 
 const FLAVOR_LABEL: Record<Exclude<ReviewFlavor, null>, string> = {
   approved: 'approved',
@@ -140,7 +138,7 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
           : orderKey(a) - orderKey(b) || b.createdAt.localeCompare(a.createdAt),
       )
   const doneCount = prs.filter((p) => p.column === 'done' && matchesFilter(filter, p.repo, p.ciState)).length
-  const columns = showDone ? [...COLUMNS, { column: 'done' as const, title: 'Done' }] : COLUMNS
+  const columns = showDone ? PR_COLUMNS : COLUMNS
 
   // hide the insertion line when dropping there wouldn't move the card
   // (over itself, over the card right after it, or at the end while already last)
@@ -186,29 +184,29 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
       </div>
       <div className="flex min-h-0 flex-1 gap-3">
         {columns.map((col) => {
-          const items = byColumn(col.column)
+          const items = byColumn(col.value)
           return (
             // biome-ignore lint/a11y/noStaticElementInteractions: kanban drop target
             <div
-              key={col.column}
+              key={col.value}
               onDragOver={(e) => {
                 if (!dragging) return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
-                setDropTarget(col.column)
+                setDropTarget(col.value)
                 // cards stopPropagation on dragOver, so reaching here means empty space -> drop at end
-                setDropLine({ col: col.column, before: null })
+                setDropLine({ col: col.value, before: null })
               }}
               onDragLeave={() => {
-                setDropTarget((cur) => (cur === col.column ? null : cur))
-                setDropLine((cur) => (cur?.col === col.column ? null : cur))
+                setDropTarget((cur) => (cur === col.value ? null : cur))
+                setDropLine((cur) => (cur?.col === col.value ? null : cur))
               }}
               onDrop={(e) => {
                 e.preventDefault()
-                drop(items, col.column, null)
+                drop(items, col.value, null)
               }}
               className={`flex min-h-0 flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
-                dropTarget === col.column && dragging
+                dropTarget === col.value && dragging
                   ? 'bg-grass-600/30 ring-1 ring-grass-500'
                   : dragging
                     ? 'bg-grass-600/20'
@@ -216,7 +214,7 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
               }`}
             >
               <h3 className="shrink-0 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
-                {col.title} <span className="font-normal text-deck-400">({items.length})</span>
+                {col.label} <span className="font-normal text-deck-400">({items.length})</span>
               </h3>
               {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
                   (fractional-width) clip edge — give them 1px of breathing room */}
@@ -232,18 +230,18 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
                       e.preventDefault()
                       e.stopPropagation()
                       e.dataTransfer.dropEffect = 'move'
-                      setDropTarget(col.column)
+                      setDropTarget(col.value)
                       setDropLine((cur) =>
-                        cur?.col === col.column && cur.before === pr.id ? cur : { col: col.column, before: pr.id },
+                        cur?.col === col.value && cur.before === pr.id ? cur : { col: col.value, before: pr.id },
                       )
                     }}
                     onDrop={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      drop(items, col.column, pr)
+                      drop(items, col.value, pr)
                     }}
                   >
-                    {dropLine?.col === col.column && dropLine.before === pr.id && !isNoMove(items, pr) && (
+                    {dropLine?.col === col.value && dropLine.before === pr.id && !isNoMove(items, pr) && (
                       <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
                     )}
                     <PrCard
@@ -262,7 +260,7 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
                     />
                   </div>
                 ))}
-                {dropLine?.col === col.column && dropLine.before === null && !isNoMove(items, null) && (
+                {dropLine?.col === col.value && dropLine.before === null && !isNoMove(items, null) && (
                   <div className="h-0.5 shrink-0 rounded-full bg-grass-400" />
                 )}
               </div>

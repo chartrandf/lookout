@@ -7,7 +7,7 @@ import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { openPrWindow } from '../lib/prwindow'
 import type { Run, RunLine } from '../lib/runs'
-import { canApproveFrom } from '../lib/stages'
+import { canApproveFrom, STAGES } from '../lib/stages'
 import { timeAgo } from '../lib/time'
 import type { ActionButton, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
@@ -95,17 +95,6 @@ const ReplyBox = ({ value, onChange, onSend, onCancel, canReply, running, placeh
     </div>
   )
 }
-
-const STAGES: { value: Stage; label: string }[] = [
-  { value: 'discovered', label: 'Discovery' },
-  { value: 'watching', label: 'Watching' },
-  { value: 'inbox', label: 'Needs Review' },
-  { value: 'reviewing', label: 'In Review' },
-  { value: 'reviewed', label: 'Reviewed' },
-  { value: 'followup', label: 'Follow-up' },
-  { value: 'done', label: 'Done' },
-  { value: 'ignored', label: 'Ignored' },
-]
 
 const CheckIcon = () => (
   <svg

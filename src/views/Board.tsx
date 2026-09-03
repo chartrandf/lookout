@@ -3,6 +3,7 @@ import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame } from '../components/CardFrame'
 import { type BoardFilter, emptyFilter, matchesFilter, openAuthorOptions, openRepoOptions } from '../lib/filters'
 import type { Run } from '../lib/runs'
+import { STAGE_LABEL } from '../lib/stages'
 import type { ReviewTask, Stage } from '../types'
 
 type Props = {
@@ -16,15 +17,15 @@ type Props = {
 
 // hint doubles as the column's tooltip: what a card in it actually means
 const COLUMNS: { stage: Stage[]; title: string; hint: string }[] = [
-  { stage: ['watching'], title: 'Watching', hint: 'On the board, nothing done yet.' },
+  { stage: ['watching'], title: STAGE_LABEL.watching, hint: 'On the board, nothing done yet.' },
   {
     stage: ['inbox', 'reviewing'],
-    title: 'Needs Review',
+    title: STAGE_LABEL.inbox,
     hint: 'A review session ran, but nothing was sent to the PR yet.',
   },
-  { stage: ['reviewed'], title: 'Reviewed', hint: 'I sent at least one comment on the PR.' },
-  { stage: ['followup'], title: 'Follow-up', hint: 'A follow-up run happened.' },
-  { stage: ['done'], title: 'Done', hint: 'I approved the PR, or it merged.' },
+  { stage: ['reviewed'], title: STAGE_LABEL.reviewed, hint: 'I sent at least one comment on the PR.' },
+  { stage: ['followup'], title: STAGE_LABEL.followup, hint: 'A follow-up run happened.' },
+  { stage: ['done'], title: STAGE_LABEL.done, hint: 'I approved the PR, or it merged.' },
 ]
 
 const DONE_TTL_MS = 24 * 60 * 60 * 1000
