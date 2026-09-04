@@ -72,8 +72,16 @@ Requirements: Rust toolchain, `gh` (authenticated), `claude` CLI.
 
 ## `lookout` CLI
 
-The Homebrew cask puts a `lookout` command on your PATH (in a dev checkout: `npm run build:cli`,
-then symlink `dist-cli/lookout.mjs`). It moves cards from a terminal, so a Claude Code skill can
+The Homebrew cask puts a `lookout` command on your PATH — `brew install --cask lookout` symlinks it,
+nothing else to do. Installing the DMG by hand instead leaves it inside the bundle at
+`Lookout.app/Contents/Resources/lookout`; symlink it yourself:
+
+```bash
+ln -sf /Applications/Lookout.app/Contents/Resources/lookout ~/.local/bin/lookout
+```
+
+It runs on Node 22.13+ (or 23.4+), where `node:sqlite` stopped needing a flag. In a dev checkout:
+`npm run build:cli`, then symlink `dist-cli/lookout.mjs`. It moves cards from a terminal, so a Claude Code skill can
 report back once it has pushed comments — and it works whether or not the app is open, because it
 writes the same SQLite database the app uses.
 

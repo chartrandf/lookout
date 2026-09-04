@@ -1,8 +1,14 @@
-import { DatabaseSync } from 'node:sqlite'
+import { createRequire } from 'node:module'
+import type { DatabaseSync } from 'node:sqlite'
 import { advanceStage } from '../lib/stages'
 import { stageUpdate, type TaskRow, toTask } from '../lib/taskrow'
 import type { ReviewTask, Stage } from '../types'
 import { resolveDbPath } from './paths'
+
+// Required at call time, not imported: a static `node:sqlite` import is hoisted above everything,
+// so on Node < 22.5 the process would die with ERR_UNKNOWN_BUILTIN_MODULE before the entry point
+// could explain which Node it needs.
+const sqlite = (): typeof import('node:sqlite') => createRequire(import.meta.url)('node:sqlite')
 
 // The CLI never migrates: the app owns the schema (src-tauri/migrations). A missing file or a
 // missing `tasks` table means "Lookout has not run here yet", which callers report as exit 3.
@@ -20,7 +26,7 @@ export type Db = {
 export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
   let handle: DatabaseSync
   try {
-    handle = new DatabaseSync(path, { readOnly })
+    handle = new (sqlite().DatabaseSync)(path, { readOnly })
   } catch (e) {
     throw new NoDatabaseError(`no Lookout database at ${path} — start the app once first (${e})`)
   }
