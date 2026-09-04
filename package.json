@@ -1,9 +1,11 @@
 {
   "name": "lookout",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.2.0",
   "type": "module",
-  "bin": { "lookout": "dist-cli/lookout.mjs" },
+  "bin": {
+    "lookout": "dist-cli/lookout.mjs"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
