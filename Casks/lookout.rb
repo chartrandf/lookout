@@ -16,6 +16,9 @@ cask "lookout" do
   depends_on macos: :catalina
 
   app "Lookout.app"
+  # The `lookout` CLI ships inside the bundle: it moves review cards from a terminal, which is how
+  # Claude Code skills report back (e.g. /do-review flipping a card to Reviewed).
+  binary "#{appdir}/Lookout.app/Contents/Resources/lookout"
 
   # The build is ad-hoc signed but not notarized, and the downloaded DMG arrives quarantined (the
   # flag propagates to everything copied out of the mounted image), so Gatekeeper would block the

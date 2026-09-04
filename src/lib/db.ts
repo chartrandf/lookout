@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql'
 import type { Alert, AlertKind, ReviewTask, Stage } from '../types'
 import { type AlertScope, inScope } from './alerts'
+import { stageUpdate, type TaskRow, toTask } from './taskrow'
 
 let db: Database | null = null
 
@@ -9,63 +10,9 @@ const getDb = async () => {
   return db
 }
 
-type Row = {
-  id: string
-  repo: string
-  repo_path: string | null
-  branch: string
-  pr_number: number
-  pr_title: string
-  pr_url: string
-  pr_state: string
-  pr_author: string
-  pr_created_at: string | null
-  is_draft: number
-  stage: string
-  review_requested: number
-  session_ids: string
-  review_files: string
-  followup_summary: string | null
-  activity_count: number | null
-  ci_state: string | null
-  new_activity: number
-  snoozed: number
-  seen: number
-  sort_order: number | null
-  done_at: string | null
-  updated_at: string
-}
-
-const toTask = (r: Row): ReviewTask => ({
-  id: r.id,
-  repo: r.repo,
-  repoPath: r.repo_path,
-  branch: r.branch,
-  prNumber: r.pr_number,
-  prTitle: r.pr_title,
-  prUrl: r.pr_url,
-  prState: r.pr_state as ReviewTask['prState'],
-  prAuthor: r.pr_author,
-  prCreatedAt: r.pr_created_at,
-  isDraft: r.is_draft === 1,
-  stage: r.stage as Stage,
-  reviewRequested: r.review_requested === 1,
-  sessionIds: JSON.parse(r.session_ids),
-  reviewFiles: JSON.parse(r.review_files),
-  followupSummary: r.followup_summary ? JSON.parse(r.followup_summary) : null,
-  activityCount: r.activity_count,
-  ciState: r.ci_state as ReviewTask['ciState'],
-  hasNewActivity: r.new_activity === 1,
-  snoozed: r.snoozed === 1,
-  seen: r.seen === 1,
-  sortOrder: r.sort_order,
-  doneAt: r.done_at,
-  updatedAt: r.updated_at,
-})
-
 export const allTasks = async (): Promise<ReviewTask[]> => {
   const d = await getDb()
-  const rows = await d.select<Row[]>('SELECT * FROM tasks ORDER BY updated_at DESC')
+  const rows = await d.select<TaskRow[]>('SELECT * FROM tasks ORDER BY updated_at DESC')
   return rows.map(toTask)
 }
 
@@ -118,10 +65,11 @@ export const upsertPr = async (t: {
 
 export const setStage = async (id: string, stage: Stage) => {
   const d = await getDb()
+  const u = stageUpdate(stage)
   await d.execute('UPDATE tasks SET stage = $1, done_at = $2, updated_at = $3 WHERE id = $4', [
-    stage,
-    stage === 'done' ? new Date().toISOString() : null,
-    new Date().toISOString(),
+    u.stage,
+    u.done_at,
+    u.updated_at,
     id,
   ])
 }
@@ -170,7 +118,7 @@ export const clearNewActivity = async (id: string) => {
 
 export const addSessionId = async (id: string, sessionId: string) => {
   const d = await getDb()
-  const rows = await d.select<Row[]>('SELECT * FROM tasks WHERE id = $1', [id])
+  const rows = await d.select<TaskRow[]>('SELECT * FROM tasks WHERE id = $1', [id])
   if (!rows.length) return
   const ids: string[] = JSON.parse(rows[0].session_ids)
   if (ids.includes(sessionId)) return

@@ -1,3 +1,4 @@
+import { listen } from '@tauri-apps/api/event'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
@@ -182,6 +183,19 @@ const App = () => {
     const interval = setInterval(refresh, POLL_MS)
     return () => clearInterval(interval)
   }, [refresh, reload, reloadAlerts])
+
+  // The `lookout` CLI pings the app's socket after it writes, so a card moved from a terminal shows
+  // up at once instead of at the next sync. The event is only a hint that something changed —
+  // reload() reads the database for the truth, so a missed or malformed ping costs nothing.
+  useEffect(() => {
+    const sub = listen('cards:changed', () => {
+      reload()
+      reloadAlerts()
+    }).catch(() => null)
+    return () => {
+      sub.then((un) => un?.())
+    }
+  }, [reload, reloadAlerts])
 
   // OS notification click: mark read + open the card panel (plugin only delivers clicks on mobile today)
   useEffect(() => {

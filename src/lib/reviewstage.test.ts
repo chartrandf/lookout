@@ -41,8 +41,8 @@ describe('deriveStage', () => {
   })
 
   it('keeps a manual Needs Review placement when nothing has happened yet', () => {
-    expect(deriveStage('inbox', NOTHING)).toBe('inbox')
-    expect(deriveStage('inbox', { ...NOTHING, spoke: true })).toBe('reviewed')
+    expect(deriveStage('needs_review', NOTHING)).toBe('needs_review')
+    expect(deriveStage('needs_review', { ...NOTHING, spoke: true })).toBe('reviewed')
   })
 })
 

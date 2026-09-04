@@ -1,4 +1,12 @@
-export type Stage = 'discovered' | 'watching' | 'ignored' | 'inbox' | 'reviewing' | 'reviewed' | 'followup' | 'done'
+export type Stage =
+  | 'discovered'
+  | 'watching'
+  | 'ignored'
+  | 'needs_review'
+  | 'reviewing'
+  | 'reviewed'
+  | 'followup'
+  | 'done'
 
 export type PrState = 'open' | 'merged' | 'closed'
 

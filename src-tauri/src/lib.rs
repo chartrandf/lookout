@@ -1,3 +1,5 @@
+mod cli_bridge;
+
 use tauri::Manager;
 
 // Open (or focus) a PR browser window. Built from Rust so a navigation toolbar
@@ -116,11 +118,27 @@ pub fn run() {
                             sql: include_str!("../migrations/011_alert_archive.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 12,
+                            description: "rename inbox stage to needs_review",
+                            sql: include_str!("../migrations/012_needs_review.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![open_pr_window])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        // the socket the `lookout` CLI pings after a write, so the board repaints immediately
+        .setup(|app| {
+            cli_bridge::start(app.handle());
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                cli_bridge::stop(app);
+            }
+        });
 }

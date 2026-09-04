@@ -16,10 +16,11 @@ import { fetchLogin, fetchName, fetchPrExchange, fetchPrState, listCommentedByMe
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { approvedByMe, deriveStage } from './reviewstage'
+import { BOARD_STAGES } from './stages'
 import { scanRepoSessions } from './sessions'
 
-// Stages whose PRs we actively watch for new comments / CI
-const ACTIVE_STAGES = new Set(['watching', 'inbox', 'reviewing', 'reviewed', 'followup'])
+// Stages whose PRs we actively watch for new comments / CI: everything on the board bar Done.
+const ACTIVE_STAGES = new Set<string>(BOARD_STAGES.filter((s) => s !== 'done'))
 
 // One full sync pass: poll gh, upsert PRs, link sessions/review files, advance stages, auto-clear merged.
 export const syncAll = async (): Promise<ReviewTask[]> => {

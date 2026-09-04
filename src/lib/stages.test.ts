@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { advanceStage, canApproveFrom } from './stages'
+import { advanceStage, canApproveFrom, parseStage } from './stages'
 
 describe('advanceStage', () => {
   it('moves a card forward', () => {
@@ -31,7 +31,35 @@ describe('canApproveFrom', () => {
   it('rejects stages where I have not reviewed yet', () => {
     expect(canApproveFrom('discovered')).toBe(false)
     expect(canApproveFrom('watching')).toBe(false)
-    expect(canApproveFrom('inbox')).toBe(false)
+    expect(canApproveFrom('needs_review')).toBe(false)
     expect(canApproveFrom('reviewing')).toBe(false)
+  })
+})
+
+describe('parseStage', () => {
+  it('reads the id the database stores', () => {
+    expect(parseStage('needs_review')).toBe('needs_review')
+    expect(parseStage('followup')).toBe('followup')
+  })
+
+  it('reads the label the board shows', () => {
+    expect(parseStage('Needs Review')).toBe('needs_review')
+    expect(parseStage('In Review')).toBe('reviewing')
+    expect(parseStage('Follow-up')).toBe('followup')
+    expect(parseStage('Discovery')).toBe('discovered')
+  })
+
+  it('ignores case, spaces and dashes', () => {
+    expect(parseStage('needs-review')).toBe('needs_review')
+    expect(parseStage('NEEDSREVIEW')).toBe('needs_review')
+    expect(parseStage('follow up')).toBe('followup')
+  })
+
+  it('still reads a retired id, so old scripts and saved configs keep working', () =>
+    expect(parseStage('inbox')).toBe('needs_review'))
+
+  it('returns null for anything else', () => {
+    expect(parseStage('nope')).toBeNull()
+    expect(parseStage('')).toBeNull()
   })
 })

@@ -2364,6 +2364,7 @@ name = "lookout"
 version = "0.1.6"
 dependencies = [
  "fix-path-env",
+ "log",
  "serde",
  "serde_json",
  "tauri",
@@ -2377,6 +2378,7 @@ dependencies = [
  "tauri-plugin-shell",
  "tauri-plugin-sql",
  "tauri-plugin-store",
+ "tokio",
 ]
 
 [[package]]

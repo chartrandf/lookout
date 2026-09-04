@@ -23,8 +23,8 @@ export const deriveStage = (current: Stage, f: StageFacts): Stage => {
   if (f.followupRan) return 'followup'
   if (f.spoke) return 'reviewed'
   if (f.hasSession) return 'reviewing'
-  // nothing done yet — 'inbox' is a manual "Needs Review" placement, so it isn't pulled back
-  return current === 'inbox' ? 'inbox' : 'watching'
+  // nothing done yet — 'needs_review' is a manual placement, so it isn't pulled back
+  return current === 'needs_review' ? 'needs_review' : 'watching'
 }
 
 // My own latest verdict on the PR (bot reviews under my login can't happen, but keep it symmetric

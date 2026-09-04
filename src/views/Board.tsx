@@ -19,8 +19,8 @@ type Props = {
 const COLUMNS: { stage: Stage[]; title: string; hint: string }[] = [
   { stage: ['watching'], title: STAGE_LABEL.watching, hint: 'On the board, nothing done yet.' },
   {
-    stage: ['inbox', 'reviewing'],
-    title: STAGE_LABEL.inbox,
+    stage: ['needs_review', 'reviewing'],
+    title: STAGE_LABEL.needs_review,
     hint: 'A review session ran, but nothing was sent to the PR yet.',
   },
   { stage: ['reviewed'], title: STAGE_LABEL.reviewed, hint: 'I sent at least one comment on the PR.' },

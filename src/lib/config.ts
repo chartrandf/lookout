@@ -1,5 +1,6 @@
 import { load, type Store } from '@tauri-apps/plugin-store'
-import type { ActionButton, Config, WatchedRepo } from '../types'
+import type { ActionButton, Config, Stage, WatchedRepo } from '../types'
+import { LEGACY_STAGE_IDS } from './stages'
 
 // Default buttons reproduce the old fixed actions. /review ships with Claude Code; the follow-up
 // default is a plain prompt. Placeholders: <branch_name>, <pr_id>. Users edit/add/remove these.
@@ -27,6 +28,18 @@ export const DEFAULT_PR_BUTTONS: ActionButton[] = [
   { id: 'handle-review', label: 'handle review', icon: 'git-pull-request', prompt: '/handle-review', conditions: [] },
 ]
 
+// A saved button can reference a stage id that has since been renamed (migration 012 renamed
+// `inbox` to `needs_review`). The database migration can't reach the config store, so translate on
+// read: an untouched button keeps matching the column it was set up for.
+export const migrateButtons = (buttons: ActionButton[]): ActionButton[] =>
+  buttons.map((b) => ({
+    ...b,
+    advanceTo: b.advanceTo ? (LEGACY_STAGE_IDS[b.advanceTo] ?? b.advanceTo) : b.advanceTo,
+    conditions: b.conditions.map((c) =>
+      c.field === 'stage' ? { ...c, values: c.values.map((v) => LEGACY_STAGE_IDS[v] ?? (v as Stage)) } : c,
+    ),
+  }))
+
 let store: Store | null = null
 
 const getStore = async () => {
@@ -40,8 +53,8 @@ export const getConfig = async (): Promise<Config> => {
     githubUser: (await s.get<string>('githubUser')) ?? '',
     githubName: (await s.get<string>('githubName')) ?? '',
     repos: (await s.get<WatchedRepo[]>('repos')) ?? [],
-    reviewButtons: (await s.get<ActionButton[]>('reviewButtons')) ?? DEFAULT_REVIEW_BUTTONS,
-    prButtons: (await s.get<ActionButton[]>('prButtons')) ?? DEFAULT_PR_BUTTONS,
+    reviewButtons: migrateButtons((await s.get<ActionButton[]>('reviewButtons')) ?? DEFAULT_REVIEW_BUTTONS),
+    prButtons: migrateButtons((await s.get<ActionButton[]>('prButtons')) ?? DEFAULT_PR_BUTTONS),
     animations: (await s.get<boolean>('animations')) ?? true,
   }
 }

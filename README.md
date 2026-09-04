@@ -70,6 +70,42 @@ Requirements: Rust toolchain, `gh` (authenticated), `claude` CLI.
 3. **Reviews** — Watching / Needs Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
 4. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
 
+## `lookout` CLI
+
+The Homebrew cask puts a `lookout` command on your PATH (in a dev checkout: `npm run build:cli`,
+then symlink `dist-cli/lookout.mjs`). It moves cards from a terminal, so a Claude Code skill can
+report back once it has pushed comments — and it works whether or not the app is open, because it
+writes the same SQLite database the app uses.
+
+```bash
+lookout card list --stage "in review"      # what's in a column
+lookout card show --pr 2305               # one card, or omit the selector inside a repo checkout
+lookout card reviewed                     # the PR for this repo + branch → Reviewed
+lookout card comments-pushed --count 3    # what /do-review calls after `gh api .../reviews`
+lookout doctor                            # database path and card count
+```
+
+Stages are named the way the board names them — `needs-review`, `"In Review"`, `follow-up`, case and
+spacing ignored. Retired ids still resolve (`inbox` is now `needs_review`), so older scripts keep
+working.
+
+A card is picked by `--card <id>`, `--pr <n>` or `--branch <b>` (add `--repo owner/repo` to
+disambiguate); with no selector at all it uses the current checkout's origin and branch. Stage moves
+are forward-only — the app's own rule, so an automated caller can't drag a card backwards — with
+`--force` to override. `--json` for machine output, `--dry-run` to resolve without writing.
+
+Exit codes are the contract for scripts: `0` done · `1` error · `2` no matching card · `3` Lookout
+has never run here · `4` selector matched several cards. In a skill, guard on the binary and let the
+"nothing to do" codes pass:
+
+```bash
+command -v lookout >/dev/null && lookout card comments-pushed --branch "$BRANCH" --count 3 --quiet || true
+```
+
+When the app is running it repaints immediately: the CLI pings a unix socket the app publishes next
+to the database, and the app re-reads. The event is only a hint — every failure degrades to the app
+noticing at its next sync.
+
 ## Font
 
 Bundles [Leckerli One](https://fonts.google.com/specimen/Leckerli+One) (SIL Open Font License 1.1).

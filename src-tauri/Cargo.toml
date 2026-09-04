@@ -31,4 +31,7 @@ tauri-plugin-notification = "2.3.3"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-dialog = "2.7.1"
 fix-path-env = { git = "https://github.com/tauri-apps/fix-path-env-rs" }
+# the CLI bridge socket (unix only: macOS + Linux)
+tokio = { version = "1", features = ["net", "io-util"] }
+log = "0.4"
 

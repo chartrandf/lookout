@@ -6,7 +6,7 @@ import type { Stage } from '../types'
 export const STAGE_LABEL: Record<Stage, string> = {
   discovered: 'Discovery',
   watching: 'Watching',
-  inbox: 'Needs Review',
+  needs_review: 'Needs Review',
   reviewing: 'In Review',
   reviewed: 'Reviewed',
   followup: 'Follow-up',
@@ -17,15 +17,32 @@ export const STAGE_LABEL: Record<Stage, string> = {
 // Same thing as a list, for the pickers that render every stage as an option.
 export const STAGES = (Object.keys(STAGE_LABEL) as Stage[]).map((value) => ({ value, label: STAGE_LABEL[value] }))
 
+// Ignore case, spaces and dashes, so "Needs Review", "needs-review" and "needsreview" are one key.
+const normalize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+// Stage ids that were renamed. Kept forever so a saved config, an old script or a skill written
+// against the previous name keeps working — migration 012 rewrites the database, but nothing can
+// rewrite what someone typed into a shell alias.
+export const LEGACY_STAGE_IDS: Record<string, Stage> = { inbox: 'needs_review' }
+
+// Read a stage from whatever someone typed: the id the database stores ("needs_review"), the name
+// the board shows ("Needs Review"), or a retired id.
+export const parseStage = (input: string): Stage | null => {
+  const key = normalize(input)
+  const listed = STAGES.find((s) => normalize(s.value) === key || normalize(s.label) === key)
+  if (listed) return listed.value
+  return Object.entries(LEGACY_STAGE_IDS).find(([old]) => normalize(old) === key)?.[1] ?? null
+}
+
 // The stages that get a column on the review board — Discovery and Ignored live off it.
-export const BOARD_STAGES: Stage[] = ['watching', 'inbox', 'reviewing', 'reviewed', 'followup', 'done']
+export const BOARD_STAGES: Stage[] = ['watching', 'needs_review', 'reviewing', 'reviewed', 'followup', 'done']
 
 // How far along the review pipeline each stage sits. Off-board stages rank below the pipeline.
 const RANK: Record<Stage, number> = {
   ignored: -1,
   discovered: 0,
   watching: 1,
-  inbox: 2,
+  needs_review: 2,
   reviewing: 3,
   reviewed: 4,
   followup: 5,
