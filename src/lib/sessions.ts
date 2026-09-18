@@ -23,9 +23,13 @@ const TS_RE = /"timestamp":"([^"]+)"/
 // Claude Code stamps the branch on every transcript line. It is the only way to place a review
 // session whose command carried no branch — `/review <pr_id>`, the shipped default button.
 const BRANCH_RE = /"gitBranch":"([^"]*)"/
+// Commands that place a session on a branch when their argument didn't
 const REVIEW_COMMANDS = new Set(['do-review', 'do-followup', 'review', 'code-review'])
+// …and the narrower set whose output is a review worth reading back (capture.ts). A follow-up run
+// answers "was my review addressed", which is a different thing from the review itself.
+const CAPTURE_COMMANDS = new Set(['do-review', 'review', 'code-review'])
 
-export const isReviewSession = (s: ReviewSession) => !!s.command && REVIEW_COMMANDS.has(s.command)
+export const isReviewSession = (s: ReviewSession) => !!s.command && CAPTURE_COMMANDS.has(s.command)
 
 // Cache: session files are append-only; once a file's first turn is parsed the result never changes.
 const cache = new Map<string, ReviewSession | null>()

@@ -190,3 +190,26 @@ describe('file descriptors', () => {
     expect([...openHandles]).toEqual([])
   })
 })
+
+describe('isReviewSession', () => {
+  const session = (command: string | null) => ({
+    sessionId: 's',
+    command,
+    branch: 'b',
+    ts: null,
+    cwd: '/clone',
+    path: '/p.jsonl',
+  })
+
+  it('takes review commands', async () => {
+    const { isReviewSession } = await load()
+    expect(['do-review', 'review', 'code-review'].map((c) => isReviewSession(session(c)))).toEqual([true, true, true])
+  })
+
+  it('leaves follow-ups and plain sessions out', async () => {
+    const { isReviewSession } = await load()
+    expect(isReviewSession(session('do-followup'))).toBe(false)
+    expect(isReviewSession(session('cp'))).toBe(false)
+    expect(isReviewSession(session(null))).toBe(false)
+  })
+})
