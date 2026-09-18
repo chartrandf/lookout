@@ -111,3 +111,26 @@ describe('reviewFromLines', () => {
     expect(result.body).toMatch(/truncated/)
   })
 })
+
+describe('parser hardening', () => {
+  it('does not glue separate answers together when the tail holds no human turn', () => {
+    const big = 'y'.repeat(MAX_BODY)
+    const turn = finalAssistantTurn([assistant([text(big)]), assistant([text(big)]), assistant([text(big)])])
+    expect(turn?.body.length).toBeLessThan(MAX_BODY * 3)
+  })
+
+  it('reads a shell redirect into the report dir as an export', () => {
+    expect(exportedToFile([assistant([toolUse('Bash', { command: 'cat > AI_TASKS/code-review/x.md' })])])).toBe(true)
+  })
+
+  it('does not read a search that merely mentions the report dir as an export', () => {
+    const lines = [assistant([toolUse('Bash', { command: 'rg TODO AI_TASKS/code-review > /dev/null' })])]
+    expect(exportedToFile(lines)).toBe(false)
+  })
+
+  it('never truncates in the middle of a surrogate pair', () => {
+    const result = reviewFromLines([userPrompt('/x'), assistant([text('😀'.repeat(MAX_BODY))])])
+    if (result.kind !== 'captured') throw new Error('expected a capture')
+    expect(result.body).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+  })
+})

@@ -28,6 +28,7 @@ export const readTailLines = async (filePath: string, maxBytes = TAIL_BYTES): Pr
       if (n === null) break
       text += decoder.decode(buf.subarray(0, n), { stream: true })
     }
+    text += decoder.decode() // flush any trailing multi-byte state
     const lines = text.split('\n')
     if (from > 0) lines.shift() // the cap lands mid-line: that first piece isn't a whole entry
     return lines.filter((l) => l !== '')
