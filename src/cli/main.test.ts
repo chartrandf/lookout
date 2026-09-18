@@ -447,6 +447,17 @@ describe('review capture', () => {
     expect(out).toEqual([])
   })
 
+  it('takes --kind followup', () => {
+    const p = transcript([assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42', '--kind', 'followup')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ kind: 'followup' }])
+  })
+
+  it('refuses a kind it does not know', () => {
+    const p = transcript([assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42', '--kind', 'nonsense')).toBe(EXIT.error)
+  })
+
   it('clears what it stored', () => {
     cli('review', 'report', '--file', '/tmp/repo/r.md', '--pr', '42')
     expect(cli('review', 'capture', '--clear')).toBe(EXIT.ok)

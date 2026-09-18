@@ -73,8 +73,8 @@ other people's PRs — the review pipeline
   lookout review stage <${STAGE_NAMES.join(' | ')}> [selector] [--force]
   lookout review reviewed | follow-up | done | watch | ignore [selector]
   lookout review comments-pushed [selector] --count <n> [--numbers 1,3] [--url <u>]
-  lookout review report [selector] --file <path> | --stdin
-  lookout review capture [selector] --transcript <path> | --hook
+  lookout review report [selector] --file <path> | --stdin [--kind review | followup]
+  lookout review capture [selector] --transcript <path> | --hook [--kind review | followup]
   lookout review capture --clear [--older-than <days>]
 
 your own PRs — the merge pipeline
@@ -207,6 +207,7 @@ const reviewCommand = (db: Db, ctx: Ctx): number => {
     if (!ctx.dryRun)
       db.saveCapturedReview({
         id,
+        kind: readKind(ctx.args.flags),
         taskId: card.id,
         branch: card.branch,
         source: 'cli',
@@ -245,6 +246,7 @@ const reviewCommand = (db: Db, ctx: Ctx): number => {
     if (!ctx.dryRun)
       db.saveCapturedReview({
         id: sessionId ?? `capture:${card.id}`,
+        kind: readKind(ctx.args.flags),
         taskId: card.id,
         branch: card.branch,
         source: hook ? 'hook' : 'cli',
@@ -261,6 +263,13 @@ const reviewCommand = (db: Db, ctx: Ctx): number => {
 }
 
 const isFlag = (flags: Args['flags'], name: string) => flags[name] === true || flags[name] === 'true'
+
+// What the session was doing, for the label the card shows. A caller that doesn't say means a review.
+const readKind = (flags: Args['flags']): 'review' | 'followup' => {
+  const kind = flagString(flags, 'kind') ?? 'review'
+  if (kind !== 'review' && kind !== 'followup') throw new Error('--kind expects review or followup')
+  return kind
+}
 
 // ~/.claude/projects/<slug>/<session id>.jsonl — the same id the app stores a sync capture under, so
 // the hook and the app refresh one row instead of racing to write two.

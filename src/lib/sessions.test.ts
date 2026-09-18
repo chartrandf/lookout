@@ -191,7 +191,7 @@ describe('file descriptors', () => {
   })
 })
 
-describe('isReviewSession', () => {
+describe('captureKind', () => {
   const session = (command: string | null) => ({
     sessionId: 's',
     command,
@@ -201,15 +201,19 @@ describe('isReviewSession', () => {
     path: '/p.jsonl',
   })
 
-  it('takes review commands', async () => {
-    const { isReviewSession } = await load()
-    expect(['do-review', 'review', 'code-review'].map((c) => isReviewSession(session(c)))).toEqual([true, true, true])
+  it('names what a capture-worthy session produced', async () => {
+    const { captureKind } = await load()
+    expect(['do-review', 'review', 'code-review'].map((c) => captureKind(session(c)))).toEqual([
+      'review',
+      'review',
+      'review',
+    ])
+    expect(captureKind(session('do-followup'))).toBe('followup')
   })
 
-  it('leaves follow-ups and plain sessions out', async () => {
-    const { isReviewSession } = await load()
-    expect(isReviewSession(session('do-followup'))).toBe(false)
-    expect(isReviewSession(session('cp'))).toBe(false)
-    expect(isReviewSession(session(null))).toBe(false)
+  it('leaves everything else out', async () => {
+    const { captureKind } = await load()
+    expect(captureKind(session('cp'))).toBeNull()
+    expect(captureKind(session(null))).toBeNull()
   })
 })

@@ -137,9 +137,9 @@ export const buildFeed = async (
   for (const c of captured)
     events.push({
       ts: c.createdAt,
-      icon: '📄',
+      icon: c.kind === 'followup' ? '🔁' : '📄',
       actor: 'claude',
-      text: 'review captured from session',
+      text: c.kind === 'followup' ? 'follow-up captured from session' : 'review captured from session',
       mine: true,
       body: c.body ?? undefined,
       filePath: c.filePath ?? undefined,

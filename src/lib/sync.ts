@@ -20,7 +20,7 @@ import { logError } from './log'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { approvedByMe, deriveStage } from './reviewstage'
-import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
+import { captureKind, scanRepoReviewSessions, scanRepoSessions } from './sessions'
 import { BOARD_STAGES } from './stages'
 
 // Stages whose PRs we actively watch for new comments / CI: everything on the board bar Done.
@@ -38,6 +38,8 @@ const captureReviews = async (
   filesByBranch: Map<string, string[]>,
 ) => {
   for (const s of await scanRepoReviewSessions(repoPath)) {
+    const kind = captureKind(s)
+    if (!kind) continue
     const prNumber = prByBranch.get(s.branch)
     if (prNumber === undefined) continue // a session on a branch with no PR on the board
     if ((filesByBranch.get(s.branch) ?? filesByBranch.get(s.branch.replace(/\//g, '-')) ?? []).length) continue
@@ -45,6 +47,7 @@ const captureReviews = async (
     if (result?.kind !== 'captured') continue
     await upsertCapturedReview({
       id: s.sessionId,
+      kind,
       taskId: `${repo}#${prNumber}`,
       branch: s.branch,
       source: 'sync',

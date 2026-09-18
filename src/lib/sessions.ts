@@ -25,11 +25,18 @@ const TS_RE = /"timestamp":"([^"]+)"/
 const BRANCH_RE = /"gitBranch":"([^"]*)"/
 // Commands that place a session on a branch when their argument didn't
 const REVIEW_COMMANDS = new Set(['do-review', 'do-followup', 'review', 'code-review'])
-// …and the narrower set whose output is a review worth reading back (capture.ts). A follow-up run
-// answers "was my review addressed", which is a different thing from the review itself.
-const CAPTURE_COMMANDS = new Set(['do-review', 'review', 'code-review'])
+// …and what each one produces when it is read back (capture.ts). A follow-up run answers "was my
+// review addressed", so the card labels it as that rather than as a second review.
+const CAPTURE_COMMANDS: Record<string, CaptureKind> = {
+  'do-review': 'review',
+  review: 'review',
+  'code-review': 'review',
+  'do-followup': 'followup',
+}
 
-export const isReviewSession = (s: ReviewSession) => !!s.command && CAPTURE_COMMANDS.has(s.command)
+export type CaptureKind = 'review' | 'followup'
+
+export const captureKind = (s: ReviewSession): CaptureKind | null => (s.command && CAPTURE_COMMANDS[s.command]) || null
 
 // Cache: session files are append-only; once a file's first turn is parsed the result never changes.
 const cache = new Map<string, ReviewSession | null>()
@@ -144,9 +151,9 @@ export const scanRepoSessions = async (repoPath: string): Promise<Map<string, st
 export const sessionsForBranch = async (repoPath: string, branch: string): Promise<ReviewSession[]> =>
   (await scanRepo(repoPath)).filter((s) => s.branch === branch)
 
-// The sessions a review could be read back out of (capture.ts), across every checkout of the repo.
+// The sessions something can be read back out of (capture.ts), across every checkout of the repo.
 export const scanRepoReviewSessions = async (repoPath: string): Promise<ReviewSession[]> =>
-  (await scanRepo(repoPath)).filter(isReviewSession)
+  (await scanRepo(repoPath)).filter((s) => captureKind(s) !== null)
 
 // Which checkout a session can be resumed from: `claude --resume` only sees the sessions of the
 // directory it runs in, so resuming a worktree session from the clone would fail to find it.

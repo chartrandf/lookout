@@ -78,6 +78,7 @@ export type ReviewTask = {
 // Display only — a captured review never feeds alerts.ts and never moves a card.
 export type CapturedReview = {
   id: string // the session id, or "file:<abs path>" for a reference the CLI registered
+  kind: 'review' | 'followup' // what the session was doing — the feed says which one it is showing
   taskId: string
   branch: string
   source: 'sync' | 'hook' | 'cli'

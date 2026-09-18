@@ -29,7 +29,11 @@ vi.mock('./gh', () => ({
 }))
 vi.mock('./notify', () => ({ notify: vi.fn() }))
 vi.mock('./reviews', () => ({ scanReviewFiles: vi.fn() }))
-vi.mock('./sessions', () => ({ scanRepoSessions: vi.fn(), scanRepoReviewSessions: vi.fn(async () => []) }))
+vi.mock('./sessions', () => ({
+  scanRepoSessions: vi.fn(),
+  scanRepoReviewSessions: vi.fn(async () => []),
+  captureKind: (s: { command: string | null }) => (s.command === 'do-followup' ? 'followup' : 'review'),
+}))
 vi.mock('./capture', () => ({ captureIfGrown: vi.fn() }))
 
 import { captureIfGrown } from './capture'
@@ -223,6 +227,7 @@ describe('syncAll — capturing a review the session never exported', () => {
     await syncAll()
     expect(upsertCapturedReview).toHaveBeenCalledWith({
       id: 's1',
+      kind: 'review',
       taskId: `${REPO}#7`,
       branch: 'feature',
       source: 'sync',
@@ -246,6 +251,12 @@ describe('syncAll — capturing a review the session never exported', () => {
     await syncAll()
     expect(scanRepoReviewSessions).not.toHaveBeenCalled()
     expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('labels a follow-up run as a follow-up, not a second review', async () => {
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, command: 'do-followup' }])
+    await syncAll()
+    expect(upsertCapturedReview).toHaveBeenCalledWith(expect.objectContaining({ kind: 'followup' }))
   })
 
   it('ignores a session whose branch has no PR on the board', async () => {

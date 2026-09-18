@@ -76,7 +76,7 @@ Claude Code's own `/review`, which prints its verdict and saves nothing. Those c
 session and no review.
 
 Lookout now reads the review back out of the session transcript itself (the final assistant turn) and
-keeps it for 30 days. It is display only: a captured review never moves a card and never raises an
+keeps it for 30 days. Follow-up runs are captured the same way and labelled as follow-ups. It is display only: a captured review never moves a card and never raises an
 alert. **Settings → Capture reviews** has the switch, the count and a Clear button.
 
 A branch whose reviews *are* exported to `AI_TASKS/code-review/` is left alone — the file is used and

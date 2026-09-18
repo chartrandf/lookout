@@ -35,6 +35,7 @@ export type Db = {
 
 export type CapturedReviewInput = {
   id: string
+  kind: 'review' | 'followup'
   taskId: string
   branch: string
   source: 'cli' | 'hook'
@@ -163,14 +164,25 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
       requireCapturedReviews()
       handle
         .prepare(
-          `INSERT INTO captured_reviews (id, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO captured_reviews (id, kind, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
-             task_id = excluded.task_id, branch = excluded.branch, source = excluded.source,
-             session_id = excluded.session_id, file_path = excluded.file_path, body = excluded.body,
-             created_at = excluded.created_at, captured_at = excluded.captured_at`,
+             kind = excluded.kind, task_id = excluded.task_id, branch = excluded.branch,
+             source = excluded.source, session_id = excluded.session_id, file_path = excluded.file_path,
+             body = excluded.body, created_at = excluded.created_at, captured_at = excluded.captured_at`,
         )
-        .run(r.id, r.taskId, r.branch, r.source, r.sessionId, r.filePath, r.body, r.createdAt, new Date().toISOString())
+        .run(
+          r.id,
+          r.kind,
+          r.taskId,
+          r.branch,
+          r.source,
+          r.sessionId,
+          r.filePath,
+          r.body,
+          r.createdAt,
+          new Date().toISOString(),
+        )
     },
     clearCapturedReviews: (before) => {
       requireCapturedReviews()

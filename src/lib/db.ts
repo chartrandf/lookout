@@ -325,6 +325,7 @@ export const dropMyPrsMissingFrom = async (repo: string, keepIds: string[]) => {
 
 type CapturedReviewRow = {
   id: string
+  kind: string
   task_id: string
   branch: string
   source: string
@@ -336,6 +337,7 @@ type CapturedReviewRow = {
 
 const toCapturedReview = (r: CapturedReviewRow): CapturedReview => ({
   id: r.id,
+  kind: r.kind === 'followup' ? 'followup' : 'review',
   taskId: r.task_id,
   branch: r.branch,
   source: r.source as CapturedReview['source'],
@@ -351,13 +353,24 @@ const toCapturedReview = (r: CapturedReviewRow): CapturedReview => ({
 export const upsertCapturedReview = async (r: Omit<CapturedReview, 'id'> & { id: string }) => {
   const d = await getDb()
   await d.execute(
-    `INSERT INTO captured_reviews (id, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO captured_reviews (id, kind, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      ON CONFLICT(id) DO UPDATE SET
-       task_id = $2, branch = $3, source = $4, session_id = $5, file_path = $6, body = $7,
-       created_at = $8, captured_at = $9
+       kind = $2, task_id = $3, branch = $4, source = $5, session_id = $6, file_path = $7, body = $8,
+       created_at = $9, captured_at = $10
      WHERE captured_reviews.source != 'cli' OR excluded.source = 'cli'`,
-    [r.id, r.taskId, r.branch, r.source, r.sessionId, r.filePath, r.body, r.createdAt, new Date().toISOString()],
+    [
+      r.id,
+      r.kind,
+      r.taskId,
+      r.branch,
+      r.source,
+      r.sessionId,
+      r.filePath,
+      r.body,
+      r.createdAt,
+      new Date().toISOString(),
+    ],
   )
 }
 
