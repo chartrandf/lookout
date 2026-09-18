@@ -29,6 +29,7 @@ export type Db = {
   setColumn: (id: string, column: PrColumn, force: boolean) => { from: PrColumn; to: PrColumn; changed: boolean }
   // reviews with no report file behind them (`captured_reviews`, migration 014)
   saveCapturedReview: (r: CapturedReviewInput) => void
+  deleteCapturedReview: (id: string) => void
   clearCapturedReviews: (before: string | null) => number
   close: () => void
 }
@@ -57,6 +58,12 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
   const hasTable = (name: string): boolean =>
     Boolean(handle.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name))
 
+  const hasColumn = (table: string, column: string): boolean =>
+    handle
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .some((c) => (c as { name: string }).name === column)
+
   if (!hasTable('tasks')) throw new NoDatabaseError(`${path} has no tasks table — start the app once first`)
 
   // `my_prs` arrived in migration 013, so a database written by an older app won't have it. Checked
@@ -67,10 +74,12 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
     }
   }
 
-  // Same reasoning as requireMyPrs: a database written by an older app has no captured_reviews yet.
+  // `kind` arrived in migration 015: a CLI newer than the app it is writing for would otherwise fail
+  // on the INSERT with a raw SQLite message — and say nothing at all from a hook, which swallows
+  // everything. Check the column, not just the table.
   const requireCapturedReviews = () => {
-    if (!hasTable('captured_reviews')) {
-      throw new NoDatabaseError(`${path} has no captured_reviews table — start this version of the app once to migrate`)
+    if (!hasTable('captured_reviews') || !hasColumn('captured_reviews', 'kind')) {
+      throw new NoDatabaseError(`${path} is from an older Lookout — start this version of the app once to migrate`)
     }
   }
 
@@ -183,6 +192,11 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
           r.createdAt,
           new Date().toISOString(),
         )
+    },
+    // the session went on to export its own report: the guess has to go, or the card shows both
+    deleteCapturedReview: (id) => {
+      requireCapturedReviews()
+      handle.prepare('DELETE FROM captured_reviews WHERE id = ?').run(id)
     },
     clearCapturedReviews: (before) => {
       requireCapturedReviews()

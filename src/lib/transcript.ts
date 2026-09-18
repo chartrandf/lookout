@@ -7,6 +7,34 @@
 export const MAX_BODY = 64 * 1024
 const MIN_BODY = 200 // a sign-off ("done ✅") is not a review
 
+// The slash command that opened a session, and its argument when it has one. Shared with the CLI so
+// a Stop hook can tell a review session from any other session it fires in.
+export const COMMAND_RE = /<command-name>\/?([\w-]+)<\/command-name>(?:(?:\\n|\s)*<command-args>([^<"]*))?/
+
+export type CaptureKind = 'review' | 'followup'
+
+// What each capture-worthy command produces. A follow-up run answers "was my review addressed", so
+// the card labels it as that rather than as a second review.
+const CAPTURE_COMMANDS: Record<string, CaptureKind> = {
+  'do-review': 'review',
+  review: 'review',
+  'code-review': 'review',
+  'do-followup': 'followup',
+}
+
+export const captureKindOf = (command: string | null): CaptureKind | null =>
+  (command && CAPTURE_COMMANDS[command]) || null
+
+// The opening command, from the head of a transcript (the first command wins: it is the one the
+// session started with).
+export const openingCommand = (lines: string[]): { command: string | null; arg: string | null } => {
+  for (const line of lines) {
+    const m = line.match(COMMAND_RE)
+    if (m) return { command: m[1], arg: (m[2] ?? '').trim() || null }
+  }
+  return { command: null, arg: null }
+}
+
 export type CaptureResult =
   | { kind: 'captured'; body: string; ts: string | null }
   | { kind: 'exported' } // the session wrote its own report: that flow already works, leave it alone

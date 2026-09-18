@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 import { PR_COLUMNS } from '../lib/prboard'
 import { parseStage, STAGE_LABEL, STAGES } from '../lib/stages'
+import { captureKindOf } from '../lib/transcript'
 import type { MyPr, PrColumn, ReviewTask, Stage } from '../types'
 import { type Args, flagNumber, flagString, parseArgs } from './args'
-import { reviewFromTranscript } from './capture'
+import { reviewFromTranscript, transcriptCommand } from './capture'
 import { type Db, NoDatabaseError, openDb } from './db'
 import { notifyApp } from './notify'
 import { resolveDbPath } from './paths'
@@ -235,18 +236,40 @@ const reviewCommand = (db: Db, ctx: Ctx): number => {
     const payload = hook ? hookPayload(ctx.stdin()) : {}
     const transcript = payload.transcript_path ?? flagString(ctx.args.flags, 'transcript')
     if (!transcript) throw new Error('--transcript <path> or --hook required')
+
+    // Resolve the card first: a Stop hook fires on every turn of every session on the machine, and
+    // most of them have no card at all. No point reading a quarter of a megabyte to find that out.
+    const card = resolveCard(db, selectorFrom(ctx.args))
+    const sessionId = payload.session_id ?? flagString(ctx.args.flags, 'session') ?? sessionIdFromPath(transcript)
+    const id = sessionId ?? `capture:${card.id}`
+
+    // A hook has no idea what it fired in. Anything that isn't a review run — a debugging session in
+    // a worktree that happens to match a card — has nothing to do with this card's review.
+    const command = transcriptCommand(transcript)
+    const kind = flagString(ctx.args.flags, 'kind') ? readKind(ctx.args.flags) : captureKindOf(command)
+    if (hook && !kind) {
+      ctx.out('not a review session', { captured: false, reason: 'not-a-review' })
+      return EXIT.ok
+    }
+
+    // The same rule the app applies: a card whose reviews are exported as files is left alone, and
+    // anything captured before that was apparent goes.
+    if (card.reviewFiles.length) {
+      if (!ctx.dryRun) db.deleteCapturedReview(id)
+      ctx.out('the branch exports its own reports', { captured: false, reason: 'exported' })
+      return EXIT.ok
+    }
+
     const result = reviewFromTranscript(transcript)
     if (result.kind !== 'captured') {
-      // 'exported': the session wrote its own report and the app already scans that
+      if (result.kind === 'exported' && !ctx.dryRun) db.deleteCapturedReview(id)
       ctx.out(`nothing to capture (${result.kind})`, { captured: false, reason: result.kind })
       return EXIT.ok
     }
-    const card = resolveCard(db, selectorFrom(ctx.args))
-    const sessionId = payload.session_id ?? flagString(ctx.args.flags, 'session') ?? sessionIdFromPath(transcript)
     if (!ctx.dryRun)
       db.saveCapturedReview({
-        id: sessionId ?? `capture:${card.id}`,
-        kind: readKind(ctx.args.flags),
+        id,
+        kind: kind ?? 'review',
         taskId: card.id,
         branch: card.branch,
         source: hook ? 'hook' : 'cli',

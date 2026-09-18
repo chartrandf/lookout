@@ -1,5 +1,6 @@
 import { homeDir, join } from '@tauri-apps/api/path'
 import { exists, open, readDir } from '@tauri-apps/plugin-fs'
+import { type CaptureKind, COMMAND_RE, captureKindOf } from './transcript'
 import { listWorktrees } from './worktrees'
 
 export type ReviewSession = {
@@ -21,22 +22,8 @@ const projectSlug = (repoPath: string) => repoPath.replace(/[^a-zA-Z0-9]/g, '-')
 
 const sessionDir = async (checkout: string) => join(await homeDir(), '.claude', 'projects', projectSlug(checkout))
 
-// The command that opened the session and its argument, when it has one: a branch
-// (/do-review <branch>) or a PR number (/review 2305).
-const COMMAND_RE = /<command-name>\/?([\w-]+)<\/command-name>(?:(?:\\n|\s)*<command-args>([^<"]*))?/
 const TS_RE = /"timestamp":"([^"]+)"/
-// What each capture-worthy command produces when it is read back (capture.ts). A follow-up run answers "was my
-// review addressed", so the card labels it as that rather than as a second review.
-const CAPTURE_COMMANDS: Record<string, CaptureKind> = {
-  'do-review': 'review',
-  review: 'review',
-  'code-review': 'review',
-  'do-followup': 'followup',
-}
-
-export type CaptureKind = 'review' | 'followup'
-
-export const captureKind = (s: ReviewSession): CaptureKind | null => (s.command && CAPTURE_COMMANDS[s.command]) || null
+export const captureKind = (s: ReviewSession): CaptureKind | null => captureKindOf(s.command)
 
 // Cache: session files are append-only; once a file's first turn is parsed the result never changes.
 const cache = new Map<string, ReviewSession | null>()

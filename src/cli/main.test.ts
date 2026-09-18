@@ -380,6 +380,13 @@ const assistantLine = (text: string) => ({
 })
 const REVIEW_TEXT = `## Review\n${'x'.repeat(300)}`
 
+// the head line a session opened with, which is how the hook tells a review run from any other
+const commandLine = (name: string, args = '') => ({
+  type: 'user',
+  message: { role: 'user', content: `<command-name>/${name}</command-name> <command-args>${args}</command-args>` },
+  timestamp: '2026-09-18T09:00:00.000Z',
+})
+
 describe('review report', () => {
   it('registers a report file against the card', () => {
     expect(cli('review', 'report', '--file', '/tmp/repo/r.md', '--pr', '42')).toBe(EXIT.ok)
@@ -434,7 +441,7 @@ describe('review capture', () => {
   })
 
   it('reads the transcript path and session id out of a hook payload', () => {
-    const p = transcript([assistantLine(REVIEW_TEXT)])
+    const p = transcript([commandLine('review', '42'), assistantLine(REVIEW_TEXT)])
     const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p, hook_event_name: 'Stop' })
     expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
     expect(capturedRows()).toMatchObject([{ id: 'abc123', session_id: 'abc123', source: 'hook' }])
@@ -456,6 +463,31 @@ describe('review capture', () => {
   it('refuses a kind it does not know', () => {
     const p = transcript([assistantLine(REVIEW_TEXT)])
     expect(cli('review', 'capture', '--transcript', p, '--pr', '42', '--kind', 'nonsense')).toBe(EXIT.error)
+  })
+
+  it('ignores a hook that fired in a session that is not a review', () => {
+    const p = transcript([commandLine('handle-review'), assistantLine(REVIEW_TEXT)])
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
+  })
+
+  it('takes the kind from the command that opened the session', () => {
+    const p = transcript([commandLine('do-followup', 'feature-x'), assistantLine(REVIEW_TEXT)])
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ kind: 'followup' }])
+  })
+
+  it('leaves a card alone when its branch exports report files', () => {
+    const h = new DatabaseSync(dbPath)
+    h.prepare('UPDATE tasks SET review_files = \'["/tmp/repo/AI_TASKS/code-review/x.md"]\' WHERE id = ?').run(
+      'owner/repo#42',
+    )
+    h.close()
+    const p = transcript([commandLine('review', '42'), assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
   })
 
   it('clears what it stored', () => {
