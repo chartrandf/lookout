@@ -405,11 +405,13 @@ export const Settings = ({
   const [captured, setCaptured] = useState(0)
   const [copiedHook, setCopiedHook] = useState(false)
 
+  // re-read after each sync: a pass can capture a review while this page is open
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh trigger only
   useEffect(() => {
     capturedReviewCount()
       .then(setCaptured)
       .catch(() => {}) // browser preview (no database): the count just stays at 0
-  }, [])
+  }, [tasks])
 
   useEffect(() => {
     isEnabled()
@@ -636,9 +638,11 @@ export const Settings = ({
               type="button"
               onClick={() => {
                 writeText(HOOK_SNIPPET)
-                  .then(() => setCopiedHook(true))
-                  .catch(() => {})
-                setTimeout(() => setCopiedHook(false), 1500)
+                  .then(() => {
+                    setCopiedHook(true)
+                    setTimeout(() => setCopiedHook(false), 1500)
+                  })
+                  .catch(() => {}) // no clipboard (browser preview): leave the label alone
               }}
               className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
             >

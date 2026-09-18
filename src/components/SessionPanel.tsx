@@ -336,8 +336,9 @@ export const SessionPanel = ({
     }
   }
 
-  // a captured review has no file behind it: the markdown itself travelled on the feed event
-  const openCaptured = (content: string) => setReport({ title: 'review captured from session', content })
+  // a captured review has no file behind it: the markdown itself travelled on the feed event, and
+  // the event's own wording is the title — a follow-up must not open under a review's name
+  const openCaptured = (content: string, title: string) => setReport({ title, content })
 
   const send = () => {
     if (!input.trim()) return
@@ -715,7 +716,7 @@ export const SessionPanel = ({
                           title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
                           onClick={(ev) =>
                             e.body
-                              ? openCaptured(e.body)
+                              ? openCaptured(e.body, e.text)
                               : e.filePath
                                 ? openReport(e.filePath)
                                 : e.sessionId
