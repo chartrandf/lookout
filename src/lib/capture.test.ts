@@ -8,6 +8,11 @@ const openHandles = new Set<string>()
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   SeekMode: { Start: 0, Current: 1, End: 2 },
+  stat: async (p: string) => {
+    const content = files.get(p)
+    if (content === undefined) throw new Error(`ENOENT ${p}`)
+    return { size: new TextEncoder().encode(content).length }
+  },
   open: async (p: string) => {
     const content = files.get(p)
     if (content === undefined) throw new Error(`ENOENT ${p}`)
@@ -198,5 +203,35 @@ describe('captureFromTranscript', () => {
   it('treats an unreadable transcript as nothing to capture', async () => {
     const { captureFromTranscript } = await load()
     expect(await captureFromTranscript('/missing.jsonl')).toEqual({ kind: 'none' })
+  })
+})
+
+describe('captureIfGrown', () => {
+  const write = (path: string, lines: string[]) => files.set(path, `${lines.join('\n')}\n`)
+
+  it('examines a transcript once, then skips it while it stands still', async () => {
+    const { captureIfGrown } = await load()
+    write('/s.jsonl', [userPrompt('/do-review 123'), assistant([text(REVIEW)])])
+    expect(await captureIfGrown('/s.jsonl')).toEqual({ kind: 'captured', body: REVIEW, ts: '2026-09-18T10:00:00.000Z' })
+    expect(await captureIfGrown('/s.jsonl')).toBeNull()
+  })
+
+  it('looks again once the session has written more', async () => {
+    const { captureIfGrown } = await load()
+    write('/s.jsonl', [userPrompt('/do-review 123'), assistant([text(REVIEW)])])
+    await captureIfGrown('/s.jsonl')
+    write('/s.jsonl', [
+      userPrompt('/do-review 123'),
+      assistant([text(REVIEW)]),
+      assistant([text(`${REVIEW} and more`)]),
+    ])
+    const again = await captureIfGrown('/s.jsonl')
+    if (again?.kind !== 'captured') throw new Error('expected a re-capture')
+    expect(again.body).toContain('and more')
+  })
+
+  it('is quiet about a transcript that vanished', async () => {
+    const { captureIfGrown } = await load()
+    expect(await captureIfGrown('/missing.jsonl')).toBeNull()
   })
 })

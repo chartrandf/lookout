@@ -97,6 +97,7 @@ const App = () => {
     prButtons: DEFAULT_PR_BUTTONS,
     animations: true,
     logging: false,
+    captureReviews: true,
   })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])

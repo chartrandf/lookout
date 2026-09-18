@@ -273,13 +273,13 @@ export const SessionPanel = ({
   const [approved, setApproved] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
-  const [report, setReport] = useState<{ path: string; content: string } | null>(null)
+  const [report, setReport] = useState<{ title: string; content: string } | null>(null)
   const [showRun, setShowRun] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const runRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true) // terminal tails the output until you scroll away from the bottom
   const autoTopRef = useRef(-1)
-  const reportRef = useRef<{ path: string; content: string } | null>(null)
+  const reportRef = useRef<{ title: string; content: string } | null>(null)
   reportRef.current = report
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: rebuild feed when switching task
@@ -328,12 +328,16 @@ export const SessionPanel = ({
   }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
+    const title = path.split('/').at(-1) ?? path
     try {
-      setReport({ path, content: await readTextFile(path) })
+      setReport({ title, content: await readTextFile(path) })
     } catch {
-      setReport({ path, content: '(could not read report file)' })
+      setReport({ title, content: '(could not read report file)' })
     }
   }
+
+  // a captured review has no file behind it: the markdown itself travelled on the feed event
+  const openCaptured = (content: string) => setReport({ title: 'review captured from session', content })
 
   const send = () => {
     if (!input.trim()) return
@@ -693,7 +697,7 @@ export const SessionPanel = ({
                     <>
                       <span className="mr-1.5">{e.icon}</span>
                       <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
-                      {e.filePath && ' ↗'}
+                      {(e.filePath || e.body) && ' ↗'}
                       {e.sessionId && ' 👻'}
                     </>
                   )
@@ -705,16 +709,18 @@ export const SessionPanel = ({
                   return (
                     // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
                     <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
-                      {e.filePath || e.url || e.sessionId ? (
+                      {e.filePath || e.body || e.url || e.sessionId ? (
                         <button
                           type="button"
                           title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
                           onClick={(ev) =>
-                            e.filePath
-                              ? openReport(e.filePath)
-                              : e.sessionId
-                                ? resumeSession(e.sessionId)
-                                : openPrWindow(e.url as string, task.repo, task.prNumber, ev.metaKey)
+                            e.body
+                              ? openCaptured(e.body)
+                              : e.filePath
+                                ? openReport(e.filePath)
+                                : e.sessionId
+                                  ? resumeSession(e.sessionId)
+                                  : openPrWindow(e.url as string, task.repo, task.prNumber, ev.metaKey)
                           }
                           className={`${bubbleClass} cursor-pointer text-left hover:underline`}
                         >
@@ -767,9 +773,7 @@ export const SessionPanel = ({
                 >
                   ← back
                 </button>
-                <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">
-                  {report.path.split('/').at(-1)}
-                </p>
+                <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.title}</p>
               </div>
               <Markdown
                 text={report.content}

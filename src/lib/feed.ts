@@ -1,5 +1,6 @@
 import type { PrState, ReviewFlavor, ReviewTask } from '../types'
 import { reviewFileTs } from './alerts'
+import { capturedReviewsForTask } from './db'
 import { fetchPrTimeline, type GhTimelineEvent } from './gh'
 import { logError, logInfo } from './log'
 import { isBot, reviewFlavor } from './prboard'
@@ -13,6 +14,7 @@ export type FeedEvent = {
   mine: boolean // my action -> right side of the chat, others -> left
   url?: string // opens in the PR window
   filePath?: string // opens the local review report
+  body?: string // a captured review's markdown — stored, with no file behind it (capture.ts)
   sessionId?: string // resumes the claude session
 }
 
@@ -125,6 +127,23 @@ export const buildFeed = async (
     const ts = reviewFileTs(f)
     if (ts) events.push({ ts, icon: '📄', actor: 'claude', text: 'review report created', filePath: f, mine: true })
   }
+
+  // Reviews Lookout recovered itself, for the flows that export no file. A branch that does export
+  // one is never captured (sync.ts), so a card cannot show the same review twice.
+  const captured = await capturedReviewsForTask(task.id).catch((e) => {
+    logError('feed', e, `captured reviews for ${task.id}`)
+    return []
+  })
+  for (const c of captured)
+    events.push({
+      ts: c.createdAt,
+      icon: '📄',
+      actor: 'claude',
+      text: 'review captured from session',
+      mine: true,
+      body: c.body ?? undefined,
+      filePath: c.filePath ?? undefined,
+    })
 
   // an empty timeline here is indistinguishable on screen from a PR with no activity, so say which
   // one it was — the gh error itself is already logged by gh.ts

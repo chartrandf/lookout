@@ -141,4 +141,5 @@ export type Config = {
   prButtons: ActionButton[]
   animations: boolean // motion effects (running glow/sheen); colors stay either way
   logging: boolean // write errors to the debug log file (see src/lib/log.ts)
+  captureReviews: boolean // recover a review from the session transcript when the skill exported no file
 }

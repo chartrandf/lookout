@@ -59,7 +59,15 @@ export const getConfig = async (): Promise<Config> => {
     // on by default: the failures worth catching (a gh call, a claude spawn) are intermittent, so a
     // switch you have to flip first would never be on when one happens. Rotated at 2 MB.
     logging: (await s.get<boolean>('logging')) ?? true,
+    // on by default: this exists for people who never knew a review could be missing from a card, so
+    // a switch they have to find first would leave the flow broken for exactly them.
+    captureReviews: (await s.get<boolean>('captureReviews')) ?? true,
   }
+}
+
+export const setCaptureReviews = async (captureReviews: boolean) => {
+  const s = await getStore()
+  await s.set('captureReviews', captureReviews)
 }
 
 export const setLogging = async (logging: boolean) => {

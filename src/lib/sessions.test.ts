@@ -125,8 +125,29 @@ describe('sessionsForBranch', () => {
         branch: 'directory-list-call-perf',
         ts: '2026-09-10T08:00:00Z',
         cwd: PERF,
+        path: `${dirFor(PERF)}/s2.jsonl`,
       },
     ])
+  })
+})
+
+describe('branch fallback', () => {
+  const reviewLine = (branch: string) =>
+    `{"timestamp":"2026-09-12T08:00:00Z","gitBranch":"${branch}","message":{"content":"<command-name>/review</command-name>"}}`
+
+  it('places a /review session in a clone by the transcript gitBranch', async () => {
+    files.set(`${dirFor(REPO)}/rev.jsonl`, [reviewLine('feature-x')])
+    const { sessionsForBranch } = await load()
+    const sessions = await sessionsForBranch(REPO, 'feature-x')
+    expect(sessions.map((s) => s.sessionId)).toEqual(['rev'])
+  })
+
+  it('leaves a non-review clone session unplaced, as before', async () => {
+    files.set(`${dirFor(REPO)}/other.jsonl`, [
+      `{"timestamp":"2026-09-12T08:00:00Z","gitBranch":"feature-x","message":{"content":"<command-name>/cp</command-name>"}}`,
+    ])
+    const { sessionsForBranch } = await load()
+    expect(await sessionsForBranch(REPO, 'feature-x')).toEqual([])
   })
 })
 

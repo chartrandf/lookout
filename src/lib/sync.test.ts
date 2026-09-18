@@ -8,6 +8,7 @@ vi.mock('./config', () => ({
 }))
 vi.mock('./db', () => ({
   allTasks: vi.fn(),
+  pruneCapturedReviews: vi.fn(),
   pruneRepos: vi.fn(),
   setActivity: vi.fn(),
   setLinks: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('./db', () => ({
   setSnoozed: vi.fn(),
   setStage: vi.fn(),
   syncAlerts: vi.fn(async () => []),
+  upsertCapturedReview: vi.fn(),
   upsertPr: vi.fn(),
 }))
 vi.mock('./gh', () => ({
@@ -27,13 +29,15 @@ vi.mock('./gh', () => ({
 }))
 vi.mock('./notify', () => ({ notify: vi.fn() }))
 vi.mock('./reviews', () => ({ scanReviewFiles: vi.fn() }))
-vi.mock('./sessions', () => ({ scanRepoSessions: vi.fn() }))
+vi.mock('./sessions', () => ({ scanRepoSessions: vi.fn(), scanRepoReviewSessions: vi.fn(async () => []) }))
+vi.mock('./capture', () => ({ captureIfGrown: vi.fn() }))
 
+import { captureIfGrown } from './capture'
 import { getConfig } from './config'
-import { allTasks, setPrState, setStage, upsertPr } from './db'
+import { allTasks, setPrState, setStage, upsertCapturedReview, upsertPr } from './db'
 import { fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { scanReviewFiles } from './reviews'
-import { scanRepoSessions } from './sessions'
+import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
 import { syncAll } from './sync'
 
 const REPO = 'owner/repo'
@@ -77,6 +81,7 @@ describe('syncAll — PR state reconciliation', () => {
       prButtons: [],
       animations: true,
       logging: false,
+      captureReviews: false,
     })
     // PR is no longer in the open list (it merged/closed on GitHub)
     vi.mocked(listOpenPrs).mockResolvedValue([])
@@ -144,6 +149,7 @@ describe('syncAll — a local scan that fails', () => {
       prButtons: [],
       animations: true,
       logging: false,
+      captureReviews: false,
     })
     vi.mocked(allTasks).mockResolvedValue([])
     vi.mocked(listOpenPrs).mockResolvedValue([theirPr])
@@ -168,5 +174,83 @@ describe('syncAll — a local scan that fails', () => {
     await syncAll()
 
     expect(upsertPr).toHaveBeenCalledWith(expect.objectContaining({ id: `${REPO}#2`, prNumber: 2 }))
+  })
+})
+
+describe('syncAll — capturing a review the session never exported', () => {
+  const openPr = {
+    number: 7,
+    title: 'A PR',
+    url: `https://github.com/${REPO}/pull/7`,
+    headRefName: 'feature',
+    author: { login: 'someone' },
+    createdAt: '2026-09-18T00:00:00Z',
+    isDraft: false,
+    reviewRequests: [],
+    latestReviews: [],
+  }
+  const session = {
+    sessionId: 's1',
+    command: 'review',
+    branch: 'feature',
+    ts: '2026-09-18T10:00:00Z',
+    cwd: '/clone',
+    path: '/home/.claude/projects/-clone/s1.jsonl',
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getConfig).mockResolvedValue({
+      githubUser: 'me',
+      repos: [{ repo: REPO, path: '/clone' }],
+      githubName: 'Me Name',
+      reviewButtons: [],
+      prButtons: [],
+      animations: true,
+      logging: false,
+      captureReviews: true,
+    })
+    vi.mocked(allTasks).mockResolvedValue([])
+    vi.mocked(listOpenPrs).mockResolvedValue([openPr] as unknown as Awaited<ReturnType<typeof listOpenPrs>>)
+    vi.mocked(listCommentedByMe).mockResolvedValue(new Set())
+    vi.mocked(scanRepoSessions).mockResolvedValue(new Map())
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map())
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([session])
+    vi.mocked(captureIfGrown).mockResolvedValue({ kind: 'captured', body: 'the review', ts: '2026-09-18T10:05:00Z' })
+  })
+
+  it('stores the captured review against the card', async () => {
+    await syncAll()
+    expect(upsertCapturedReview).toHaveBeenCalledWith({
+      id: 's1',
+      taskId: `${REPO}#7`,
+      branch: 'feature',
+      source: 'sync',
+      sessionId: 's1',
+      filePath: null,
+      body: 'the review',
+      createdAt: '2026-09-18T10:05:00Z',
+    })
+  })
+
+  it('leaves a branch alone when the skill already exported a report', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    await syncAll()
+    expect(captureIfGrown).not.toHaveBeenCalled()
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('does nothing at all when capture is switched off', async () => {
+    const config = await vi.mocked(getConfig)()
+    vi.mocked(getConfig).mockResolvedValue({ ...config, captureReviews: false })
+    await syncAll()
+    expect(scanRepoReviewSessions).not.toHaveBeenCalled()
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('ignores a session whose branch has no PR on the board', async () => {
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, branch: 'some-other-branch' }])
+    await syncAll()
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,4 @@
-import { open, SeekMode } from '@tauri-apps/plugin-fs'
+import { open, SeekMode, stat } from '@tauri-apps/plugin-fs'
 import { errText, logWarn } from './log'
 
 // A review that only ever existed in a session transcript. The shipped default review button runs
@@ -127,4 +127,24 @@ export const captureFromTranscript = async (filePath: string, maxBytes = TAIL_BY
   if (!turn || turn.body.length < MIN_BODY) return { kind: 'none' }
   const body = turn.body.length > MAX_BODY ? `${turn.body.slice(0, MAX_BODY)}\n\n_(truncated by Lookout)_` : turn.body
   return { kind: 'captured', body, ts: turn.ts }
+}
+
+// A sync pass runs every ~28 s and a finished session never changes again, so a tail read per pass
+// per session would be waste. Size is the cheap "did anything happen" signal: a grown transcript is
+// read again (the session continued, the verdict may have moved), a still one is skipped. The map
+// lives for the run only — after a restart every session is examined once more, which costs one
+// pass and keeps the app from having to trust anything it wrote earlier.
+const examined = new Map<string, number>() // transcript path -> size at the last examination
+
+export const captureIfGrown = async (filePath: string): Promise<CaptureResult | null> => {
+  let size: number
+  try {
+    size = (await stat(filePath)).size
+  } catch (e) {
+    logWarn('capture', `cannot stat ${filePath}: ${errText(e)}`)
+    return null
+  }
+  if (examined.get(filePath) === size) return null
+  examined.set(filePath, size)
+  return captureFromTranscript(filePath)
 }

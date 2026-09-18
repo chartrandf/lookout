@@ -1,8 +1,10 @@
 import type { Alert, ReviewTask } from '../types'
 import { type AlertScope, myLastWordAt, TASK_ALERT_KINDS, taskAlerts } from './alerts'
+import { captureIfGrown } from './capture'
 import { getConfig, setGithubName, setGithubUser } from './config'
 import {
   allTasks,
+  pruneCapturedReviews,
   pruneRepos,
   setActivity,
   setLinks,
@@ -10,6 +12,7 @@ import {
   setSnoozed,
   setStage,
   syncAlerts,
+  upsertCapturedReview,
   upsertPr,
 } from './db'
 import { fetchLogin, fetchName, fetchPrExchange, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
@@ -17,11 +20,41 @@ import { logError } from './log'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { approvedByMe, deriveStage } from './reviewstage'
-import { scanRepoSessions } from './sessions'
+import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
 import { BOARD_STAGES } from './stages'
 
 // Stages whose PRs we actively watch for new comments / CI: everything on the board bar Done.
 const ACTIVE_STAGES = new Set<string>(BOARD_STAGES.filter((s) => s !== 'done'))
+
+const CAPTURE_DAYS = 30 // a month of history, then the row goes
+
+// Reviews a session printed but never exported. Skipped for a branch that already has a report file:
+// that flow works, and capturing it again would put the same review on the card twice — the point is
+// to patch the broken flow only. Display only, so nothing here touches a stage or an alert.
+const captureReviews = async (
+  repo: string,
+  repoPath: string,
+  prByBranch: Map<string, number>,
+  filesByBranch: Map<string, string[]>,
+) => {
+  for (const s of await scanRepoReviewSessions(repoPath)) {
+    const prNumber = prByBranch.get(s.branch)
+    if (prNumber === undefined) continue // a session on a branch with no PR on the board
+    if ((filesByBranch.get(s.branch) ?? filesByBranch.get(s.branch.replace(/\//g, '-')) ?? []).length) continue
+    const result = await captureIfGrown(s.path)
+    if (result?.kind !== 'captured') continue
+    await upsertCapturedReview({
+      id: s.sessionId,
+      taskId: `${repo}#${prNumber}`,
+      branch: s.branch,
+      source: 'sync',
+      sessionId: s.sessionId,
+      filePath: null,
+      body: result.body,
+      createdAt: result.ts ?? new Date().toISOString(),
+    })
+  }
+}
 
 // One full sync pass: poll gh, upsert PRs, link sessions/review files, advance stages, auto-clear merged.
 export const syncAll = async (): Promise<ReviewTask[]> => {
@@ -39,6 +72,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
 
   // drop tasks for repos no longer watched so removed projects vanish from Discovery/board
   await pruneRepos(config.repos.map((r) => r.repo))
+  await pruneCapturedReviews(new Date(Date.now() - CAPTURE_DAYS * 86400_000).toISOString())
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
   const openIds = new Set<string>()
@@ -68,6 +102,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       }),
     ])
     polledRepos.add(repo)
+    const boardedPrs = new Map<string, number>() // branch -> PR number, for the capture pass below
     for (const pr of prs) {
       if (pr.author.login === me) continue // never track my own PRs
       const id = `${repo}#${pr.number}`
@@ -95,7 +130,12 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       // below refines that: an approval of mine lands it in Done)
       const engaged = pr.latestReviews.some((r) => r.author.login === me) || commentedByMe.has(pr.number)
       if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered') await setStage(id, 'reviewed')
+      boardedPrs.set(pr.headRefName, pr.number)
     }
+    if (config.captureReviews)
+      await captureReviews(repo, path, boardedPrs, reviewsByBranch).catch((e) => {
+        logError('sync', e, `review capture ${repo}`) // costs captures only, never the repo's PRs
+      })
   }
 
   // Advance stages + auto-clear
