@@ -44,6 +44,7 @@ import {
   allTasks,
   capturedCliTaskIds,
   deleteCapturedReview,
+  pruneCapturedReviews,
   setPrState,
   setStage,
   upsertCapturedReview,
@@ -232,6 +233,7 @@ describe('syncAll — capturing a review the session never exported', () => {
     vi.mocked(scanReviewFiles).mockResolvedValue(new Map())
     vi.mocked(scanRepoReviewSessions).mockResolvedValue([session])
     vi.mocked(capturedCliTaskIds).mockResolvedValue(new Set())
+    vi.mocked(pruneCapturedReviews).mockResolvedValue(undefined)
     vi.mocked(captureIfGrown).mockResolvedValue({ kind: 'captured', body: 'the review', ts: '2026-09-18T10:05:00Z' })
   })
 
@@ -277,6 +279,12 @@ describe('syncAll — capturing a review the session never exported', () => {
     expect(captureIfGrown).not.toHaveBeenCalled()
     expect(upsertCapturedReview).not.toHaveBeenCalled()
     expect(deleteCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('does not let a failing retention sweep take the pass down with it', async () => {
+    vi.mocked(pruneCapturedReviews).mockRejectedValue(new Error('database is locked'))
+    await expect(syncAll()).resolves.toBeDefined()
+    expect(upsertPr).toHaveBeenCalled()
   })
 
   it('does nothing at all when capture is switched off', async () => {

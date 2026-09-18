@@ -95,7 +95,13 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
 
   // drop tasks for repos no longer watched so removed projects vanish from Discovery/board
   await pruneRepos(config.repos.map((r) => r.repo))
-  await pruneCapturedReviews(new Date(Date.now() - CAPTURE_DAYS * 86400_000).toISOString())
+  // Guarded like every other local step, and for the same reason the comments below give: this runs
+  // before a single PR is upserted, so an unguarded throw here (a locked database, a table an older
+  // build never migrated) would stop the board updating at all, every pass, for a retention sweep.
+  if (config.captureReviews)
+    await pruneCapturedReviews(new Date(Date.now() - CAPTURE_DAYS * 86400_000).toISOString()).catch((e) =>
+      logError('sync', e, 'prune captured reviews'),
+    )
 
   const known = new Map((await allTasks()).map((t) => [t.id, t]))
   const openIds = new Set<string>()
