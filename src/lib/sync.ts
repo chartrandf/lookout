@@ -35,21 +35,26 @@ const captureReviews = async (
   repo: string,
   repoPath: string,
   prByBranch: Map<string, number>,
+  branchByPr: Map<number, string>,
   filesByBranch: Map<string, string[]>,
 ) => {
   for (const s of await scanRepoReviewSessions(repoPath)) {
     const kind = captureKind(s)
     if (!kind) continue
-    const prNumber = prByBranch.get(s.branch)
+    // the session names either the branch it ran on or the PR it was asked to review; a PR id is
+    // resolved to the card's own branch, never to whatever checkout the run happened to sit in
+    const branch = s.branch ?? (s.prNumber === null ? null : (branchByPr.get(s.prNumber) ?? null))
+    if (!branch) continue
+    const prNumber = prByBranch.get(branch)
     if (prNumber === undefined) continue // a session on a branch with no PR on the board
-    if ((filesByBranch.get(s.branch) ?? filesByBranch.get(s.branch.replace(/\//g, '-')) ?? []).length) continue
+    if ((filesByBranch.get(branch) ?? filesByBranch.get(branch.replace(/\//g, '-')) ?? []).length) continue
     const result = await captureIfGrown(s.path)
     if (result?.kind !== 'captured') continue
     await upsertCapturedReview({
       id: s.sessionId,
       kind,
       taskId: `${repo}#${prNumber}`,
-      branch: s.branch,
+      branch,
       source: 'sync',
       sessionId: s.sessionId,
       filePath: null,
@@ -106,6 +111,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     ])
     polledRepos.add(repo)
     const boardedPrs = new Map<string, number>() // branch -> PR number, for the capture pass below
+    const boardedBranches = new Map<number, string>() // …and back, for a session that named a PR id
     for (const pr of prs) {
       if (pr.author.login === me) continue // never track my own PRs
       const id = `${repo}#${pr.number}`
@@ -134,9 +140,10 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       const engaged = pr.latestReviews.some((r) => r.author.login === me) || commentedByMe.has(pr.number)
       if (engaged && (known.get(id)?.stage ?? 'discovered') === 'discovered') await setStage(id, 'reviewed')
       boardedPrs.set(pr.headRefName, pr.number)
+      boardedBranches.set(pr.number, pr.headRefName)
     }
     if (config.captureReviews)
-      await captureReviews(repo, path, boardedPrs, reviewsByBranch).catch((e) => {
+      await captureReviews(repo, path, boardedPrs, boardedBranches, reviewsByBranch).catch((e) => {
         logError('sync', e, `review capture ${repo}`) // costs captures only, never the repo's PRs
       })
   }

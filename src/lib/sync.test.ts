@@ -196,7 +196,8 @@ describe('syncAll — capturing a review the session never exported', () => {
   const session = {
     sessionId: 's1',
     command: 'review',
-    branch: 'feature',
+    branch: 'feature' as string | null,
+    prNumber: null as number | null,
     ts: '2026-09-18T10:00:00Z',
     cwd: '/clone',
     path: '/home/.claude/projects/-clone/s1.jsonl',
@@ -257,6 +258,20 @@ describe('syncAll — capturing a review the session never exported', () => {
     vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, command: 'do-followup' }])
     await syncAll()
     expect(upsertCapturedReview).toHaveBeenCalledWith(expect.objectContaining({ kind: 'followup' }))
+  })
+
+  it('places a session that named a PR id on that card, with the card own branch', async () => {
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, branch: null, prNumber: 7 }])
+    await syncAll()
+    expect(upsertCapturedReview).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: `${REPO}#7`, branch: 'feature' }),
+    )
+  })
+
+  it('ignores a session whose PR is not on the board', async () => {
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, branch: null, prNumber: 999 }])
+    await syncAll()
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
   })
 
   it('ignores a session whose branch has no PR on the board', async () => {
