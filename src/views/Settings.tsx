@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { homeDir } from '@tauri-apps/api/path'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
@@ -31,6 +32,15 @@ type Props = {
   onSaveLogging: (on: boolean) => void
   onSaveCaptureReviews: (on: boolean) => void
 }
+
+// What to paste into ~/.claude/settings.json for instant capture. Lookout does not write that file
+// itself: it is the user's own config, shared with every other tool, and a merge gone wrong there is
+// worse than a copy-paste.
+const HOOK_SNIPPET = JSON.stringify(
+  { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'lookout review capture --hook', timeout: 10 }] }] } },
+  null,
+  2,
+)
 
 // one settings row: label, hint, and the pill switch on the right
 const ToggleRow = ({
@@ -393,6 +403,7 @@ export const Settings = ({
   const [version, setVersion] = useState('')
   const [logFile, setLogFile] = useState('')
   const [captured, setCaptured] = useState(0)
+  const [copiedHook, setCopiedHook] = useState(false)
 
   useEffect(() => {
     capturedReviewCount()
@@ -616,21 +627,41 @@ export const Settings = ({
         on={config.captureReviews}
         onToggle={() => onSaveCaptureReviews(!config.captureReviews)}
       >
-        <div className="flex items-center gap-2 border-t border-deck-800 pt-2">
-          <span className="min-w-0 flex-1 truncate text-xs text-deck-500">
-            {captured === 0 ? 'nothing captured yet' : `${captured} review${captured > 1 ? 's' : ''} stored`}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              clearCapturedReviews()
-                .then(() => setCaptured(0))
-                .catch(() => {})
-            }
-            className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
-          >
-            Clear
-          </button>
+        <div className="flex flex-col gap-2 border-t border-deck-800 pt-2">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-deck-500">
+              {captured === 0 ? 'nothing captured yet' : `${captured} review${captured > 1 ? 's' : ''} stored`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                writeText(HOOK_SNIPPET)
+                  .then(() => setCopiedHook(true))
+                  .catch(() => {})
+                setTimeout(() => setCopiedHook(false), 1500)
+              }}
+              className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
+            >
+              {copiedHook ? 'copied ✓' : 'Copy hook'}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                clearCapturedReviews()
+                  .then(() => setCaptured(0))
+                  .catch(() => {})
+              }
+              className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
+            >
+              Clear
+            </button>
+          </div>
+          {/* the sync pass already captures on its own; the hook is only about it being instant */}
+          <p className="text-xs text-deck-500">
+            A review shows up on the next sync. To have it land the moment a session stops, paste the copied Stop hook
+            into <span className="font-mono">~/.claude/settings.json</span> (needs the{' '}
+            <span className="font-mono">lookout</span> CLI on your PATH).
+          </p>
         </div>
       </ToggleRow>
 

@@ -68,6 +68,35 @@ deps from scratch crashes Arborist with `Cannot read properties of null (reading
 5. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
 6. **Worktrees** — you only ever register the clone path. A branch checked out in a linked worktree is followed there: actions run in that worktree, its sessions and `AI_TASKS/code-review/` reports show up on the card, and resume opens the directory the session actually ran in.
 
+## Reviews with no report file
+
+A review only reaches a card if something wrote it down. My own `/do-review` exports
+`AI_TASKS/code-review/<stamp>-<branch>.md`, which the app scans — but the default review button runs
+Claude Code's own `/review`, which prints its verdict and saves nothing. Those cards used to show a
+session and no review.
+
+Lookout now reads the review back out of the session transcript itself (the final assistant turn) and
+keeps it for 30 days. It is display only: a captured review never moves a card and never raises an
+alert. **Settings → Capture reviews** has the switch, the count and a Clear button.
+
+A branch whose reviews *are* exported to `AI_TASKS/code-review/` is left alone — the file is used and
+nothing is captured, so a review can't appear twice. A session that wrote its own report is skipped
+for the same reason.
+
+Capture happens on the next sync. For it to land the moment a session stops, copy the Stop hook from
+Settings into `~/.claude/settings.json`:
+
+```json
+{ "hooks": { "Stop": [{ "hooks": [{ "type": "command", "command": "lookout review capture --hook", "timeout": 10 }] }] } }
+```
+
+A skill can also hand a review over outright, which always wins over what Lookout guessed:
+
+```bash
+lookout review report --file AI_TASKS/reviews/pr-2305.md   # a report file living anywhere
+claude -p "…" | lookout review report --stdin              # or the text itself
+```
+
 ## `lookout` CLI
 
 The Homebrew cask puts a `lookout` command on your PATH — `brew install --cask lookout` symlinks it,
@@ -91,6 +120,8 @@ lookout review list --stage "in review"    # what's in a column
 lookout review show --pr 2305              # one card, or omit the selector inside a repo checkout
 lookout review reviewed                    # the PR for this repo + branch → Reviewed
 lookout review comments-pushed --count 3   # what /do-review calls after `gh api .../reviews`
+lookout review report --file report.md     # register a report your skill wrote, wherever it wrote it
+lookout review capture --hook              # Stop-hook entry point: payload on stdin, always silent
 
 lookout mine list --column ready           # my PRs that are approved and just need a CI check
 lookout mine show                          # my PR for this repo + branch
