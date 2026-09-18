@@ -12,6 +12,7 @@ import { avatarUrl } from '../lib/avatar'
 import { CONDITION_FIELDS } from '../lib/buttons'
 import { listSlashCommands } from '../lib/commands'
 import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
+import { capturedReviewCount, clearCapturedReviews } from '../lib/db'
 import { allowPath } from '../lib/fsscope'
 import { repoFromPath } from '../lib/gh'
 import { clearLog, logPath } from '../lib/log'
@@ -28,6 +29,7 @@ type Props = {
   onSavePrButtons: (buttons: ActionButton[]) => void
   onSaveAnimations: (on: boolean) => void
   onSaveLogging: (on: boolean) => void
+  onSaveCaptureReviews: (on: boolean) => void
 }
 
 // one settings row: label, hint, and the pill switch on the right
@@ -364,6 +366,7 @@ export const Settings = ({
   onSavePrButtons,
   onSaveAnimations,
   onSaveLogging,
+  onSaveCaptureReviews,
 }: Props) => {
   const [path, setPath] = useState('')
   const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
@@ -389,6 +392,13 @@ export const Settings = ({
   const [autostart, setAutostart] = useState(false)
   const [version, setVersion] = useState('')
   const [logFile, setLogFile] = useState('')
+  const [captured, setCaptured] = useState(0)
+
+  useEffect(() => {
+    capturedReviewCount()
+      .then(setCaptured)
+      .catch(() => {}) // browser preview (no database): the count just stays at 0
+  }, [])
 
   useEffect(() => {
     isEnabled()
@@ -598,6 +608,30 @@ export const Settings = ({
             </button>
           </div>
         )}
+      </ToggleRow>
+
+      <ToggleRow
+        label="Capture reviews"
+        hint="Keep the review a session printed but never saved, so it shows on the card. Skipped for a repo whose review command already writes AI_TASKS/code-review — that report is used instead. A month is kept."
+        on={config.captureReviews}
+        onToggle={() => onSaveCaptureReviews(!config.captureReviews)}
+      >
+        <div className="flex items-center gap-2 border-t border-deck-800 pt-2">
+          <span className="min-w-0 flex-1 truncate text-xs text-deck-500">
+            {captured === 0 ? 'nothing captured yet' : `${captured} review${captured > 1 ? 's' : ''} stored`}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              clearCapturedReviews()
+                .then(() => setCaptured(0))
+                .catch(() => {})
+            }
+            className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
+          >
+            Clear
+          </button>
+        </div>
       </ToggleRow>
 
       {import.meta.env.DEV && (

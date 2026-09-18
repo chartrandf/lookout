@@ -10,6 +10,7 @@ import {
   DEFAULT_REVIEW_BUTTONS,
   getConfig,
   setAnimations,
+  setCaptureReviews,
   setLogging,
   setPrButtons,
   setRepos,
@@ -652,6 +653,10 @@ const App = () => {
             onSaveLogging={async (on) => {
               await setLogging(on)
               setLogEnabled(on) // takes effect on the next line written, not on the next sync
+              setConfig(await getConfig())
+            }}
+            onSaveCaptureReviews={async (on) => {
+              await setCaptureReviews(on)
               setConfig(await getConfig())
             }}
           />
