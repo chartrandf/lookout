@@ -4,6 +4,8 @@ import { captureIfGrown } from './capture'
 import { getConfig, setGithubName, setGithubUser } from './config'
 import {
   allTasks,
+  capturedCliTaskIds,
+  deleteCapturedReview,
   pruneCapturedReviews,
   pruneRepos,
   setActivity,
@@ -38,6 +40,7 @@ const captureReviews = async (
   branchByPr: Map<number, string>,
   filesByBranch: Map<string, string[]>,
 ) => {
+  const registered = await capturedCliTaskIds()
   for (const s of await scanRepoReviewSessions(repoPath)) {
     const kind = captureKind(s)
     if (!kind) continue
@@ -47,13 +50,25 @@ const captureReviews = async (
     if (!branch) continue
     const prNumber = prByBranch.get(branch)
     if (prNumber === undefined) continue // a session on a branch with no PR on the board
-    if ((filesByBranch.get(branch) ?? filesByBranch.get(branch.replace(/\//g, '-')) ?? []).length) continue
+    const taskId = `${repo}#${prNumber}`
+    if (registered.has(taskId)) continue // a skill handed this card a review itself
+    // The branch exports its own reports after all — including when the session in flight wrote one
+    // since the last pass. Whatever was captured before that was visible has to go, or the card
+    // shows the guess next to the report for the next 30 days.
+    if ((filesByBranch.get(branch) ?? filesByBranch.get(branch.replace(/\//g, '-')) ?? []).length) {
+      await deleteCapturedReview(s.sessionId)
+      continue
+    }
     const result = await captureIfGrown(s.path)
+    if (result?.kind === 'exported') {
+      await deleteCapturedReview(s.sessionId)
+      continue
+    }
     if (result?.kind !== 'captured') continue
     await upsertCapturedReview({
       id: s.sessionId,
       kind,
-      taskId: `${repo}#${prNumber}`,
+      taskId,
       branch,
       source: 'sync',
       sessionId: s.sessionId,

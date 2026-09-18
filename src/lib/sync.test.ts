@@ -8,6 +8,8 @@ vi.mock('./config', () => ({
 }))
 vi.mock('./db', () => ({
   allTasks: vi.fn(),
+  capturedCliTaskIds: vi.fn(async () => new Set<string>()),
+  deleteCapturedReview: vi.fn(),
   pruneCapturedReviews: vi.fn(),
   pruneRepos: vi.fn(),
   setActivity: vi.fn(),
@@ -38,7 +40,15 @@ vi.mock('./capture', () => ({ captureIfGrown: vi.fn() }))
 
 import { captureIfGrown } from './capture'
 import { getConfig } from './config'
-import { allTasks, setPrState, setStage, upsertCapturedReview, upsertPr } from './db'
+import {
+  allTasks,
+  capturedCliTaskIds,
+  deleteCapturedReview,
+  setPrState,
+  setStage,
+  upsertCapturedReview,
+  upsertPr,
+} from './db'
 import { fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { scanReviewFiles } from './reviews'
 import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
@@ -221,6 +231,7 @@ describe('syncAll — capturing a review the session never exported', () => {
     vi.mocked(scanRepoSessions).mockResolvedValue(new Map())
     vi.mocked(scanReviewFiles).mockResolvedValue(new Map())
     vi.mocked(scanRepoReviewSessions).mockResolvedValue([session])
+    vi.mocked(capturedCliTaskIds).mockResolvedValue(new Set())
     vi.mocked(captureIfGrown).mockResolvedValue({ kind: 'captured', body: 'the review', ts: '2026-09-18T10:05:00Z' })
   })
 
@@ -244,6 +255,28 @@ describe('syncAll — capturing a review the session never exported', () => {
     await syncAll()
     expect(captureIfGrown).not.toHaveBeenCalled()
     expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  // captured mid-run, before the session got round to writing its report
+  it('drops a capture once the branch turns out to export reports', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    await syncAll()
+    expect(deleteCapturedReview).toHaveBeenCalledWith('s1')
+  })
+
+  it('drops a capture once the transcript shows the session exported one', async () => {
+    vi.mocked(captureIfGrown).mockResolvedValue({ kind: 'exported' })
+    await syncAll()
+    expect(deleteCapturedReview).toHaveBeenCalledWith('s1')
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('stands aside for a card a skill registered a review for', async () => {
+    vi.mocked(capturedCliTaskIds).mockResolvedValue(new Set([`${REPO}#7`]))
+    await syncAll()
+    expect(captureIfGrown).not.toHaveBeenCalled()
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+    expect(deleteCapturedReview).not.toHaveBeenCalled()
   })
 
   it('does nothing at all when capture is switched off', async () => {

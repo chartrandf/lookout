@@ -383,11 +383,21 @@ export const capturedReviewsForTask = async (taskId: string): Promise<CapturedRe
   return rows.map(toCapturedReview)
 }
 
-// Which sessions already have a row, so a sync pass can skip re-reading their transcripts.
-export const capturedReviewIds = async (): Promise<Set<string>> => {
+// Cards a skill registered a review for outright. Lookout does not guess alongside one: without
+// this the two land under different ids — `cli:<card>` or `file:<path>` against the session id — and
+// the card shows the same review twice.
+export const capturedCliTaskIds = async (): Promise<Set<string>> => {
   const d = await getDb()
-  const rows = await d.select<{ id: string }[]>('SELECT id FROM captured_reviews')
-  return new Set(rows.map((r) => r.id))
+  const rows = await d.select<{ task_id: string }[]>("SELECT task_id FROM captured_reviews WHERE source = 'cli'")
+  return new Set(rows.map((r) => r.task_id))
+}
+
+// A capture stops being true: the session went on to export its own report, or the branch turned out
+// to have report files after all. Nothing else deletes a row before its 30 days are up, so without
+// this the card keeps showing both the guess and the real report.
+export const deleteCapturedReview = async (id: string) => {
+  const d = await getDb()
+  await d.execute('DELETE FROM captured_reviews WHERE id = $1', [id])
 }
 
 export const capturedReviewCount = async (): Promise<number> => {
