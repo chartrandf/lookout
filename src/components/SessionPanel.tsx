@@ -276,6 +276,9 @@ export const SessionPanel = ({
   const [report, setReport] = useState<{ path: string; content: string } | null>(null)
   const [showRun, setShowRun] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const runRef = useRef<HTMLDivElement>(null)
+  const followRef = useRef(true) // terminal tails the output until you scroll away from the bottom
+  const autoTopRef = useRef(-1)
   const reportRef = useRef<{ path: string; content: string } | null>(null)
   reportRef.current = report
 
@@ -293,6 +296,29 @@ export const SessionPanel = ({
   useEffect(() => {
     if (feed) scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
   }, [feed])
+
+  // a fresh run (or another card) starts tailing again
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-arm triggers only
+  useEffect(() => {
+    followRef.current = true
+  }, [run, task.id])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the growing log
+  useEffect(() => {
+    const el = runRef.current
+    if (!el || !followRef.current) return
+    el.scrollTop = el.scrollHeight
+    autoTopRef.current = el.scrollTop
+  }, [run?.lines.length, showRun])
+
+  // scrolling up stops the tail, snapping back to the bottom starts it again
+  const onRunScroll = () => {
+    const el = runRef.current
+    if (!el) return
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 16) followRef.current = true
+    // ignore the echo of our own scroll: lines appended since then grew scrollHeight, not scrollTop
+    else if (el.scrollTop !== autoTopRef.current) followRef.current = false
+  }
 
   // refresh history when a run finishes or a new report gets linked (no manual ↻ needed)
   const runIdle = run?.status === 'awaiting-input' || run?.status === 'closed'
@@ -590,7 +616,11 @@ export const SessionPanel = ({
                   )}
                 </div>
                 {showRun && (
-                  <div className="flex max-h-72 flex-col gap-2 overflow-y-auto px-3 pb-3 text-sm">
+                  <div
+                    ref={runRef}
+                    onScroll={onRunScroll}
+                    className="flex max-h-72 flex-col gap-2 overflow-y-auto px-3 pb-3 text-sm"
+                  >
                     {groupLines(run.lines).map((group, gi) => {
                       const openLink = (url: string, external: boolean) =>
                         openPrWindow(url, task.repo, task.prNumber, external)
