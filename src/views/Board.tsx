@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame, type CardMenu } from '../components/CardFrame'
+import { CiFailBadge, CiNeutralBadge, ConflictsBadge } from '../components/CiFailBadge'
 import { type BoardFilter, emptyFilter, matchesFilter, openAuthorOptions, openRepoOptions } from '../lib/filters'
 import type { Run } from '../lib/runs'
 import { STAGE_LABEL } from '../lib/stages'
@@ -74,19 +75,6 @@ const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd, menu }:
         {run?.status === 'running' && (
           <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
         )}
-        {run?.status === 'awaiting-input' && (
-          <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">awaiting input</span>
-        )}
-        {t.sessionIds.length > 0 && (
-          <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.sessionIds.join('\n')}>
-            {t.sessionIds.length} session{t.sessionIds.length > 1 ? 's' : ''}
-          </span>
-        )}
-        {t.reviewFiles.length > 0 && (
-          <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300" title={t.reviewFiles.join('\n')}>
-            {t.reviewFiles.length} review{t.reviewFiles.length > 1 ? 's' : ''}
-          </span>
-        )}
         {t.followupSummary && (
           <span className="rounded bg-deck-700 px-1 py-0.5">
             🚨{t.followupSummary.pending} ⚠️{t.followupSummary.partial} ✅{t.followupSummary.addressed}
@@ -105,8 +93,11 @@ const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd, menu }:
             💬 new
           </button>
         )}
-        {t.ciState === 'fail' && <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>}
+        {t.ciState === 'pass' && <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">✓ CI</span>}
+        {t.ciState === 'fail' && <CiFailBadge checks={t.ciChecks} />}
         {t.ciState === 'pending' && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">CI …</span>}
+        {t.ciState === 'neutral' && <CiNeutralBadge />}
+        {t.ciState === null && t.conflicts && <ConflictsBadge />}
       </>
     )}
   </CardFrame>

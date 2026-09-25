@@ -1,15 +1,38 @@
-import type { CiState, MyPr, PrColumn, PrState, ReviewFlavor } from '../types'
+import type { CiChecks, CiState, MyPr, PrColumn, PrState, ReviewFlavor } from '../types'
 import type { GhMyPr } from './gh'
 
-// Collapse a statusCheckRollup array into a single CI verdict (fail > pending > pass; empty = null).
+type Check = { conclusion?: string; status?: string; state?: string }
+
+const checkState = (c: Check) => (c.conclusion || c.state || c.status || '').toUpperCase()
+const isFailure = (s: string) => s === 'FAILURE' || s === 'ERROR'
+
+// The checks that actually ran. A neutral finish (a bot like Bugbot with nothing to say) or a skipped
+// job says nothing about whether the code passes — and a PR with merge conflicts often has nothing
+// else, because its real CI never started. Counting those as green showed ✓ CI on a PR that ran none.
+const ran = (checks: Check[]) => checks.filter((c) => !['NEUTRAL', 'SKIPPED'].includes(checkState(c)))
+
+// Collapse a statusCheckRollup array into a single CI verdict (fail > pending > pass). No checks at
+// all = null; checks that all finished neutral or skipped = 'neutral' (shown as a gray "~ CI").
 // Pure so both the classifier and gh.ts (fetchPrExchange) share one source of truth.
-export const rollupToCiState = (checks: { conclusion?: string; status?: string; state?: string }[]): CiState => {
+export const rollupToCiState = (checks: Check[]): CiState => {
   if (!checks.length) return null
-  const states = checks.map((c) => (c.conclusion || c.state || c.status || '').toUpperCase())
-  if (states.some((s) => s === 'FAILURE' || s === 'ERROR')) return 'fail'
+  const states = ran(checks).map(checkState)
+  if (!states.length) return 'neutral'
+  if (states.some(isFailure)) return 'fail'
   if (states.some((s) => s === '' || s === 'PENDING' || s === 'IN_PROGRESS' || s === 'QUEUED')) return 'pending'
   return 'pass'
 }
+
+// Failed checks out of the ones that ran, for the "✗ CI 4/7" badge; null when none ran.
+export const ciChecks = (checks: Check[]): CiChecks => {
+  const real = ran(checks)
+  if (!real.length) return null
+  return { failed: real.filter((c) => isFailure(checkState(c))).length, total: real.length }
+}
+
+// GitHub's `mergeable`: CONFLICTING is the only answer that means "fix the branch first" (UNKNOWN is
+// GitHub still computing it, not a conflict)
+export const hasConflicts = (mergeable?: string | null): boolean => mergeable === 'CONFLICTING'
 
 // Every PR board column, in order, with the label the UI shows for it. Single source of truth for the
 // board's headers and the Settings action editor.
@@ -94,6 +117,8 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
     humanReview,
     botReview,
     ciState: rollupToCiState(raw.statusCheckRollup ?? []),
+    ciChecks: ciChecks(raw.statusCheckRollup ?? []),
+    conflicts: hasConflicts(raw.mergeable),
     doneAt: raw.mergedAt ?? raw.closedAt ?? null,
     snoozed: false, // syncMyPrs carries a stored snooze over
   }

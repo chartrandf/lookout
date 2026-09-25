@@ -34,6 +34,7 @@ const CI_VALUES: ConditionValue[] = [
   { value: 'pass', label: 'Passing' },
   { value: 'fail', label: 'Failing' },
   { value: 'pending', label: 'Pending' },
+  { value: 'neutral', label: 'Nothing ran' },
   { value: 'none', label: 'No CI' },
 ]
 const PR_STATE_VALUES: ConditionValue[] = [

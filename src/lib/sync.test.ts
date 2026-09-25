@@ -81,6 +81,8 @@ const task = (overrides: Partial<ReviewTask>): ReviewTask => ({
   followupSummary: null,
   activityCount: null,
   ciState: null,
+  ciChecks: null,
+  conflicts: false,
   hasNewActivity: false,
   snoozed: false,
   seen: false,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { GhMyPr } from './gh'
-import { isBoardable, isBot, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
+import { ciChecks, isBoardable, isBot, reviewFlavor, rollupToCiState, toMyPr } from './prboard'
 
 const REPO = 'owner/repo'
 
@@ -54,6 +54,11 @@ describe('rollupToCiState', () => {
     expect(rollupToCiState([{ conclusion: 'SUCCESS' }, { status: 'IN_PROGRESS' }])).toBe('pending'))
   it('pass when all checks succeeded', () =>
     expect(rollupToCiState([{ conclusion: 'SUCCESS' }, { state: 'SUCCESS' }])).toBe('pass'))
+  // a bot like Bugbot finishing NEUTRAL, or a skipped job, says nothing about whether the code passes
+  it('neutral when every check is neutral or skipped: checks exist, nothing actually ran', () =>
+    expect(rollupToCiState([{ conclusion: 'NEUTRAL' }, { conclusion: 'SKIPPED' }])).toBe('neutral'))
+  it('ignores neutral and skipped checks next to real ones', () =>
+    expect(rollupToCiState([{ conclusion: 'NEUTRAL' }, { conclusion: 'SUCCESS' }])).toBe('pass'))
 })
 
 describe('classifyColumn — column per PR state', () => {
@@ -189,4 +194,47 @@ describe('isBoardable — Done is the current day only', () => {
 
   it('refuses one with no timestamp at all', () =>
     expect(isBoardable({ state: 'merged', doneAt: null }, TODAY)).toBe(false))
+})
+
+describe('ciChecks', () => {
+  it('counts the failed checks out of all of them', () => {
+    expect(
+      ciChecks([{ conclusion: 'FAILURE' }, { conclusion: 'SUCCESS' }, { state: 'ERROR' }, { status: 'IN_PROGRESS' }]),
+    ).toEqual({ failed: 2, total: 4 })
+  })
+
+  it('has nothing to count when the PR has no checks', () => {
+    expect(ciChecks([])).toBeNull()
+  })
+})
+
+describe('ciChecks — only checks that ran count', () => {
+  it('leaves neutral and skipped checks out of the total', () => {
+    expect(
+      ciChecks([
+        { conclusion: 'FAILURE' },
+        { conclusion: 'SUCCESS' },
+        { conclusion: 'NEUTRAL' },
+        { conclusion: 'SKIPPED' },
+      ]),
+    ).toEqual({
+      failed: 1,
+      total: 2,
+    })
+  })
+
+  it('has nothing to count when no check ran', () => {
+    expect(ciChecks([{ conclusion: 'NEUTRAL' }])).toBeNull()
+  })
+})
+
+describe('toMyPr — merge conflicts', () => {
+  it('flags a PR GitHub says cannot merge', () => {
+    expect(toMyPr(raw({ mergeable: 'CONFLICTING' }), REPO, null).conflicts).toBe(true)
+  })
+
+  it('does not flag one that merges, or one GitHub has not worked out yet', () => {
+    expect(toMyPr(raw({ mergeable: 'MERGEABLE' }), REPO, null).conflicts).toBe(false)
+    expect(toMyPr(raw({ mergeable: 'UNKNOWN' }), REPO, null).conflicts).toBe(false)
+  })
 })

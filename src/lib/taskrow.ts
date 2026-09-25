@@ -1,4 +1,5 @@
 import type { ReviewTask, Stage } from '../types'
+import { ciChecksOf } from './myprrow'
 
 // The `tasks` table row, exactly as the schema defines it (src-tauri/migrations/001_tasks.sql and up).
 // Shared so the two drivers that read this table agree on its shape: the app (tauri-plugin-sql) and
@@ -22,6 +23,9 @@ export type TaskRow = {
   followup_summary: string | null
   activity_count: number | null
   ci_state: string | null
+  ci_failed?: number | null // migration 017
+  ci_total?: number | null
+  conflicts?: number // migration 018
   new_activity: number
   snoozed: number
   seen: number
@@ -49,6 +53,8 @@ export const toTask = (r: TaskRow): ReviewTask => ({
   followupSummary: r.followup_summary ? JSON.parse(r.followup_summary) : null,
   activityCount: r.activity_count,
   ciState: r.ci_state as ReviewTask['ciState'],
+  ciChecks: ciChecksOf(r.ci_failed, r.ci_total),
+  conflicts: r.conflicts === 1,
   hasNewActivity: r.new_activity === 1,
   snoozed: r.snoozed === 1,
   seen: r.seen === 1,

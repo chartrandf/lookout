@@ -434,6 +434,8 @@ const App = () => {
     followupSummary: null,
     activityCount: null,
     ciState: pr.ciState,
+    ciChecks: pr.ciChecks,
+    conflicts: pr.conflicts,
     hasNewActivity: false,
     snoozed: pr.snoozed,
     seen: true,
@@ -441,13 +443,6 @@ const App = () => {
     doneAt: null,
     updatedAt: pr.createdAt,
   })
-
-  // PR card shortcut: open the panel; run the first PR button only if nothing is already live for this PR
-  const onHandleReview = (pr: MyPr) => {
-    setPanelTaskId(pr.id)
-    const button = config.prButtons[0]
-    if (button && !getRun(pr.id)) runButton(myPrToTask(pr), 'pr', button)
-  }
 
   // drag-drop on the PR board (optimistic): the drop is the placement, in either direction. It sticks
   // because derived_column is left as it was — the next sync sees GitHub hasn't changed its mind and
@@ -653,7 +648,7 @@ const App = () => {
               setPanelTaskId(pr.id)
               await markCardRead(pr.id)
             }}
-            onHandleReview={onHandleReview}
+            onDismissNew={(pr) => markCardRead(pr.id)}
             onReorder={reorderMyPr}
             menuFor={(pr) => cardMenu(myPrToTask(pr), 'pr')}
           />

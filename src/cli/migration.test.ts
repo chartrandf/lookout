@@ -137,3 +137,39 @@ describe('016_my_pr_snooze', () => {
     expect(row.snoozed).toBe(0)
   })
 })
+
+describe('017_ci_checks', () => {
+  it('adds the failed / total check counts to both boards, empty until counted', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'lookout-migrate-')), 'lookout.db')
+    const h = new DatabaseSync(path)
+    applyThrough(h, 16)
+    h.prepare(
+      `INSERT INTO my_prs (id, repo, number, title, url, branch, pr_created_at, derived_column, board_column, updated_at)
+       VALUES ('owner/repo#1', 'owner/repo', 1, 't', 'u', 'b', '2026-01-01T00:00:00Z', 'waiting', 'waiting', '2026-01-01T00:00:00Z')`,
+    ).run()
+    apply(h, '017_ci_checks.sql')
+    const pr = h.prepare('SELECT ci_failed, ci_total FROM my_prs').get()
+    const cols = (h.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]).map((c) => c.name)
+    h.close()
+    expect(pr).toEqual({ ci_failed: null, ci_total: null })
+    expect(cols).toEqual(expect.arrayContaining(['ci_failed', 'ci_total']))
+  })
+})
+
+describe('018_conflicts', () => {
+  it('adds a conflicts flag to both boards, off for existing rows', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'lookout-migrate-')), 'lookout.db')
+    const h = new DatabaseSync(path)
+    applyThrough(h, 17)
+    h.prepare(
+      `INSERT INTO my_prs (id, repo, number, title, url, branch, pr_created_at, derived_column, board_column, updated_at)
+       VALUES ('owner/repo#1', 'owner/repo', 1, 't', 'u', 'b', '2026-01-01T00:00:00Z', 'waiting', 'waiting', '2026-01-01T00:00:00Z')`,
+    ).run()
+    apply(h, '018_conflicts.sql')
+    const pr = h.prepare('SELECT conflicts FROM my_prs').get()
+    const cols = (h.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]).map((c) => c.name)
+    h.close()
+    expect(pr).toEqual({ conflicts: 0 })
+    expect(cols).toContain('conflicts')
+  })
+})

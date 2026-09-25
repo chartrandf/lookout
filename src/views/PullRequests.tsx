@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
 import { CardFrame, type CardMenu } from '../components/CardFrame'
+import { CiFailBadge, CiNeutralBadge, ConflictsBadge } from '../components/CiFailBadge'
 import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
 import { PR_COLUMNS } from '../lib/prboard'
 import type { Run } from '../lib/runs'
-import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
+import type { CiChecks, CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 type Props = {
   prs: MyPr[]
@@ -12,7 +13,7 @@ type Props = {
   runs: Run[]
   alertedIds: Set<string> // PRs with an unread notification (same set the bell shows)
   onOpen: (pr: MyPr) => void
-  onHandleReview: (pr: MyPr) => void
+  onDismissNew: (pr: MyPr) => void // the 💬 new tag: mark the PR's unread notifications read
   onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
   menuFor: (pr: MyPr) => CardMenu // quick actions: hover ⋯ and right-click
 }
@@ -20,31 +21,19 @@ type Props = {
 // the board shows the pipeline columns; Done is appended on demand
 const COLUMNS = PR_COLUMNS.filter((c) => c.value !== 'done')
 
-const FLAVOR_LABEL: Record<Exclude<ReviewFlavor, null>, string> = {
-  approved: 'approved',
-  changes_requested: 'changes',
-  commented: 'commented',
-}
-
-const flavorClass = (f: Exclude<ReviewFlavor, null>): string =>
-  f === 'approved'
-    ? 'bg-grass-500/20 text-grass-300'
-    : f === 'changes_requested'
-      ? 'bg-amber-500/20 text-amber-300'
-      : 'bg-sky-500/20 text-sky-300'
-
-// human review is what I'm waiting for → labelled plainly; bot review is an assist → prefixed 🤖
-const ReviewTag = ({ flavor, bot }: { flavor: ReviewFlavor; bot?: boolean }) =>
-  flavor ? (
-    <span className={`rounded px-1 py-0.5 ${bot ? 'bg-deck-700 text-deck-300' : flavorClass(flavor)}`}>
-      {bot ? '🤖 ' : ''}
-      {FLAVOR_LABEL[flavor]}
-    </span>
+// the human review verdict worth a tag: approved or changes requested. A bare "commented" review
+// and any bot review aren't shown on the card
+const ReviewTag = ({ flavor }: { flavor: ReviewFlavor }) =>
+  flavor === 'approved' ? (
+    <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">approved</span>
+  ) : flavor === 'changes_requested' ? (
+    <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">changes</span>
   ) : null
 
-const CiTag = ({ ci }: { ci: CiState }) => {
-  if (ci === 'pass') return <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">CI ✓</span>
-  if (ci === 'fail') return <span className="rounded bg-red-500/20 px-1 py-0.5 text-red-300">CI ✗</span>
+const CiTag = ({ ci, checks }: { ci: CiState; checks: CiChecks }) => {
+  if (ci === 'pass') return <span className="rounded bg-grass-500/20 px-1 py-0.5 text-grass-300">✓ CI</span>
+  if (ci === 'fail') return <CiFailBadge checks={checks} />
+  if (ci === 'neutral') return <CiNeutralBadge />
   if (ci === 'pending') return <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">CI …</span>
   return null
 }
@@ -55,7 +44,7 @@ const PrCard = ({
   run,
   alerted,
   onOpen,
-  onHandleReview,
+  onDismissNew,
   onDragStart,
   onDragEnd,
   menu,
@@ -66,7 +55,7 @@ const PrCard = ({
   run: Run | undefined
   alerted: boolean
   onOpen: (pr: MyPr) => void
-  onHandleReview: (pr: MyPr) => void
+  onDismissNew: (pr: MyPr) => void
   onDragStart: () => void
   onDragEnd: () => void
 }) => (
@@ -101,27 +90,24 @@ const PrCard = ({
         {run?.status === 'running' && (
           <span className="animate-pulse rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">running</span>
         )}
-        {alerted && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">💬 new</span>}
-        {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ draft</span>}
+        {alerted && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDismissNew(pr)
+            }}
+            title="New reviews/comments since last look — click to dismiss"
+            className="cursor-pointer rounded bg-amber-500/20 px-1 py-0.5 text-amber-300 hover:bg-amber-500/40"
+          >
+            💬 new
+          </button>
+        )}
+        {pr.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ Draft</span>}
         <ReviewTag flavor={pr.humanReview} />
-        <ReviewTag flavor={pr.botReview} bot />
-        <CiTag ci={pr.ciState} />
+        <CiTag ci={pr.ciState} checks={pr.ciChecks} />
+        {pr.ciState === null && pr.conflicts && <ConflictsBadge />}
       </>
-    )}
-    {/* Gated on having a review to handle, not on the column: a bot review no longer moves the card
-        out of Waiting, and clearing Cursor's comments is exactly the sort of thing this button runs. */}
-    {pr.column !== 'done' && (pr.humanReview !== null || pr.botReview !== null) && (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          onHandleReview(pr)
-        }}
-        title="Run /handle-review on this PR"
-        className="ml-auto cursor-pointer rounded bg-grass-600 px-1.5 py-0.5 font-medium text-grass-50 hover:bg-grass-500"
-      >
-        handle review
-      </button>
     )}
   </CardFrame>
 )
@@ -129,7 +115,7 @@ const PrCard = ({
 // default (unranked) position: manual drag order first, then non-drafts, drafts at the bottom
 const orderKey = (p: MyPr) => p.sortOrder ?? (p.isDraft ? 2e9 : 1e9)
 
-export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview, onReorder, menuFor }: Props) => {
+export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onDismissNew, onReorder, menuFor }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
@@ -279,7 +265,7 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
                       run={runByPr.get(pr.id)}
                       alerted={alertedIds.has(pr.id)}
                       onOpen={onOpen}
-                      onHandleReview={onHandleReview}
+                      onDismissNew={onDismissNew}
                       menu={menuFor(pr)}
                       onDragStart={() => setDragging(pr)}
                       onDragEnd={() => {

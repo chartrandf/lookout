@@ -213,7 +213,7 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
         const x = await fetchPrExchange(t.repo, t.prNumber, me)
         const baseline = t.activityCount === null // first fetch: set silently
         const isNew = !baseline && x.count > (t.activityCount ?? 0)
-        await setActivity(t.id, x.count, x.ciState, isNew)
+        await setActivity(t.id, x.count, x.ciState, isNew, x.ciChecks, x.conflicts)
         if (x.ciState === 'fail' && t.snoozed) await setSnoozed(t.id, false) // a red build wakes a hidden card
         const stage = deriveStage(t.stage, {
           hasSession: t.sessionIds.length > 0 || t.reviewFiles.length > 0,

@@ -193,6 +193,18 @@ pub fn run() {
                             sql: include_str!("../migrations/016_my_pr_snooze.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 17,
+                            description: "failed / total ci checks",
+                            sql: include_str!("../migrations/017_ci_checks.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 18,
+                            description: "merge conflicts",
+                            sql: include_str!("../migrations/018_conflicts.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

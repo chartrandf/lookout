@@ -10,7 +10,8 @@ export type Stage =
 
 export type PrState = 'open' | 'merged' | 'closed'
 
-export type CiState = 'pass' | 'fail' | 'pending' | null
+export type CiState = 'pass' | 'fail' | 'pending' | 'neutral' | null // neutral: only neutral/skipped checks
+export type CiChecks = { failed: number; total: number } | null // null = no checks, or not counted yet
 
 // which column a PR I authored lands in on the Pull Requests board
 export type PrColumn = 'waiting' | 'in_review' | 'ready' | 'done'
@@ -36,6 +37,8 @@ export type MyPr = {
   humanReview: ReviewFlavor
   botReview: ReviewFlavor // shown as a badge only — bot reviews never move the column
   ciState: CiState
+  ciChecks: CiChecks
+  conflicts: boolean // GitHub can't merge it as is (and its CI usually hasn't run)
   doneAt: string | null // mergedAt / closedAt; Done keeps only the current day's cards
   snoozed: boolean // hidden until GitHub reports something new about the PR (myprs.ts)
 }
@@ -65,7 +68,9 @@ export type ReviewTask = {
   reviewFiles: string[]
   followupSummary: FollowupSummary | null
   activityCount: number | null
-  ciState: 'pass' | 'fail' | 'pending' | null
+  ciState: CiState
+  ciChecks: CiChecks
+  conflicts: boolean // GitHub can't merge it as is (and its CI usually hasn't run)
   hasNewActivity: boolean
   snoozed: boolean
   seen: boolean // acknowledged in Discovery (clears the "new" highlight and drops it from the count)

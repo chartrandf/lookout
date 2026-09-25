@@ -69,6 +69,8 @@ const storedPr = (o: Partial<MyPr> = {}): MyPr => ({
   humanReview: null,
   botReview: null,
   ciState: null,
+  ciChecks: null,
+  conflicts: false,
   doneAt: null,
   snoozed: false,
   ...o,
@@ -255,6 +257,13 @@ describe('syncMyPrs — a snoozed card sleeps until GitHub has news', () => {
   it('wakes when CI changes', async () => {
     vi.mocked(allMyPrs).mockResolvedValue([storedPr({ snoozed: true, ciState: 'pending' })])
     vi.mocked(listMyPrs).mockResolvedValue([ghPr({ statusCheckRollup: [{ conclusion: 'FAILURE' }] })])
+    await syncMyPrs(config([REPO]))
+    expect(written(`${REPO}#1`)?.snoozed).toBe(false)
+  })
+
+  it('wakes when the PR runs into merge conflicts', async () => {
+    vi.mocked(allMyPrs).mockResolvedValue([storedPr({ snoozed: true })])
+    vi.mocked(listMyPrs).mockResolvedValue([ghPr({ mergeable: 'CONFLICTING' })])
     await syncMyPrs(config([REPO]))
     expect(written(`${REPO}#1`)?.snoozed).toBe(false)
   })

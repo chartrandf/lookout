@@ -1,7 +1,7 @@
 import { Command } from '@tauri-apps/plugin-shell'
-import type { CiState } from '../types'
+import type { CiChecks, CiState } from '../types'
 import { errText, logError } from './log'
-import { rollupToCiState } from './prboard'
+import { ciChecks, hasConflicts, rollupToCiState } from './prboard'
 
 // Every gh failure is logged here rather than at the call sites: most of them swallow the rejection
 // to keep one bad repo (or one unreachable PR) from emptying a board, which used to mean a broken
@@ -172,6 +172,8 @@ export type GhCommit = {
 export type PrExchange = {
   count: number // comments + reviews that aren't mine (my own actions are not "new" to me)
   ciState: CiState
+  ciChecks: CiChecks
+  conflicts: boolean // GitHub can't merge it as is: its CI usually hasn't run either
   reviews: GhReview[]
   comments: GhComment[]
   commits: GhCommit[]
@@ -179,13 +181,23 @@ export type PrExchange = {
 
 export const fetchPrExchange = async (repo: string, prNumber: number, me: string): Promise<PrExchange> => {
   const out = JSON.parse(
-    await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'comments,reviews,commits,statusCheckRollup']),
+    await gh([
+      'pr',
+      'view',
+      String(prNumber),
+      '--repo',
+      repo,
+      '--json',
+      'comments,reviews,commits,statusCheckRollup,mergeable',
+    ]),
   )
   const notMine = (list?: { author?: { login?: string } }[]) =>
     (list ?? []).filter((c) => c.author?.login !== me).length
   return {
     count: notMine(out.comments) + notMine(out.reviews),
     ciState: rollupToCiState(out.statusCheckRollup ?? []),
+    ciChecks: ciChecks(out.statusCheckRollup ?? []),
+    conflicts: hasConflicts(out.mergeable),
     reviews: out.reviews ?? [],
     comments: out.comments ?? [],
     commits: out.commits ?? [],
@@ -206,10 +218,11 @@ export type GhMyPr = {
   latestReviews: { author: { login: string; is_bot?: boolean } | null; state: string }[]
   reviewRequests: { login?: string }[] // reviewers with a pending (re-)review request
   statusCheckRollup: { conclusion?: string; status?: string; state?: string }[]
+  mergeable?: string // MERGEABLE | CONFLICTING | UNKNOWN
 }
 
 const MY_PR_FIELDS =
-  'number,title,url,headRefName,createdAt,isDraft,state,mergedAt,closedAt,latestReviews,reviewRequests,statusCheckRollup'
+  'number,title,url,headRefName,createdAt,isDraft,state,mergedAt,closedAt,latestReviews,reviewRequests,statusCheckRollup,mergeable'
 
 const listMyPrsIn = async (repo: string, me: string, state: string, limit: number): Promise<GhMyPr[]> =>
   JSON.parse(

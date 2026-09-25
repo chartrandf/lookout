@@ -5,6 +5,7 @@ const CI_OPTIONS = [
   { value: 'pass', label: '✓ pass' },
   { value: 'fail', label: '✗ fail' },
   { value: 'pending', label: '… pending' },
+  { value: 'neutral', label: '~ nothing ran' },
   { value: 'none', label: 'none' },
 ]
 

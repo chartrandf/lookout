@@ -11,12 +11,13 @@ import { type LegacyPrStore, migrateLegacyPrStore } from './proverrides'
 import { startOfToday } from './time'
 
 // What wakes a snoozed card: anything GitHub reports differently about the PR since the last pass —
-// a review verdict (human or bot), CI, merge/close, or the column its reviews point at (a re-review
-// request moves that). A plain comment with no review isn't in the list call, so it doesn't wake one.
+// a review verdict (human or bot), CI, merge conflicts, merge/close, or the column its reviews point
+// at (a re-review request moves that). A plain comment with no review isn't in the list call, so it doesn't wake one.
 const hasNews = (prev: MyPr, fresh: MyPr): boolean =>
   prev.humanReview !== fresh.humanReview ||
   prev.botReview !== fresh.botReview ||
   prev.ciState !== fresh.ciState ||
+  prev.conflicts !== fresh.conflicts ||
   prev.state !== fresh.state ||
   prev.derivedColumn !== fresh.derivedColumn
 

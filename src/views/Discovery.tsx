@@ -134,7 +134,7 @@ const DiscoveryCard = ({
     className={`${t.isDraft ? 'card-draft' : ''} ${t.seen ? '' : 'ring-1 ring-grass-500/60'}`}
   >
     {!t.seen && <span className="h-2 w-2 rounded-full bg-grass-400" title="New — not seen yet" />}
-    {t.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ draft</span>}
+    {t.isDraft && <span className="rounded bg-deck-700 px-1 py-0.5 text-deck-400">✎ Draft</span>}
     {t.reviewRequested && <span className="rounded bg-amber-500/20 px-1 py-0.5 text-amber-300">review requested</span>}
     <span className="rounded bg-grass-600/20 px-1 py-0.5 font-medium text-grass-300">{timeAgo(t.prCreatedAt)}</span>
     <div className="ml-auto flex items-center gap-1">

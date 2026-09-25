@@ -1,4 +1,4 @@
-import type { CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
+import type { CiChecks, CiState, MyPr, PrColumn, ReviewFlavor } from '../types'
 
 // The `my_prs` table row, exactly as the schema defines it (src-tauri/migrations/013_my_prs.sql).
 // Shared so the two drivers that read this table agree on its shape: the app (tauri-plugin-sql) and
@@ -23,6 +23,9 @@ export type MyPrRow = {
   done_at: string | null
   updated_at: string
   snoozed?: number // migration 016; absent on an older database the CLI may read
+  ci_failed?: number | null // migration 017
+  ci_total?: number | null
+  conflicts?: number // migration 018
 }
 
 export const rowToMyPr = (r: MyPrRow): MyPr => ({
@@ -44,4 +47,10 @@ export const rowToMyPr = (r: MyPrRow): MyPr => ({
   sortOrder: r.sort_order,
   doneAt: r.done_at,
   snoozed: r.snoozed === 1,
+  ciChecks: ciChecksOf(r.ci_failed, r.ci_total),
+  conflicts: r.conflicts === 1,
 })
+
+// both counts, or none: a half-written pair is as good as not counted
+export const ciChecksOf = (failed?: number | null, total?: number | null): CiChecks =>
+  failed == null || total == null ? null : { failed, total }
