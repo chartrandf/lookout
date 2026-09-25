@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
-import { CardFrame } from '../components/CardFrame'
+import { CardFrame, type CardMenu } from '../components/CardFrame'
 import { type BoardFilter, emptyFilter, matchesFilter, openAuthorOptions, openRepoOptions } from '../lib/filters'
 import type { Run } from '../lib/runs'
 import { STAGE_LABEL } from '../lib/stages'
@@ -13,6 +13,7 @@ type Props = {
   onOpenSession: (t: ReviewTask) => void
   onSeen: (t: ReviewTask) => void
   onReorder: (t: ReviewTask, stage: Stage, orderedIds: string[]) => void
+  menuFor: (t: ReviewTask) => CardMenu // quick actions: hover ⋯ and right-click
 }
 
 // hint doubles as the column's tooltip: what a card in it actually means
@@ -38,10 +39,12 @@ type CardProps = {
   onSeen: () => void
   onDragStart: () => void
   onDragEnd: () => void
+  menu: CardMenu
 }
 
-const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd }: CardProps) => (
+const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd, menu }: CardProps) => (
   <CardFrame
+    menu={menu}
     title={t.prTitle}
     author={t.prAuthor}
     repo={t.repo}
@@ -109,7 +112,7 @@ const Card = ({ t, run, alerted, onOpen, onSeen, onDragStart, onDragEnd }: CardP
   </CardFrame>
 )
 
-export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorder }: Props) => {
+export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorder, menuFor }: Props) => {
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragging, setDragging] = useState<ReviewTask | null>(null)
@@ -255,6 +258,7 @@ export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorde
                       alerted={alertedIds.has(t.id)}
                       onOpen={() => onOpenSession(t)}
                       onSeen={() => onSeen(t)}
+                      menu={menuFor(t)}
                       onDragStart={() => setDragging(t)}
                       onDragEnd={() => {
                         setDragging(null)

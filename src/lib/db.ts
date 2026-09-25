@@ -243,12 +243,12 @@ export const upsertMyPr = async (pr: MyPr) => {
   const d = await getDb()
   await d.execute(
     `INSERT INTO my_prs (id, repo, repo_path, number, title, url, branch, pr_created_at, state, is_draft,
-       human_review, bot_review, ci_state, derived_column, board_column, sort_order, done_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+       human_review, bot_review, ci_state, derived_column, board_column, sort_order, done_at, updated_at, snoozed)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      ON CONFLICT(id) DO UPDATE SET
        repo_path = $3, title = $5, url = $6, branch = $7, state = $9, is_draft = $10,
        human_review = $11, bot_review = $12, ci_state = $13, derived_column = $14, board_column = $15,
-       done_at = $17, updated_at = $18`,
+       done_at = $17, updated_at = $18, snoozed = $19`,
     [
       pr.id,
       pr.repo,
@@ -268,8 +268,14 @@ export const upsertMyPr = async (pr: MyPr) => {
       pr.sortOrder,
       pr.doneAt,
       new Date().toISOString(),
+      pr.snoozed ? 1 : 0,
     ],
   )
+}
+
+export const setMyPrSnoozed = async (id: string, snoozed: boolean) => {
+  const d = await getDb()
+  await d.execute('UPDATE my_prs SET snoozed = $1 WHERE id = $2', [snoozed ? 1 : 0, id])
 }
 
 // A manual drop. `derived_column` is deliberately left untouched: the next sync compares GitHub's

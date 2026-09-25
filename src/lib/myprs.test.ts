@@ -70,6 +70,7 @@ const storedPr = (o: Partial<MyPr> = {}): MyPr => ({
   botReview: null,
   ciState: null,
   doneAt: null,
+  snoozed: false,
   ...o,
 })
 
@@ -231,5 +232,36 @@ describe('syncMyPrs — the retired pr-overrides.json is carried over once', () 
     vi.mocked(listMyPrs).mockResolvedValue([ghPr()])
     await syncMyPrs(config([REPO]))
     expect(written(`${REPO}#1`)?.sortOrder).toBe(20)
+  })
+})
+
+describe('syncMyPrs — a snoozed card sleeps until GitHub has news', () => {
+  it('stays snoozed while nothing about the PR changed', async () => {
+    vi.mocked(allMyPrs).mockResolvedValue([storedPr({ snoozed: true })])
+    vi.mocked(listMyPrs).mockResolvedValue([ghPr()])
+    await syncMyPrs(config([REPO]))
+    expect(written(`${REPO}#1`)?.snoozed).toBe(true)
+  })
+
+  it('wakes on a new review', async () => {
+    vi.mocked(allMyPrs).mockResolvedValue([storedPr({ snoozed: true })])
+    vi.mocked(listMyPrs).mockResolvedValue([
+      ghPr({ latestReviews: [{ author: { login: 'alice' }, state: 'COMMENTED' }] }),
+    ])
+    await syncMyPrs(config([REPO]))
+    expect(written(`${REPO}#1`)?.snoozed).toBe(false)
+  })
+
+  it('wakes when CI changes', async () => {
+    vi.mocked(allMyPrs).mockResolvedValue([storedPr({ snoozed: true, ciState: 'pending' })])
+    vi.mocked(listMyPrs).mockResolvedValue([ghPr({ statusCheckRollup: [{ conclusion: 'FAILURE' }] })])
+    await syncMyPrs(config([REPO]))
+    expect(written(`${REPO}#1`)?.snoozed).toBe(false)
+  })
+
+  it('boards a PR it never saw awake', async () => {
+    vi.mocked(listMyPrs).mockResolvedValue([ghPr()])
+    await syncMyPrs(config([REPO]))
+    expect(written(`${REPO}#1`)?.snoozed).toBe(false)
   })
 })

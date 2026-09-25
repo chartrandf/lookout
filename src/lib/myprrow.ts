@@ -22,6 +22,7 @@ export type MyPrRow = {
   sort_order: number | null
   done_at: string | null
   updated_at: string
+  snoozed?: number // migration 016; absent on an older database the CLI may read
 }
 
 export const rowToMyPr = (r: MyPrRow): MyPr => ({
@@ -42,4 +43,5 @@ export const rowToMyPr = (r: MyPrRow): MyPr => ({
   column: r.board_column as PrColumn,
   sortOrder: r.sort_order,
   doneAt: r.done_at,
+  snoozed: r.snoozed === 1,
 })

@@ -78,6 +78,7 @@ const myPr = (over: Partial<MyPr> = {}): MyPr => ({
   botReview: null,
   ciState: null,
   doneAt: null,
+  snoozed: false,
   ...over,
 })
 

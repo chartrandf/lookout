@@ -95,5 +95,6 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
     botReview,
     ciState: rollupToCiState(raw.statusCheckRollup ?? []),
     doneAt: raw.mergedAt ?? raw.closedAt ?? null,
+    snoozed: false, // syncMyPrs carries a stored snooze over
   }
 }

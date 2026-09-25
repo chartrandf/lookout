@@ -37,6 +37,7 @@ export type MyPr = {
   botReview: ReviewFlavor // shown as a badge only — bot reviews never move the column
   ciState: CiState
   doneAt: string | null // mergedAt / closedAt; Done keeps only the current day's cards
+  snoozed: boolean // hidden until GitHub reports something new about the PR (myprs.ts)
 }
 
 export type FollowupSummary = {

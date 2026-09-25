@@ -121,3 +121,19 @@ describe('013_my_prs', () => {
     expect(n).toBe(0)
   })
 })
+
+describe('016_my_pr_snooze', () => {
+  it('adds snoozed to my_prs, off for the rows already there', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'lookout-migrate-')), 'lookout.db')
+    const h = new DatabaseSync(path)
+    applyThrough(h, 15)
+    h.prepare(
+      `INSERT INTO my_prs (id, repo, number, title, url, branch, pr_created_at, derived_column, board_column, updated_at)
+       VALUES ('owner/repo#1', 'owner/repo', 1, 't', 'u', 'b', '2026-01-01T00:00:00Z', 'waiting', 'waiting', '2026-01-01T00:00:00Z')`,
+    ).run()
+    apply(h, '016_my_pr_snooze.sql')
+    const row = h.prepare('SELECT snoozed FROM my_prs').get() as { snoozed: number }
+    h.close()
+    expect(row.snoozed).toBe(0)
+  })
+})

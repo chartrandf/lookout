@@ -10,6 +10,16 @@ import { resolveColumn } from './prcolumns'
 import { type LegacyPrStore, migrateLegacyPrStore } from './proverrides'
 import { startOfToday } from './time'
 
+// What wakes a snoozed card: anything GitHub reports differently about the PR since the last pass —
+// a review verdict (human or bot), CI, merge/close, or the column its reviews point at (a re-review
+// request moves that). A plain comment with no review isn't in the list call, so it doesn't wake one.
+const hasNews = (prev: MyPr, fresh: MyPr): boolean =>
+  prev.humanReview !== fresh.humanReview ||
+  prev.botReview !== fresh.botReview ||
+  prev.ciState !== fresh.ciState ||
+  prev.state !== fresh.state ||
+  prev.derivedColumn !== fresh.derivedColumn
+
 // One pass: list the PRs I authored across watched repos and reconcile them into `my_prs`.
 //
 // Reconciliation is per repo, not global: a repo whose `gh` call throws keeps every row it already
@@ -52,6 +62,7 @@ export const syncMyPrs = async (config?: Config): Promise<MyPr[]> => {
         // GitHub only gets to move the card when its own verdict changed (see prcolumns.ts)
         fresh.column = resolveColumn(prev.column, prev.derivedColumn, fresh.derivedColumn)
         fresh.sortOrder = prev.sortOrder
+        fresh.snoozed = prev.snoozed && !hasNews(prev, fresh)
       } else {
         // never seen before: an old hand-off, if there was one, is where the card starts
         fresh.column = legacy.columns[fresh.id] ?? fresh.column

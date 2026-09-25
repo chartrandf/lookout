@@ -1,9 +1,11 @@
 import { listen } from '@tauri-apps/api/event'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
 import { visibleButtons } from './lib/buttons'
+import { type CardActionId, cardActions } from './lib/cardactions'
 import { ACTION_TOOLS } from './lib/claude'
 import {
   DEFAULT_PR_BUTTONS,
@@ -30,6 +32,7 @@ import {
   setLinks,
   setMyPrColumn,
   setMyPrOrders,
+  setMyPrSnoozed,
   setOrders,
   setPrState,
   setSeen,
@@ -38,6 +41,7 @@ import {
   upsertMyPr,
 } from './lib/db'
 import type { TimelineSummary } from './lib/feed'
+import { resumeInGhostty } from './lib/ghostty'
 import { logError, logWarn, setLogEnabled } from './lib/log'
 import { syncMyPrs } from './lib/myprs'
 import { onNotificationClick } from './lib/notify'
@@ -255,6 +259,49 @@ const App = () => {
     await reload()
   }
 
+  // one card's snooze, on whichever board it lives
+  const snoozeCard = async (id: string, board: ButtonBoard, snoozed: boolean) => {
+    if (board === 'pr') {
+      await setMyPrSnoozed(id, snoozed)
+      await reloadMyPrs()
+    } else {
+      await setSnoozed(id, snoozed)
+      await reload()
+    }
+  }
+
+  // A card's quick actions (hover ⋯, right-click): the same list the panel's ⋯ shows
+  // (cardactions.ts), done from the board without opening the panel.
+  const cardMenu = (t: ReviewTask, board: ButtonBoard) => {
+    const run = getRun(t.id)
+    const sessionId = run?.sessionId ?? t.sessionIds.at(-1)
+    // resuming only works from the checkout the session ran in (see sessionCwd)
+    const checkout = async (id: string) =>
+      run?.sessionId === id ? run.repoPath : await sessionCwd(t.repoPath ?? '', id)
+    const onSelect = async (id: CardActionId) => {
+      try {
+        if (id === 'snooze') await snoozeCard(t.id, board, !t.snoozed)
+        else if (id === 'resume' && sessionId && t.repoPath) await resumeInGhostty(await checkout(sessionId), sessionId)
+        else if (id === 'open-browser') await openUrl(t.prUrl)
+        else if (id === 'remove') {
+          if (panelTaskId === t.id) setPanelTaskId(null)
+          await moveStage(t.id, 'discovered')
+        } else if (id === 'kill') await killRun(t.id)
+      } catch (e) {
+        logError('card', e, `${t.id}: ${id}`)
+      }
+    }
+    return {
+      actions: cardActions({
+        snoozed: t.snoozed,
+        hasSession: !!sessionId,
+        isPr: board === 'pr',
+        running: run?.status === 'running',
+      }),
+      onSelect,
+    }
+  }
+
   const markSeen = async (id: string, seen: boolean) => {
     await setSeen(id, seen)
     await reload()
@@ -388,7 +435,7 @@ const App = () => {
     activityCount: null,
     ciState: pr.ciState,
     hasNewActivity: false,
-    snoozed: false,
+    snoozed: pr.snoozed,
     seen: true,
     sortOrder: null,
     doneAt: null,
@@ -608,6 +655,7 @@ const App = () => {
             }}
             onHandleReview={onHandleReview}
             onReorder={reorderMyPr}
+            menuFor={(pr) => cardMenu(myPrToTask(pr), 'pr')}
           />
         )}
         {view === 'discovery' && (
@@ -628,6 +676,7 @@ const App = () => {
           <Board
             tasks={tasks}
             runs={runs}
+            menuFor={(t) => cardMenu(t, 'review')}
             alertedIds={alertedIds}
             onReorder={async (t, stage, orderedIds) => {
               if (t.stage !== stage) await setStage(t.id, stage)
@@ -702,10 +751,8 @@ const App = () => {
           onCancel={() => cancelRun(panelTask.id)}
           onRunButton={(button) => runButton(panelTask, panelIsPr ? 'pr' : 'review', button)}
           onStageChange={(stage) => moveStage(panelTask.id, stage)}
-          onSnooze={async (snoozed) => {
-            await setSnoozed(panelTask.id, snoozed)
-            await reload()
-          }}
+          // the panel is shared: a card from the Pull Requests board snoozes its own row
+          onSnooze={(snoozed) => snoozeCard(panelTask.id, panelIsPr ? 'pr' : 'review', snoozed)}
           onKill={() => killRun(panelTask.id)}
           onClose={() => setPanelTaskId(null)}
           onRefresh={(summary) => {

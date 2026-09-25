@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BoardFilters } from '../components/BoardFilters'
-import { CardFrame } from '../components/CardFrame'
+import { CardFrame, type CardMenu } from '../components/CardFrame'
 import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
 import { PR_COLUMNS } from '../lib/prboard'
 import type { Run } from '../lib/runs'
@@ -14,6 +14,7 @@ type Props = {
   onOpen: (pr: MyPr) => void
   onHandleReview: (pr: MyPr) => void
   onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
+  menuFor: (pr: MyPr) => CardMenu // quick actions: hover ⋯ and right-click
 }
 
 // the board shows the pipeline columns; Done is appended on demand
@@ -57,7 +58,9 @@ const PrCard = ({
   onHandleReview,
   onDragStart,
   onDragEnd,
+  menu,
 }: {
+  menu: CardMenu
   pr: MyPr
   me: string
   run: Run | undefined
@@ -68,6 +71,7 @@ const PrCard = ({
   onDragEnd: () => void
 }) => (
   <CardFrame
+    menu={menu}
     title={pr.title}
     author={me}
     repo={pr.repo}
@@ -81,7 +85,7 @@ const PrCard = ({
       onDragStart()
     }}
     onDragEnd={onDragEnd}
-    className={`${pr.isDraft ? 'card-draft' : ''} ${
+    className={`${pr.isDraft ? 'card-draft' : ''} ${pr.snoozed ? 'opacity-50' : ''} ${
       run?.status === 'running' ? 'card-running' : alerted ? 'card-awaiting' : ''
     }`}
   >
@@ -125,8 +129,9 @@ const PrCard = ({
 // default (unranked) position: manual drag order first, then non-drafts, drafts at the bottom
 const orderKey = (p: MyPr) => p.sortOrder ?? (p.isDraft ? 2e9 : 1e9)
 
-export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview, onReorder }: Props) => {
+export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview, onReorder, menuFor }: Props) => {
   const [showDone, setShowDone] = useState(false)
+  const [showSnoozed, setShowSnoozed] = useState(false)
   const [filter, setFilter] = useState<BoardFilter>(emptyFilter)
   const [dragging, setDragging] = useState<MyPr | null>(null)
   const [dropTarget, setDropTarget] = useState<PrColumn | null>(null)
@@ -136,7 +141,11 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
   const runByPr = new Map(runs.map((r) => [r.taskId, r]))
   const byColumn = (c: PrColumn) =>
     prs
-      .filter((p) => p.column === c && matchesFilter(filter, p.repo, p.ciState))
+      // snoozed cards stay hidden until new activity; Done always shows, as on the review board
+      .filter(
+        (p) =>
+          p.column === c && (showSnoozed || !p.snoozed || c === 'done') && matchesFilter(filter, p.repo, p.ciState),
+      )
       // Done ignores drag order: it holds today's merges and closes, most recently dealt with first
       .sort((a, b) =>
         c === 'done'
@@ -144,6 +153,9 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
           : orderKey(a) - orderKey(b) || b.createdAt.localeCompare(a.createdAt),
       )
   const doneCount = prs.filter((p) => p.column === 'done' && matchesFilter(filter, p.repo, p.ciState)).length
+  const snoozedCount = prs.filter(
+    (p) => p.snoozed && p.column !== 'done' && matchesFilter(filter, p.repo, p.ciState),
+  ).length
   const columns = showDone ? PR_COLUMNS : COLUMNS
 
   // hide the insertion line when dropping there wouldn't move the card
@@ -178,15 +190,26 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-center gap-2">
         <BoardFilters repos={repoOptions} filter={filter} onChange={setFilter} />
-        {doneCount > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowDone((s) => !s)}
-            className="ml-auto cursor-pointer text-xs text-deck-400 hover:text-deck-200"
-          >
-            {showDone ? 'hide done' : `show done (${doneCount})`}
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-3">
+          {snoozedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowSnoozed((s) => !s)}
+              className="cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+            >
+              {showSnoozed ? 'hide snoozed' : `show snoozed (${snoozedCount})`}
+            </button>
+          )}
+          {doneCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowDone((s) => !s)}
+              className="cursor-pointer text-xs text-deck-400 hover:text-deck-200"
+            >
+              {showDone ? 'hide done' : `show done (${doneCount})`}
+            </button>
+          )}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 gap-3">
         {columns.map((col) => {
@@ -257,6 +280,7 @@ export const PullRequests = ({ prs, me, runs, alertedIds, onOpen, onHandleReview
                       alerted={alertedIds.has(pr.id)}
                       onOpen={onOpen}
                       onHandleReview={onHandleReview}
+                      menu={menuFor(pr)}
                       onDragStart={() => setDragging(pr)}
                       onDragEnd={() => {
                         setDragging(null)

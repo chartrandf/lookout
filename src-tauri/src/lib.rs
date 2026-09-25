@@ -187,6 +187,12 @@ pub fn run() {
                             sql: include_str!("../migrations/015_captured_review_kind.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 16,
+                            description: "snooze on the pull request board",
+                            sql: include_str!("../migrations/016_my_pr_snooze.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),
