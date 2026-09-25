@@ -192,11 +192,29 @@ pub fn run() {
             cli_bridge::start(app.handle());
             Ok(())
         })
+        // Cmd+W on the board hides it instead of destroying it, so the Dock icon can bring it back
+        // with its state (and running sessions) intact; Cmd+Q still quits
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                cli_bridge::stop(app);
+        .run(|app, event| match event {
+            tauri::RunEvent::Exit => cli_bridge::stop(app),
+            // Dock icon click: show the board even when PR windows are still open
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen { .. } => {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.unminimize();
+                    let _ = main.set_focus();
+                }
             }
+            _ => {}
         });
 }
