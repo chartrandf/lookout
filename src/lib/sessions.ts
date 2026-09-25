@@ -22,6 +22,10 @@ const projectSlug = (repoPath: string) => repoPath.replace(/[^a-zA-Z0-9]/g, '-')
 
 const sessionDir = async (checkout: string) => join(await homeDir(), '.claude', 'projects', projectSlug(checkout))
 
+// The transcript Claude Code writes for a session started in `checkout`
+export const transcriptPath = async (checkout: string, sessionId: string) =>
+  join(await sessionDir(checkout), `${sessionId}.jsonl`)
+
 const TS_RE = /"timestamp":"([^"]+)"/
 export const captureKind = (s: ReviewSession): CaptureKind | null => captureKindOf(s.command)
 

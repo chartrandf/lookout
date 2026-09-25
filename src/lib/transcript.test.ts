@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { exportedToFile, finalAssistantTurn, MAX_BODY, reviewFromLines } from './transcript'
+import {
+  exportedToFile,
+  finalAssistantTurn,
+  MAX_BODY,
+  promptCaptureKind,
+  reviewFromLines,
+  runCaptureKind,
+} from './transcript'
 
 // --- transcript line builders -------------------------------------------------------------
 
@@ -132,5 +139,37 @@ describe('parser hardening', () => {
     const result = reviewFromLines([userPrompt('/x'), assistant([text('😀'.repeat(MAX_BODY))])])
     if (result.kind !== 'captured') throw new Error('expected a capture')
     expect(result.body).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/)
+  })
+})
+
+describe('promptCaptureKind', () => {
+  it('reads the kind from the leading slash command', () => {
+    expect(promptCaptureKind('/review <pr_id>')).toBe('review')
+    expect(promptCaptureKind('  /do-followup <branch_name>')).toBe('followup')
+  })
+
+  it('leaves a plain prompt or an unknown command undecided', () => {
+    expect(promptCaptureKind('Fetch the review comments of PR #<pr_id>')).toBeNull()
+    expect(promptCaptureKind('/handle-review')).toBeNull()
+  })
+})
+
+describe('runCaptureKind', () => {
+  it('uses the kind the button saves as, over its prompt', () => {
+    expect(runCaptureKind({ prompt: 'Fetch the review comments', saveReport: 'followup' })).toBe('followup')
+    expect(runCaptureKind({ prompt: '/review <pr_id>', saveReport: 'followup' })).toBe('followup')
+  })
+
+  it('auto-detects from the slash command, or leaves it to Haiku', () => {
+    expect(runCaptureKind({ prompt: '/review <pr_id>' })).toBe('review')
+    expect(runCaptureKind({ prompt: 'Fetch the review comments' })).toBeNull()
+  })
+
+  it('skips a button set to never save', () => {
+    expect(runCaptureKind({ prompt: '/review <pr_id>', saveReport: 'off' })).toBe('off')
+  })
+
+  it('leaves a reply with no button to Haiku', () => {
+    expect(runCaptureKind(undefined)).toBeNull()
   })
 })

@@ -30,15 +30,20 @@ vi.mock('./gh', () => ({
   listOpenPrs: vi.fn(),
 }))
 vi.mock('./notify', () => ({ notify: vi.fn() }))
+vi.mock('./classify', () => ({ classifySession: vi.fn() }))
 vi.mock('./reviews', () => ({ scanReviewFiles: vi.fn() }))
 vi.mock('./sessions', () => ({
   scanRepoSessions: vi.fn(),
   scanRepoReviewSessions: vi.fn(async () => []),
   captureKind: (s: { command: string | null }) => (s.command === 'do-followup' ? 'followup' : 'review'),
+  transcriptPath: vi.fn(
+    async (cwd: string, id: string) => `/home/.claude/projects/${cwd.replace(/\//g, '-')}/${id}.jsonl`,
+  ),
 }))
-vi.mock('./capture', () => ({ captureIfGrown: vi.fn() }))
+vi.mock('./capture', () => ({ captureIfGrown: vi.fn(), captureFromTranscript: vi.fn() }))
 
-import { captureIfGrown } from './capture'
+import { captureFromTranscript, captureIfGrown } from './capture'
+import { classifySession } from './classify'
 import { getConfig } from './config'
 import {
   allTasks,
@@ -53,7 +58,7 @@ import {
 import { fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
 import { scanReviewFiles } from './reviews'
 import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
-import { syncAll } from './sync'
+import { captureRun, syncAll } from './sync'
 
 const REPO = 'owner/repo'
 
@@ -295,6 +300,13 @@ describe('syncAll — capturing a review the session never exported', () => {
     expect(upsertCapturedReview).not.toHaveBeenCalled()
   })
 
+  it('captures a follow-up on a branch that exports review reports', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, command: 'do-followup' }])
+    await syncAll()
+    expect(upsertCapturedReview).toHaveBeenCalledWith(expect.objectContaining({ kind: 'followup' }))
+  })
+
   it('labels a follow-up run as a follow-up, not a second review', async () => {
     vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, command: 'do-followup' }])
     await syncAll()
@@ -319,5 +331,106 @@ describe('syncAll — capturing a review the session never exported', () => {
     vi.mocked(scanRepoReviewSessions).mockResolvedValue([{ ...session, branch: 'some-other-branch' }])
     await syncAll()
     expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+})
+
+describe('captureRun — a button run whose turn just finished', () => {
+  const run = {
+    taskId: `${REPO}#7`,
+    branch: 'feature',
+    repoPath: '/clone',
+    cwd: '/wt/feature',
+    sessionId: 's9',
+    kind: 'followup' as 'review' | 'followup' | null,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getConfig).mockResolvedValue({
+      githubUser: 'me',
+      repos: [{ repo: REPO, path: '/clone' }],
+      githubName: 'Me Name',
+      reviewButtons: [],
+      prButtons: [],
+      animations: true,
+      logging: false,
+      captureReviews: true,
+    })
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map())
+    vi.mocked(capturedCliTaskIds).mockResolvedValue(new Set())
+    vi.mocked(captureFromTranscript).mockResolvedValue({
+      kind: 'captured',
+      body: 'the verdict',
+      ts: '2026-09-25T10:00:00Z',
+    })
+  })
+
+  it('stores the run final turn with the kind its button declared', async () => {
+    await captureRun(run)
+    expect(captureFromTranscript).toHaveBeenCalledWith('/home/.claude/projects/-wt-feature/s9.jsonl')
+    expect(upsertCapturedReview).toHaveBeenCalledWith({
+      id: 's9',
+      kind: 'followup',
+      taskId: `${REPO}#7`,
+      branch: 'feature',
+      source: 'sync',
+      sessionId: 's9',
+      filePath: null,
+      body: 'the verdict',
+      createdAt: '2026-09-25T10:00:00Z',
+    })
+  })
+
+  it('leaves a review alone on a branch that exports its own reports', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    await captureRun({ ...run, kind: 'review' })
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+    expect(deleteCapturedReview).toHaveBeenCalledWith('s9')
+  })
+
+  // /do-review exports a report file, /do-followup doesn't: the file is a review, not this follow-up
+  it('still stores a follow-up on a branch that exports review reports', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    await captureRun(run)
+    expect(upsertCapturedReview).toHaveBeenCalledWith(expect.objectContaining({ id: 's9', kind: 'followup' }))
+  })
+
+  it('stands aside for a card a skill registered a review for', async () => {
+    vi.mocked(capturedCliTaskIds).mockResolvedValue(new Set([`${REPO}#7`]))
+    await captureRun(run)
+    expect(captureFromTranscript).not.toHaveBeenCalled()
+  })
+
+  it('does nothing when capture is switched off', async () => {
+    const config = await vi.mocked(getConfig)()
+    vi.mocked(getConfig).mockResolvedValue({ ...config, captureReviews: false })
+    await captureRun(run)
+    expect(captureFromTranscript).not.toHaveBeenCalled()
+  })
+
+  it('asks Haiku when the prompt did not say what the run was', async () => {
+    vi.mocked(classifySession).mockResolvedValue('followup')
+    await captureRun({ ...run, kind: null })
+    expect(classifySession).toHaveBeenCalledWith('s9', 'the verdict')
+    expect(upsertCapturedReview).toHaveBeenCalledWith(expect.objectContaining({ id: 's9', kind: 'followup' }))
+  })
+
+  it('stores nothing when Haiku says the run was not a review', async () => {
+    vi.mocked(classifySession).mockResolvedValue(null)
+    await captureRun({ ...run, kind: null })
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+  })
+
+  it('does not ask Haiku when the slash command already said', async () => {
+    await captureRun(run)
+    expect(classifySession).not.toHaveBeenCalled()
+  })
+
+  it('drops what Haiku calls a review on a branch that exports its own reports', async () => {
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map([['feature', ['/clone/AI_TASKS/code-review/x.md']]]))
+    vi.mocked(classifySession).mockResolvedValue('review')
+    await captureRun({ ...run, kind: null })
+    expect(upsertCapturedReview).not.toHaveBeenCalled()
+    expect(deleteCapturedReview).toHaveBeenCalledWith('s9')
   })
 })

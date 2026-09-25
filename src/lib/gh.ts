@@ -77,19 +77,16 @@ export type GhTimelineEvent = {
   actor: string
   text: string
   url?: string
+  // the picture GitHub sent: github.com/<login>.png has none for a bot (`some-app[bot]`) or a git name
+  avatar?: string
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
-const toTimelineEvent = (e: any): GhTimelineEvent | null => {
+const eventAvatar = (e: any): string | undefined => e.user?.avatar_url ?? e.actor?.avatar_url ?? undefined
+
+// biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
+const toEvent = (e: any): GhTimelineEvent | null => {
   switch (e.event) {
-    case 'committed':
-      return {
-        ts: e.author?.date,
-        kind: 'commit',
-        actor: e.author?.name ?? '',
-        text: (e.message ?? '').split('\n')[0],
-        url: e.html_url,
-      }
     case 'commented':
       return { ts: e.created_at, kind: 'comment', actor: e.user?.login ?? '', text: 'commented', url: e.html_url }
     case 'reviewed': {
@@ -116,10 +113,44 @@ const toTimelineEvent = (e: any): GhTimelineEvent | null => {
   }
 }
 
-export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<GhTimelineEvent[]> => {
-  const raw = JSON.parse(await gh(['api', `repos/${repo}/issues/${prNumber}/timeline?per_page=100`]))
+// A timeline commit carries only the git author (name, email); `commitAvatars` (sha -> avatar_url,
+// from the PR's commit list) is what knows the GitHub account behind it.
+export const toTimelineEvent = (
   // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
-  return (raw as any[]).map(toTimelineEvent).filter((e): e is GhTimelineEvent => e !== null && Boolean(e.ts))
+  e: any,
+  commitAvatars: Map<string, string> = new Map(),
+): GhTimelineEvent | null => {
+  if (e.event === 'committed') {
+    const avatar = commitAvatars.get(e.sha)
+    return {
+      ts: e.author?.date,
+      kind: 'commit',
+      actor: e.author?.name ?? '',
+      text: (e.message ?? '').split('\n')[0],
+      url: e.html_url,
+      ...(avatar ? { avatar } : {}),
+    }
+  }
+  const out = toEvent(e)
+  const avatar = eventAvatar(e)
+  return out && avatar ? { ...out, avatar } : out
+}
+
+export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<GhTimelineEvent[]> => {
+  const [raw, commits] = await Promise.all([
+    gh(['api', `repos/${repo}/issues/${prNumber}/timeline?per_page=100`]).then(JSON.parse),
+    // pictures only: a failure here costs commit avatars, never the timeline
+    gh(['api', `repos/${repo}/pulls/${prNumber}/commits?per_page=100`])
+      .then(JSON.parse)
+      .catch(() => []),
+  ])
+  const commitAvatars = new Map<string, string>(
+    // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
+    (commits as any[]).filter((c) => c.author?.avatar_url).map((c) => [c.sha, c.author.avatar_url]),
+  )
+  return (raw as unknown[])
+    .map((e) => toTimelineEvent(e, commitAvatars))
+    .filter((e): e is GhTimelineEvent => e !== null && Boolean(e.ts))
 }
 
 export const approvePr = async (repo: string, prNumber: number) => {

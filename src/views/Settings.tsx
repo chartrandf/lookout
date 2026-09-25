@@ -271,9 +271,9 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
             </button>
           </div>
 
-          {/* 4 — where the card lands once the run finishes (review board only) */}
+          {/* 4 — where the card lands once the run finishes, and whether its answer is kept (review board only) */}
           {board === 'review' && (
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <span className={labelCls}>On completion</span>
               <div className="flex items-center gap-2 text-xs text-deck-400">
                 move card to stage
@@ -290,7 +290,22 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
                   ))}
                 </select>
               </div>
-            </label>
+              <div className="flex items-center gap-2 text-xs text-deck-400">
+                save answer as report
+                <select
+                  value={b.saveReport ?? ''}
+                  onChange={(e) =>
+                    patch(b.id, { saveReport: (e.target.value || undefined) as ActionButton['saveReport'] }, true)
+                  }
+                  className="w-48 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
+                >
+                  <option value="">auto-detect</option>
+                  <option value="review">review</option>
+                  <option value="followup">follow-up</option>
+                  <option value="off">don't save</option>
+                </select>
+              </div>
+            </div>
           )}
         </div>
       ))}

@@ -37,17 +37,19 @@ export const readTailLines = async (filePath: string, maxBytes = TAIL_BYTES): Pr
   }
 }
 
-export const captureFromTranscript = async (filePath: string, maxBytes = TAIL_BYTES): Promise<CaptureResult> => {
-  let lines: string[]
+// null when the file can't be read — which is not the same answer as "read it, nothing to capture"
+const readCapture = async (filePath: string, maxBytes: number): Promise<CaptureResult | null> => {
   try {
-    lines = await readTailLines(filePath, maxBytes)
+    return reviewFromLines(await readTailLines(filePath, maxBytes))
   } catch (e) {
     // a session file removed mid-scan, or one the fs scope won't read: it costs this capture, nothing else
     logWarn('capture', `unreadable ${filePath}: ${errText(e)}`)
-    return { kind: 'none' }
+    return null
   }
-  return reviewFromLines(lines)
 }
+
+export const captureFromTranscript = async (filePath: string, maxBytes = TAIL_BYTES): Promise<CaptureResult> =>
+  (await readCapture(filePath, maxBytes)) ?? { kind: 'none' }
 
 // A sync pass runs every ~28 s and a finished session never changes again, so a tail read per pass
 // per session would be waste. Size is the cheap "did anything happen" signal: a grown transcript is
@@ -65,6 +67,7 @@ export const captureIfGrown = async (filePath: string): Promise<CaptureResult | 
     return null
   }
   if (examined.get(filePath) === size) return null
-  examined.set(filePath, size)
-  return captureFromTranscript(filePath)
+  const result = await readCapture(filePath, TAIL_BYTES)
+  if (result) examined.set(filePath, size) // a failed read is tried again next pass, not written off
+  return result
 }

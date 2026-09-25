@@ -1,3 +1,4 @@
+import type { ActionButton } from '../types'
 // Reading a review out of a Claude Code transcript. Pure line-level parsing, no file access and no
 // Tauri: the app reads the tail through plugin-fs (capture.ts) and the `lookout` CLI through
 // node:fs, and both must decide the same way about the same lines.
@@ -24,6 +25,17 @@ const CAPTURE_COMMANDS: Record<string, CaptureKind> = {
 
 export const captureKindOf = (command: string | null): CaptureKind | null =>
   (command && CAPTURE_COMMANDS[command]) || null
+
+// The same decision from a button prompt before it runs: `/review <pr_id>` says it, a plain prompt
+// doesn't (null — the caller asks Haiku once the run has answered).
+export const promptCaptureKind = (prompt: string): CaptureKind | null =>
+  captureKindOf(prompt.match(/^\s*\/([\w-]+)/)?.[1] ?? null)
+
+// What a finished run is saved as: the button's own setting, else its slash command; null leaves
+// it to Haiku (as for a chat reply, which has no button), 'off' skips the capture entirely.
+export const runCaptureKind = (
+  button: Pick<ActionButton, 'prompt' | 'saveReport'> | undefined,
+): CaptureKind | 'off' | null => button?.saveReport ?? (button ? promptCaptureKind(button.prompt) : null)
 
 // The opening command, from the head of a transcript (the first command wins: it is the one the
 // session started with).

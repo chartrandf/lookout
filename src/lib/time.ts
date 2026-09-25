@@ -11,3 +11,16 @@ export const timeAgo = (iso: string | null): string => {
 // is still today's until the clock rolls over, wherever the laptop happens to be.
 export const startOfToday = (now = new Date()): string =>
   new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const pad = (n: number) => String(n).padStart(2, '0')
+
+// A chat message's stamp, as a messenger shows it: the clock alone today, the day before that, the
+// year only once it differs. Spelled out by hand so it doesn't follow the OS locale (the UI is English).
+export const messageTime = (iso: string, now = new Date()): string => {
+  const d = new Date(iso)
+  const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  if (d.toDateString() === now.toDateString()) return clock
+  const day = `${MONTHS[d.getMonth()]} ${d.getDate()}`
+  return d.getFullYear() === now.getFullYear() ? `${day}, ${clock}` : `${day}, ${d.getFullYear()}, ${clock}`
+}

@@ -12,6 +12,7 @@ export const DEFAULT_REVIEW_BUTTONS: ActionButton[] = [
     prompt: '/review <pr_id>',
     conditions: [],
     advanceTo: 'reviewing', // a finished session is "Needs Review" — Reviewed means sent on GitHub
+    saveReport: 'review',
   },
   {
     id: 'do-followup',
@@ -21,6 +22,7 @@ export const DEFAULT_REVIEW_BUTTONS: ActionButton[] = [
       'Fetch the review comments of PR #<pr_id> (branch <branch_name>) with gh, check the PR commits to verify whether each comment was addressed, and finish with a line: SUMMARY: X addressed | Y partial | Z pending',
     conditions: [],
     advanceTo: 'followup',
+    saveReport: 'followup', // a plain prompt: without this only Haiku could tell what the run was
   },
 ]
 

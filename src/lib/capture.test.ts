@@ -5,6 +5,7 @@ const files = new Map<string, string>() // transcript path -> raw contents
 // Mirrors the real plugin-fs handle (read/seek/stat/close). `openHandles` counts the ones still
 // unclosed so a leaked descriptor fails the suite — the leak sessions.ts documents is easy to repeat.
 const openHandles = new Set<string>()
+const unopenable = new Set<string>() // stat works, open throws (a permission the scope lacks)
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   SeekMode: { Start: 0, Current: 1, End: 2 },
@@ -14,6 +15,7 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
     return { size: new TextEncoder().encode(content).length }
   },
   open: async (p: string) => {
+    if (unopenable.has(p)) throw new Error(`fs.seek not allowed ${p}`)
     const content = files.get(p)
     if (content === undefined) throw new Error(`ENOENT ${p}`)
     openHandles.add(p)
@@ -64,6 +66,7 @@ const REVIEW = 'a'.repeat(300) // clears the minimum-body guard
 beforeEach(() => {
   files.clear()
   openHandles.clear()
+  unopenable.clear()
 })
 
 describe('readTailLines', () => {
@@ -143,6 +146,15 @@ describe('captureIfGrown', () => {
     const again = await captureIfGrown('/s.jsonl')
     if (again?.kind !== 'captured') throw new Error('expected a re-capture')
     expect(again.body).toContain('and more')
+  })
+
+  it('reads a transcript again after a read that failed', async () => {
+    const { captureIfGrown } = await load()
+    write('/s.jsonl', [userPrompt('/do-review 123'), assistant([text(REVIEW)])])
+    unopenable.add('/s.jsonl')
+    expect(await captureIfGrown('/s.jsonl')).toBeNull()
+    unopenable.clear()
+    expect(await captureIfGrown('/s.jsonl')).toEqual(expect.objectContaining({ kind: 'captured' }))
   })
 
   it('is quiet about a transcript that vanished', async () => {

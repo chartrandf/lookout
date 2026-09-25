@@ -132,6 +132,9 @@ export type ActionButton = {
   prompt: string
   conditions: ButtonCondition[] // empty = always visible
   advanceTo?: Stage // review board only: move the card to this stage when the run completes
+  // review board only: store the run's final answer on the card as a report of this kind.
+  // Unset = auto-detect (the prompt's slash command, else Haiku); 'off' = never.
+  saveReport?: 'review' | 'followup' | 'off'
 }
 
 export type Config = {

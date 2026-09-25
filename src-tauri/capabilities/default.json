@@ -15,6 +15,9 @@
     "fs:allow-read",
     "fs:allow-read-dir",
     "fs:allow-exists",
+    "fs:allow-stat",
+    "fs:allow-fstat",
+    "fs:allow-seek",
     {
       "identifier": "fs:scope",
       "allow": [

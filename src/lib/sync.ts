@@ -1,6 +1,7 @@
 import type { Alert, ReviewTask } from '../types'
 import { type AlertScope, myLastWordAt, TASK_ALERT_KINDS, taskAlerts } from './alerts'
-import { captureIfGrown } from './capture'
+import { captureFromTranscript, captureIfGrown } from './capture'
+import { classifySession } from './classify'
 import { getConfig, setGithubName, setGithubUser } from './config'
 import {
   allTasks,
@@ -22,17 +23,58 @@ import { logError } from './log'
 import { notify } from './notify'
 import { scanReviewFiles } from './reviews'
 import { approvedByMe, deriveStage } from './reviewstage'
-import { captureKind, scanRepoReviewSessions, scanRepoSessions } from './sessions'
+import { captureKind, scanRepoReviewSessions, scanRepoSessions, transcriptPath } from './sessions'
 import { BOARD_STAGES } from './stages'
+import type { CaptureKind, CaptureResult } from './transcript'
 
 // Stages whose PRs we actively watch for new comments / CI: everything on the board bar Done.
 const ACTIVE_STAGES = new Set<string>(BOARD_STAGES.filter((s) => s !== 'done'))
 
 const CAPTURE_DAYS = 30 // a month of history, then the row goes
 
-// Reviews a session printed but never exported. Skipped for a branch that already has a report file:
-// that flow works, and capturing it again would put the same review on the card twice — the point is
-// to patch the broken flow only. Display only, so nothing here touches a stage or an alert.
+type CaptureTarget = { sessionId: string; kind: CaptureKind; taskId: string; branch: string }
+
+// The branch exports its own reports after all — including when the session in flight wrote one
+// since the last pass. Whatever was captured before that was visible has to go, or the card shows
+// the guess next to the report for the next 30 days. Those files are reviews (/do-review writes
+// them, /do-followup doesn't), so they only ever stand in for a review, never for a follow-up.
+const storeCapture = async (t: CaptureTarget, hasReportFiles: boolean, read: () => Promise<CaptureResult | null>) => {
+  if (hasReportFiles && t.kind === 'review') return deleteCapturedReview(t.sessionId)
+  const result = await read()
+  if (result?.kind === 'exported') return deleteCapturedReview(t.sessionId)
+  if (result?.kind !== 'captured') return
+  await upsertCapturedReview({
+    id: t.sessionId,
+    kind: t.kind,
+    taskId: t.taskId,
+    branch: t.branch,
+    source: 'sync',
+    sessionId: t.sessionId,
+    filePath: null,
+    body: result.body,
+    createdAt: result.ts ?? new Date().toISOString(),
+  })
+}
+
+// A button run whose turn just finished: capture it now instead of on the next pass. `kind` comes
+// from the prompt's slash command; a prompt that names none (null) is classified by Haiku from the
+// answer itself, which is what lets a plain-prompt button land on the card at all.
+export const captureRun = async (
+  r: Omit<CaptureTarget, 'kind'> & { kind: CaptureKind | null; repoPath: string; cwd: string },
+): Promise<void> => {
+  if (!(await getConfig()).captureReviews) return
+  if ((await capturedCliTaskIds()).has(r.taskId)) return // a skill handed this card a review itself
+  const files = await scanReviewFiles(r.repoPath)
+  const hasReportFiles = (files.get(r.branch) ?? files.get(r.branch.replace(/\//g, '-')) ?? []).length > 0
+  if (hasReportFiles && r.kind === 'review') return deleteCapturedReview(r.sessionId) // skip the read
+  const result = await captureFromTranscript(await transcriptPath(r.cwd, r.sessionId))
+  const kind = r.kind ?? (result.kind === 'captured' ? await classifySession(r.sessionId, result.body) : null)
+  if (kind) await storeCapture({ ...r, kind }, hasReportFiles, async () => result)
+}
+
+// Reviews a session printed but never exported. A review is skipped for a branch that already has a
+// report file: that flow works, and capturing it again would put the same review on the card twice —
+// the point is to patch the broken flow only. Display only, so nothing here touches a stage or an alert.
 const captureReviews = async (
   repo: string,
   repoPath: string,
@@ -52,30 +94,8 @@ const captureReviews = async (
     if (prNumber === undefined) continue // a session on a branch with no PR on the board
     const taskId = `${repo}#${prNumber}`
     if (registered.has(taskId)) continue // a skill handed this card a review itself
-    // The branch exports its own reports after all — including when the session in flight wrote one
-    // since the last pass. Whatever was captured before that was visible has to go, or the card
-    // shows the guess next to the report for the next 30 days.
-    if ((filesByBranch.get(branch) ?? filesByBranch.get(branch.replace(/\//g, '-')) ?? []).length) {
-      await deleteCapturedReview(s.sessionId)
-      continue
-    }
-    const result = await captureIfGrown(s.path)
-    if (result?.kind === 'exported') {
-      await deleteCapturedReview(s.sessionId)
-      continue
-    }
-    if (result?.kind !== 'captured') continue
-    await upsertCapturedReview({
-      id: s.sessionId,
-      kind,
-      taskId,
-      branch,
-      source: 'sync',
-      sessionId: s.sessionId,
-      filePath: null,
-      body: result.body,
-      createdAt: result.ts ?? new Date().toISOString(),
-    })
+    const hasReportFiles = (filesByBranch.get(branch) ?? filesByBranch.get(branch.replace(/\//g, '-')) ?? []).length > 0
+    await storeCapture({ sessionId: s.sessionId, kind, taskId, branch }, hasReportFiles, () => captureIfGrown(s.path))
   }
 }
 
