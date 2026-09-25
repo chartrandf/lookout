@@ -175,6 +175,18 @@ pub fn run() {
                             sql: include_str!("../migrations/013_my_prs.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 14,
+                            description: "captured reviews",
+                            sql: include_str!("../migrations/014_captured_reviews.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
+                        tauri_plugin_sql::Migration {
+                            version: 15,
+                            description: "captured review kind",
+                            sql: include_str!("../migrations/015_captured_review_kind.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
 import { PR_COLUMNS } from '../lib/prboard'
 import { parseStage, STAGE_LABEL, STAGES } from '../lib/stages'
+import { captureKindOf } from '../lib/transcript'
 import type { MyPr, PrColumn, ReviewTask, Stage } from '../types'
 import { type Args, flagNumber, flagString, parseArgs } from './args'
+import { reviewFromTranscript, transcriptCommand } from './capture'
 import { type Db, NoDatabaseError, openDb } from './db'
 import { notifyApp } from './notify'
 import { resolveDbPath } from './paths'
@@ -70,6 +74,9 @@ other people's PRs — the review pipeline
   lookout review stage <${STAGE_NAMES.join(' | ')}> [selector] [--force]
   lookout review reviewed | follow-up | done | watch | ignore [selector]
   lookout review comments-pushed [selector] --count <n> [--numbers 1,3] [--url <u>]
+  lookout review report [selector] --file <path> | --stdin [--kind review | followup]
+  lookout review capture [selector] --transcript <path> | --hook [--kind review | followup]
+  lookout review capture --clear [--older-than <days>]
 
 your own PRs — the merge pipeline
 
@@ -96,6 +103,7 @@ type Ctx = {
   quiet: boolean
   dryRun: boolean
   out: (human: string, data: unknown) => void
+  stdin: () => string // a piped review body, or a hook's JSON payload
 }
 
 const selectorFrom = (args: Args): Selector => ({
@@ -186,7 +194,123 @@ const reviewCommand = (db: Db, ctx: Ctx): number => {
     })
   }
 
+  // Register a review a skill produced itself: a report file it wrote wherever it likes, or the text
+  // on stdin. Either way the card shows it — no AI_TASKS/code-review convention to follow.
+  if (sub === 'report') {
+    const file = flagString(ctx.args.flags, 'file')
+    const piped = isFlag(ctx.args.flags, 'stdin')
+    if (!file && !piped) throw new Error('--file <path> or --stdin required')
+    const body = piped ? ctx.stdin().trim() : null
+    if (piped && !body) throw new Error('nothing on stdin')
+    const card = resolveCard(db, selectorFrom(ctx.args))
+    const path = file ? resolvePath(file) : null
+    const id = path ? `file:${path}` : `cli:${card.id}`
+    if (!ctx.dryRun)
+      db.saveCapturedReview({
+        id,
+        kind: readKind(ctx.args.flags),
+        taskId: card.id,
+        branch: card.branch,
+        source: 'cli',
+        sessionId: null,
+        filePath: path,
+        body,
+        createdAt: new Date().toISOString(),
+      })
+    ctx.out(`${ctx.dryRun ? 'would store' : 'stored'} a review for ${card.id}`, { id: card.id, review: id })
+    return EXIT.ok
+  }
+
+  // Read a review back out of a session transcript — what the Stop hook calls, so a flow that
+  // exports nothing still lands its review on the card.
+  if (sub === 'capture') {
+    if (isFlag(ctx.args.flags, 'clear')) {
+      const days = flagNumber(ctx.args.flags, 'older-than')
+      const before = days === undefined ? null : new Date(Date.now() - days * 86400_000).toISOString()
+      const removed = ctx.dryRun ? 0 : db.clearCapturedReviews(before)
+      ctx.out(`cleared ${removed} captured review${removed === 1 ? '' : 's'}`, { removed })
+      return EXIT.ok
+    }
+
+    const hook = isFlag(ctx.args.flags, 'hook')
+    const payload = hook ? hookPayload(ctx.stdin()) : {}
+    const transcript = payload.transcript_path ?? flagString(ctx.args.flags, 'transcript')
+    if (!transcript) throw new Error('--transcript <path> or --hook required')
+
+    // Resolve the card first: a Stop hook fires on every turn of every session on the machine, and
+    // most of them have no card at all. No point reading a quarter of a megabyte to find that out.
+    const card = resolveCard(db, selectorFrom(ctx.args))
+    const sessionId = payload.session_id ?? flagString(ctx.args.flags, 'session') ?? sessionIdFromPath(transcript)
+    const id = sessionId ?? `capture:${card.id}`
+
+    // A hook has no idea what it fired in. Anything that isn't a review run — a debugging session in
+    // a worktree that happens to match a card — has nothing to do with this card's review.
+    const command = transcriptCommand(transcript)
+    const kind = flagString(ctx.args.flags, 'kind') ? readKind(ctx.args.flags) : captureKindOf(command)
+    if (hook && !kind) {
+      ctx.out('not a review session', { captured: false, reason: 'not-a-review' })
+      return EXIT.ok
+    }
+
+    // The same rule the app applies: a card whose reviews are exported as files is left alone, and
+    // anything captured before that was apparent goes.
+    if (card.reviewFiles.length) {
+      if (!ctx.dryRun) db.deleteCapturedReview(id)
+      ctx.out('the branch exports its own reports', { captured: false, reason: 'exported' })
+      return EXIT.ok
+    }
+
+    const result = reviewFromTranscript(transcript)
+    if (result.kind !== 'captured') {
+      if (result.kind === 'exported' && !ctx.dryRun) db.deleteCapturedReview(id)
+      ctx.out(`nothing to capture (${result.kind})`, { captured: false, reason: result.kind })
+      return EXIT.ok
+    }
+    if (!ctx.dryRun)
+      db.saveCapturedReview({
+        id,
+        kind: kind ?? 'review',
+        taskId: card.id,
+        branch: card.branch,
+        source: hook ? 'hook' : 'cli',
+        sessionId,
+        filePath: null,
+        body: result.body,
+        createdAt: result.ts ?? new Date().toISOString(),
+      })
+    ctx.out(`${ctx.dryRun ? 'would capture' : 'captured'} a review for ${card.id}`, { id: card.id, captured: true })
+    return EXIT.ok
+  }
+
   throw new Error(`unknown ${ctx.args.path[0]} command "${sub}"`)
+}
+
+const isFlag = (flags: Args['flags'], name: string) => flags[name] === true || flags[name] === 'true'
+
+// What the session was doing, for the label the card shows. A caller that doesn't say means a review.
+const readKind = (flags: Args['flags']): 'review' | 'followup' => {
+  const kind = flagString(flags, 'kind') ?? 'review'
+  if (kind !== 'review' && kind !== 'followup') throw new Error('--kind expects review or followup')
+  return kind
+}
+
+// ~/.claude/projects/<slug>/<session id>.jsonl — the same id the app stores a sync capture under, so
+// the hook and the app refresh one row instead of racing to write two.
+const sessionIdFromPath = (transcript: string): string | null =>
+  transcript
+    .split('/')
+    .at(-1)
+    ?.replace(/\.jsonl$/, '') || null
+
+// What a Stop / SessionEnd hook writes on stdin (verified against the shipped ralph-loop stop hook:
+// `.session_id` and `.transcript_path`). Anything unexpected reads as an empty payload.
+const hookPayload = (raw: string): { session_id?: string; transcript_path?: string } => {
+  try {
+    const o = JSON.parse(raw)
+    return o && typeof o === 'object' ? o : {}
+  } catch {
+    return {}
+  }
 }
 
 const prLine = (p: MyPr): string =>
@@ -297,10 +421,18 @@ const doctor = (ctx: Ctx): number => {
   }
 }
 
-export const run = (argv: string[], stdout = console.log, stderr = console.error): number => {
+export const run = (
+  argv: string[],
+  stdout = console.log,
+  stderr = console.error,
+  readStdin = () => readFileSync(0, 'utf8'),
+): number => {
   const args = parseArgs(argv)
   const json = args.flags.json === true || args.flags.json === 'true'
-  const quiet = args.flags.quiet === true || args.flags.quiet === 'true'
+  // A Stop hook fires in every session, including ones in a repo Lookout has never heard of: it must
+  // say nothing and exit 0 whatever it finds, or it turns into noise in someone else's terminal.
+  const hookMode = args.flags.hook === true || args.flags.hook === 'true'
+  const quiet = hookMode || args.flags.quiet === true || args.flags.quiet === 'true'
   const ctx: Ctx = {
     args,
     json,
@@ -310,6 +442,7 @@ export const run = (argv: string[], stdout = console.log, stderr = console.error
       if (quiet) return
       stdout(json ? JSON.stringify(data, null, 2) : human)
     },
+    stdin: readStdin,
   }
 
   const [command] = args.path
@@ -330,6 +463,7 @@ export const run = (argv: string[], stdout = console.log, stderr = console.error
       db.close()
     }
   } catch (e) {
+    if (hookMode) return EXIT.ok // never fail a session's exit over a review we could not place
     if (e instanceof NoDatabaseError) {
       if (!quiet) stderr(String(e.message))
       return EXIT.noDb

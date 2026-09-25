@@ -1,5 +1,6 @@
 import type { PrState, ReviewFlavor, ReviewTask } from '../types'
 import { reviewFileTs } from './alerts'
+import { capturedReviewsForTask } from './db'
 import { fetchPrTimeline, type GhTimelineEvent } from './gh'
 import { logError, logInfo } from './log'
 import { isBot, reviewFlavor } from './prboard'
@@ -11,10 +12,43 @@ export type FeedEvent = {
   actor: string
   text: string
   mine: boolean // my action -> right side of the chat, others -> left
+  // a GitHub login shows that account's picture; an emoji stands in for what has none (👀 Lookout).
+  // A session I spawned is mine, shown as me; a saved report is Lookout's
+  // url: the picture GitHub sent, when it did. badge: a small picture over the corner — Lookout (👀)
+  // wears mine, since it acts for me
+  avatar: { login: string; url?: string } | { emoji: string; badge?: string }
   url?: string // opens in the PR window
   filePath?: string // opens the local review report
+  body?: string // a captured review's markdown — stored, with no file behind it (capture.ts)
   sessionId?: string // resumes the claude session
+  fromSession?: string // a captured report: the session it was read out of
+  // the session a report answers, quoted over it like a chat reply. exact = the capture named it;
+  // a report file names none, so it quotes the last session started before it (a guess)
+  replyTo?: { text: string; ts: string; exact: boolean }
 }
+
+// Tie each report to the session that produced it. Runs on the sorted feed.
+export const linkReports = (events: FeedEvent[]): FeedEvent[] => {
+  const sessions = events.filter((e) => e.sessionId)
+  return events.map((e) => {
+    if (!(e.filePath || e.body)) return e
+    const quote = (s: FeedEvent | undefined, exact: boolean) =>
+      s ? { ...e, replyTo: { text: s.text, ts: s.ts, exact } } : e
+    if (e.fromSession)
+      return quote(
+        sessions.find((s) => s.sessionId === e.fromSession),
+        true,
+      )
+    return quote(sessions.filter((s) => s.ts <= e.ts).at(-1), false)
+  })
+}
+
+// a timeline event with no user behind it is Lookout's own doing, not an anonymous GitHub user
+const ghAvatar = (actor: string, url?: string): FeedEvent['avatar'] =>
+  actor ? { login: actor, ...(url ? { url } : {}) } : { emoji: '👀' }
+// what Lookout did itself, like saving a report onto the card: it acts for me, so on my side, its
+// 👀 wearing my picture as a badge
+const lookout = (me: string) => ({ actor: 'Lookout', mine: true, avatar: { emoji: '👀', badge: me } })
 
 const REVIEW_ICONS: Record<string, string> = {
   approved: '✅',
@@ -102,6 +136,7 @@ export const buildFeed = async (
       actor: task.prAuthor,
       text: 'opened the pull request',
       mine: isMine(task.prAuthor),
+      avatar: ghAvatar(task.prAuthor),
     })
 
   if (task.repoPath) {
@@ -117,14 +152,39 @@ export const buildFeed = async (
           actor: 'you',
           text: s.command ? `started /${s.command} session` : 'started a claude session',
           mine: true,
+          avatar: { login: me },
           sessionId: s.sessionId,
         })
   }
 
   for (const f of task.reviewFiles) {
     const ts = reviewFileTs(f)
-    if (ts) events.push({ ts, icon: '📄', actor: 'claude', text: 'review report created', filePath: f, mine: true })
+    if (ts)
+      events.push({
+        ts,
+        icon: '📄',
+        ...lookout(me),
+        text: 'Review done',
+        filePath: f,
+      })
   }
+
+  // Reviews Lookout recovered itself, for the flows that export no file. A branch that does export
+  // one never has its reviews captured (sync.ts), so a card cannot show the same review twice.
+  const captured = await capturedReviewsForTask(task.id).catch((e) => {
+    logError('feed', e, `captured reviews for ${task.id}`)
+    return []
+  })
+  for (const c of captured)
+    events.push({
+      ts: c.createdAt,
+      icon: c.kind === 'followup' ? '📋' : '📄', // a follow-up is a checklist of addressed comments
+      ...lookout(me),
+      text: c.kind === 'followup' ? 'Follow-up done' : 'Review done',
+      body: c.body ?? undefined,
+      fromSession: c.sessionId ?? undefined,
+      filePath: c.filePath ?? undefined,
+    })
 
   // an empty timeline here is indistinguishable on screen from a PR with no activity, so say which
   // one it was — the gh error itself is already logged by gh.ts
@@ -139,12 +199,24 @@ export const buildFeed = async (
         text: `review: ${e.text}`,
         url: e.url,
         mine,
+        avatar: ghAvatar(e.actor, e.avatar),
       })
-    else events.push({ ts: e.ts, icon: KIND_ICONS[e.kind], actor: e.actor, text: e.text, url: e.url, mine })
+    else
+      events.push({
+        ts: e.ts,
+        icon: KIND_ICONS[e.kind],
+        actor: e.actor,
+        text: e.text,
+        url: e.url,
+        mine,
+        // a commit's actor is a git author name, not a login: GitHub's picture when the PR commit list
+        // had one, else mine is known and anyone else falls back to an initial
+        avatar: e.kind === 'commit' && mine && !e.avatar ? { login: me } : ghAvatar(e.actor, e.avatar),
+      })
   }
 
   const asc = events.sort((a, b) => a.ts.localeCompare(b.ts))
   logInfo('feed', `${task.repo}#${task.prNumber}: ${asc.length} events (${gh.length} from the github timeline)`)
   // chronological: newest last, next to the reply input
-  return { feed: groupCommits(asc), summary: deriveSummary(gh) }
+  return { feed: linkReports(groupCommits(asc)), summary: deriveSummary(gh) }
 }

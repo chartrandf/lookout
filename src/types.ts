@@ -73,6 +73,21 @@ export type ReviewTask = {
   updatedAt: string
 }
 
+// A review Lookout had to recover itself, because the session that produced it exported no file:
+// the final assistant turn of a review session, or a body/path handed over by the `lookout` CLI.
+// Display only — a captured review never feeds alerts.ts and never moves a card.
+export type CapturedReview = {
+  id: string // the session id, or "file:<abs path>" for a reference the CLI registered
+  kind: 'review' | 'followup' // what the session was doing — the feed says which one it is showing
+  taskId: string
+  branch: string
+  source: 'sync' | 'hook' | 'cli'
+  sessionId: string | null
+  filePath: string | null // when set, the file is the truth and `body` is null
+  body: string | null
+  createdAt: string
+}
+
 // What the bell shows. Alerts are derived from live PR state on every sync — never logged events:
 //  addressed     the author pushed real work after my review (merges/rebases don't count)
 //  ready_to_send my review session finished but I haven't said anything on GitHub yet
@@ -117,6 +132,9 @@ export type ActionButton = {
   prompt: string
   conditions: ButtonCondition[] // empty = always visible
   advanceTo?: Stage // review board only: move the card to this stage when the run completes
+  // review board only: store the run's final answer on the card as a report of this kind.
+  // Unset = auto-detect (the prompt's slash command, else Haiku); 'off' = never.
+  saveReport?: 'review' | 'followup' | 'off'
 }
 
 export type Config = {
@@ -127,4 +145,5 @@ export type Config = {
   prButtons: ActionButton[]
   animations: boolean // motion effects (running glow/sheen); colors stay either way
   logging: boolean // write errors to the debug log file (see src/lib/log.ts)
+  captureReviews: boolean // recover a review from the session transcript when the skill exported no file
 }

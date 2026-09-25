@@ -10,6 +10,7 @@ import {
   DEFAULT_REVIEW_BUTTONS,
   getConfig,
   setAnimations,
+  setCaptureReviews,
   setLogging,
   setPrButtons,
   setRepos,
@@ -48,7 +49,8 @@ import { scanReviewFiles } from './lib/reviews'
 import { cancelRun, closeRun, getRun, getRuns, killRun, replyRun, resumeRun, startRun, subscribeRuns } from './lib/runs'
 import { sessionCwd } from './lib/sessions'
 import { advanceStage } from './lib/stages'
-import { syncAll, syncTaskAlerts } from './lib/sync'
+import { captureRun, syncAll, syncTaskAlerts } from './lib/sync'
+import { runCaptureKind } from './lib/transcript'
 import { initTray, setTrayCount, showMainWindow } from './lib/tray'
 import { pathForBranch } from './lib/worktrees'
 import type {
@@ -97,6 +99,7 @@ const App = () => {
     prButtons: DEFAULT_PR_BUTTONS,
     animations: true,
     logging: false,
+    captureReviews: true,
   })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])
@@ -307,6 +310,20 @@ const App = () => {
         const summary = parseFollowupSummary(result)
         if (summary) await setFollowupSummary(taskId, summary)
         await linkReviewReport(taskId)
+        // the review lands on the card now, not on the next sync, as the button's "save answer as"
+        // setting says; a reply (no button) leaves the kind to Haiku, which answers once per session
+        const run = getRun(taskId)
+        const task = (await allTasks()).find((x) => x.id === taskId)
+        const kind = runCaptureKind(button)
+        if (run?.sessionId && task?.repoPath && kind !== 'off')
+          await captureRun({
+            taskId,
+            branch: task.branch,
+            repoPath: task.repoPath,
+            cwd: run.repoPath,
+            sessionId: run.sessionId,
+            kind,
+          }).catch((e) => logError('capture', e, `${taskId}: run capture`))
         // forward-only: a re-review on a follow-up card leaves it in Follow-up
         if (button?.advanceTo) {
           const cur = (await allTasks()).find((x) => x.id === taskId)?.stage
@@ -651,6 +668,10 @@ const App = () => {
             onSaveLogging={async (on) => {
               await setLogging(on)
               setLogEnabled(on) // takes effect on the next line written, not on the next sync
+              setConfig(await getConfig())
+            }}
+            onSaveCaptureReviews={async (on) => {
+              await setCaptureReviews(on)
               setConfig(await getConfig())
             }}
           />

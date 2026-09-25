@@ -27,7 +27,23 @@ export type Db = {
   myPrs: (filter?: { repo?: string; column?: PrColumn; branch?: string; prNumber?: number }) => MyPr[]
   myPr: (id: string) => MyPr | null
   setColumn: (id: string, column: PrColumn, force: boolean) => { from: PrColumn; to: PrColumn; changed: boolean }
+  // reviews with no report file behind them (`captured_reviews`, migration 014)
+  saveCapturedReview: (r: CapturedReviewInput) => void
+  deleteCapturedReview: (id: string) => void
+  clearCapturedReviews: (before: string | null) => number
   close: () => void
+}
+
+export type CapturedReviewInput = {
+  id: string
+  kind: 'review' | 'followup'
+  taskId: string
+  branch: string
+  source: 'cli' | 'hook'
+  sessionId: string | null
+  filePath: string | null
+  body: string | null
+  createdAt: string
 }
 
 export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
@@ -42,6 +58,12 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
   const hasTable = (name: string): boolean =>
     Boolean(handle.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?").get(name))
 
+  const hasColumn = (table: string, column: string): boolean =>
+    handle
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .some((c) => (c as { name: string }).name === column)
+
   if (!hasTable('tasks')) throw new NoDatabaseError(`${path} has no tasks table — start the app once first`)
 
   // `my_prs` arrived in migration 013, so a database written by an older app won't have it. Checked
@@ -49,6 +71,15 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
   const requireMyPrs = () => {
     if (!hasTable('my_prs')) {
       throw new NoDatabaseError(`${path} has no my_prs table — start this version of the app once to migrate`)
+    }
+  }
+
+  // `kind` arrived in migration 015: a CLI newer than the app it is writing for would otherwise fail
+  // on the INSERT with a raw SQLite message — and say nothing at all from a hook, which swallows
+  // everything. Check the column, not just the table.
+  const requireCapturedReviews = () => {
+    if (!hasTable('captured_reviews') || !hasColumn('captured_reviews', 'kind')) {
+      throw new NoDatabaseError(`${path} is from an older Lookout — start this version of the app once to migrate`)
     }
   }
 
@@ -136,6 +167,44 @@ export const openDb = (path = resolveDbPath(), readOnly = false): Db => {
         .map((r) => rowToMyPr(r as MyPrRow))
     },
     myPr,
+    // What a skill hands over outright, so it wins over anything the app guessed from a transcript
+    // (src/lib/db.ts keeps its own sync captures from overwriting a `cli` row).
+    saveCapturedReview: (r) => {
+      requireCapturedReviews()
+      handle
+        .prepare(
+          `INSERT INTO captured_reviews (id, kind, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             kind = excluded.kind, task_id = excluded.task_id, branch = excluded.branch,
+             source = excluded.source, session_id = excluded.session_id, file_path = excluded.file_path,
+             body = excluded.body, created_at = excluded.created_at, captured_at = excluded.captured_at`,
+        )
+        .run(
+          r.id,
+          r.kind,
+          r.taskId,
+          r.branch,
+          r.source,
+          r.sessionId,
+          r.filePath,
+          r.body,
+          r.createdAt,
+          new Date().toISOString(),
+        )
+    },
+    // the session went on to export its own report: the guess has to go, or the card shows both
+    deleteCapturedReview: (id) => {
+      requireCapturedReviews()
+      handle.prepare('DELETE FROM captured_reviews WHERE id = ?').run(id)
+    },
+    clearCapturedReviews: (before) => {
+      requireCapturedReviews()
+      const result = before
+        ? handle.prepare('DELETE FROM captured_reviews WHERE created_at < ?').run(before)
+        : handle.prepare('DELETE FROM captured_reviews').run()
+      return Number(result.changes)
+    },
     // Forward-only by default, like setStage: the board's own rule (src/lib/prcolumns.ts), so an
     // automated caller can't knock a PR back down the merge pipeline. --force sets it outright.
     //

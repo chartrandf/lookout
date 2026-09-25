@@ -123,10 +123,40 @@ describe('sessionsForBranch', () => {
         sessionId: 's2',
         command: 'handle-review',
         branch: 'directory-list-call-perf',
+        prNumber: null,
         ts: '2026-09-10T08:00:00Z',
         cwd: PERF,
+        path: `${dirFor(PERF)}/s2.jsonl`,
       },
     ])
+  })
+})
+
+describe('placing a session that named a PR instead of a branch', () => {
+  const reviewLine = (args: string) =>
+    `{"timestamp":"2026-09-12T08:00:00Z","gitBranch":"whatever-the-clone-is-on","message":{"content":"<command-name>/review</command-name> <command-args>${args}</command-args>"}}`
+
+  it('carries the PR number and no branch', async () => {
+    files.set(`${dirFor(REPO)}/rev.jsonl`, [reviewLine('2305')])
+    const { scanRepoReviewSessions } = await load()
+    const rev = (await scanRepoReviewSessions(REPO)).find((s) => s.sessionId === 'rev')
+    expect(rev).toMatchObject({ command: 'review', branch: null, prNumber: 2305 })
+  })
+
+  // the clone's branch is not the PR's branch: linking it would attach the session — and the
+  // Reviewing stage that follows from it — to whatever card happened to match
+  it('never lands in the branch map that drives the stage', async () => {
+    files.set(`${dirFor(REPO)}/rev.jsonl`, [reviewLine('2305')])
+    const { scanRepoSessions } = await load()
+    expect((await scanRepoSessions(REPO)).get('whatever-the-clone-is-on')).toBeUndefined()
+  })
+
+  it('still reads a branch argument as a branch', async () => {
+    files.set(`${dirFor(REPO)}/rev.jsonl`, [
+      `{"timestamp":"2026-09-12T08:00:00Z","message":{"content":"<command-name>/do-review</command-name> <command-args>feature-x</command-args>"}}`,
+    ])
+    const { scanRepoSessions } = await load()
+    expect((await scanRepoSessions(REPO)).get('feature-x')).toEqual(['rev'])
   })
 })
 
@@ -167,5 +197,33 @@ describe('file descriptors', () => {
     const { scanRepoSessions } = await load()
     expect((await scanRepoSessions(REPO)).has('late-branch')).toBe(false)
     expect([...openHandles]).toEqual([])
+  })
+})
+
+describe('captureKind', () => {
+  const session = (command: string | null) => ({
+    sessionId: 's',
+    command,
+    branch: 'b',
+    prNumber: null,
+    ts: null,
+    cwd: '/clone',
+    path: '/p.jsonl',
+  })
+
+  it('names what a capture-worthy session produced', async () => {
+    const { captureKind } = await load()
+    expect(['do-review', 'review', 'code-review'].map((c) => captureKind(session(c)))).toEqual([
+      'review',
+      'review',
+      'review',
+    ])
+    expect(captureKind(session('do-followup'))).toBe('followup')
+  })
+
+  it('leaves everything else out', async () => {
+    const { captureKind } = await load()
+    expect(captureKind(session('cp'))).toBeNull()
+    expect(captureKind(session(null))).toBeNull()
   })
 })

@@ -1,6 +1,7 @@
 import { getVersion } from '@tauri-apps/api/app'
 import { homeDir } from '@tauri-apps/api/path'
 import { disable, enable, isEnabled } from '@tauri-apps/plugin-autostart'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
@@ -12,6 +13,7 @@ import { avatarUrl } from '../lib/avatar'
 import { CONDITION_FIELDS } from '../lib/buttons'
 import { listSlashCommands } from '../lib/commands'
 import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
+import { capturedReviewCount, clearCapturedReviews } from '../lib/db'
 import { allowPath } from '../lib/fsscope'
 import { repoFromPath } from '../lib/gh'
 import { clearLog, logPath } from '../lib/log'
@@ -28,7 +30,17 @@ type Props = {
   onSavePrButtons: (buttons: ActionButton[]) => void
   onSaveAnimations: (on: boolean) => void
   onSaveLogging: (on: boolean) => void
+  onSaveCaptureReviews: (on: boolean) => void
 }
+
+// What to paste into ~/.claude/settings.json for instant capture. Lookout does not write that file
+// itself: it is the user's own config, shared with every other tool, and a merge gone wrong there is
+// worse than a copy-paste.
+const HOOK_SNIPPET = JSON.stringify(
+  { hooks: { Stop: [{ hooks: [{ type: 'command', command: 'lookout review capture --hook', timeout: 10 }] }] } },
+  null,
+  2,
+)
 
 // one settings row: label, hint, and the pill switch on the right
 const ToggleRow = ({
@@ -259,9 +271,9 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
             </button>
           </div>
 
-          {/* 4 — where the card lands once the run finishes (review board only) */}
+          {/* 4 — where the card lands once the run finishes, and whether its answer is kept (review board only) */}
           {board === 'review' && (
-            <label className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1">
               <span className={labelCls}>On completion</span>
               <div className="flex items-center gap-2 text-xs text-deck-400">
                 move card to stage
@@ -278,7 +290,22 @@ const ActionsEditor = ({ board, hint, buttons, defaults, commands, onEdit, onCom
                   ))}
                 </select>
               </div>
-            </label>
+              <div className="flex items-center gap-2 text-xs text-deck-400">
+                save answer as report
+                <select
+                  value={b.saveReport ?? ''}
+                  onChange={(e) =>
+                    patch(b.id, { saveReport: (e.target.value || undefined) as ActionButton['saveReport'] }, true)
+                  }
+                  className="w-48 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
+                >
+                  <option value="">auto-detect</option>
+                  <option value="review">review</option>
+                  <option value="followup">follow-up</option>
+                  <option value="off">don't save</option>
+                </select>
+              </div>
+            </div>
           )}
         </div>
       ))}
@@ -364,6 +391,7 @@ export const Settings = ({
   onSavePrButtons,
   onSaveAnimations,
   onSaveLogging,
+  onSaveCaptureReviews,
 }: Props) => {
   const [path, setPath] = useState('')
   const [editing, setEditing] = useState<ButtonBoard | null>(null) // which board's actions are open in the side panel
@@ -389,6 +417,16 @@ export const Settings = ({
   const [autostart, setAutostart] = useState(false)
   const [version, setVersion] = useState('')
   const [logFile, setLogFile] = useState('')
+  const [captured, setCaptured] = useState(0)
+  const [copiedHook, setCopiedHook] = useState(false)
+
+  // re-read after each sync: a pass can capture a review while this page is open
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refresh trigger only
+  useEffect(() => {
+    capturedReviewCount()
+      .then(setCaptured)
+      .catch(() => {}) // browser preview (no database): the count just stays at 0
+  }, [tasks])
 
   useEffect(() => {
     isEnabled()
@@ -598,6 +636,52 @@ export const Settings = ({
             </button>
           </div>
         )}
+      </ToggleRow>
+
+      <ToggleRow
+        label="Capture reviews"
+        hint="Keep the review a session printed but never saved, so it shows on the card. Skipped for a repo whose review command already writes AI_TASKS/code-review — that report is used instead. A month is kept."
+        on={config.captureReviews}
+        onToggle={() => onSaveCaptureReviews(!config.captureReviews)}
+      >
+        <div className="flex flex-col gap-2 border-t border-deck-800 pt-2">
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-xs text-deck-500">
+              {captured === 0 ? 'nothing captured yet' : `${captured} review${captured > 1 ? 's' : ''} stored`}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                writeText(HOOK_SNIPPET)
+                  .then(() => {
+                    setCopiedHook(true)
+                    setTimeout(() => setCopiedHook(false), 1500)
+                  })
+                  .catch(() => {}) // no clipboard (browser preview): leave the label alone
+              }}
+              className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
+            >
+              {copiedHook ? 'copied ✓' : 'Copy hook'}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                clearCapturedReviews()
+                  .then(() => setCaptured(0))
+                  .catch(() => {})
+              }
+              className="cursor-pointer rounded-md border border-deck-600 px-2 py-1 text-xs text-deck-300 hover:bg-deck-700"
+            >
+              Clear
+            </button>
+          </div>
+          {/* the sync pass already captures on its own; the hook is only about it being instant */}
+          <p className="text-xs text-deck-500">
+            A review shows up on the next sync. To have it land the moment a session stops, paste the copied Stop hook
+            into <span className="font-mono">~/.claude/settings.json</span> (needs the{' '}
+            <span className="font-mono">lookout</span> CLI on your PATH).
+          </p>
+        </div>
       </ToggleRow>
 
       {import.meta.env.DEV && (

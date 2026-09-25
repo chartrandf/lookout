@@ -1,5 +1,5 @@
 import Database from '@tauri-apps/plugin-sql'
-import type { Alert, AlertKind, MyPr, PrColumn, ReviewTask, Stage } from '../types'
+import type { Alert, AlertKind, CapturedReview, MyPr, PrColumn, ReviewTask, Stage } from '../types'
 import { type AlertScope, inScope } from './alerts'
 import { logError } from './log'
 import { type MyPrRow, rowToMyPr } from './myprrow'
@@ -317,4 +317,102 @@ export const dropMyPrsMissingFrom = async (repo: string, keepIds: string[]) => {
   }
   const placeholders = keepIds.map((_, i) => `$${i + 2}`).join(', ')
   await d.execute(`DELETE FROM my_prs WHERE repo = $1 AND id NOT IN (${placeholders})`, [repo, ...keepIds])
+}
+
+// --- captured reviews ---------------------------------------------------------------------------
+// Reviews recovered from a session transcript or registered by the CLI (see migration 014). They
+// only ever feed the chat feed — no alert, no stage move.
+
+type CapturedReviewRow = {
+  id: string
+  kind: string
+  task_id: string
+  branch: string
+  source: string
+  session_id: string | null
+  file_path: string | null
+  body: string | null
+  created_at: string
+}
+
+const toCapturedReview = (r: CapturedReviewRow): CapturedReview => ({
+  id: r.id,
+  kind: r.kind === 'followup' ? 'followup' : 'review',
+  taskId: r.task_id,
+  branch: r.branch,
+  source: r.source as CapturedReview['source'],
+  sessionId: r.session_id,
+  filePath: r.file_path,
+  body: r.body,
+  createdAt: r.created_at,
+})
+
+// A later pass re-captures the same session (a Stop hook fires on every turn, a sync pass re-reads a
+// growing transcript), so the row is refreshed rather than duplicated — except that what the CLI
+// registered is what a skill told us outright, and a guess from a transcript must not overwrite it.
+export const upsertCapturedReview = async (r: Omit<CapturedReview, 'id'> & { id: string }) => {
+  const d = await getDb()
+  await d.execute(
+    `INSERT INTO captured_reviews (id, kind, task_id, branch, source, session_id, file_path, body, created_at, captured_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     ON CONFLICT(id) DO UPDATE SET
+       kind = $2, task_id = $3, branch = $4, source = $5, session_id = $6, file_path = $7, body = $8,
+       created_at = $9, captured_at = $10
+     WHERE captured_reviews.source != 'cli' OR excluded.source = 'cli'`,
+    [
+      r.id,
+      r.kind,
+      r.taskId,
+      r.branch,
+      r.source,
+      r.sessionId,
+      r.filePath,
+      r.body,
+      r.createdAt,
+      new Date().toISOString(),
+    ],
+  )
+}
+
+export const capturedReviewsForTask = async (taskId: string): Promise<CapturedReview[]> => {
+  const d = await getDb()
+  const rows = await d.select<CapturedReviewRow[]>(
+    'SELECT * FROM captured_reviews WHERE task_id = $1 ORDER BY created_at',
+    [taskId],
+  )
+  return rows.map(toCapturedReview)
+}
+
+// Cards a skill registered a review for outright. Lookout does not guess alongside one: without
+// this the two land under different ids — `cli:<card>` or `file:<path>` against the session id — and
+// the card shows the same review twice.
+export const capturedCliTaskIds = async (): Promise<Set<string>> => {
+  const d = await getDb()
+  const rows = await d.select<{ task_id: string }[]>("SELECT task_id FROM captured_reviews WHERE source = 'cli'")
+  return new Set(rows.map((r) => r.task_id))
+}
+
+// A capture stops being true: the session went on to export its own report, or the branch turned out
+// to have report files after all. Nothing else deletes a row before its 30 days are up, so without
+// this the card keeps showing both the guess and the real report.
+export const deleteCapturedReview = async (id: string) => {
+  const d = await getDb()
+  await d.execute('DELETE FROM captured_reviews WHERE id = $1', [id])
+}
+
+export const capturedReviewCount = async (): Promise<number> => {
+  const d = await getDb()
+  const rows = await d.select<{ n: number }[]>('SELECT COUNT(*) AS n FROM captured_reviews')
+  return rows[0]?.n ?? 0
+}
+
+export const clearCapturedReviews = async () => {
+  const d = await getDb()
+  await d.execute('DELETE FROM captured_reviews')
+}
+
+// Retention: a month of history, nothing older. `before` is an ISO instant.
+export const pruneCapturedReviews = async (before: string) => {
+  const d = await getDb()
+  await d.execute('DELETE FROM captured_reviews WHERE created_at < $1', [before])
 }

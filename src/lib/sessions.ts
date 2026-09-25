@@ -1,13 +1,20 @@
 import { homeDir, join } from '@tauri-apps/api/path'
 import { exists, open, readDir } from '@tauri-apps/plugin-fs'
+import { type CaptureKind, COMMAND_RE, captureKindOf } from './transcript'
 import { listWorktrees } from './worktrees'
 
 export type ReviewSession = {
   sessionId: string
   command: string | null // slash command that opened the session, when it started with one
-  branch: string
+  // What the session is about. A command naming a branch (/do-review <branch>) or a worktree gives
+  // the branch; a command naming a PR (/review <pr_id>) gives the number and no branch, because the
+  // run happens in whatever checkout pathForBranch picked — usually the clone, sitting on some
+  // unrelated branch. Guessing a branch from that would attach the session to the wrong card.
+  branch: string | null
+  prNumber: number | null
   ts: string | null
   cwd: string // checkout the session ran in — the clone or one of its worktrees
+  path: string // the transcript file, so a review can be read back out of it (capture.ts)
 }
 
 // /Users/x/Projects/@foo/bar -> -Users-x-Projects--foo-bar (Claude Code project slug)
@@ -15,9 +22,12 @@ const projectSlug = (repoPath: string) => repoPath.replace(/[^a-zA-Z0-9]/g, '-')
 
 const sessionDir = async (checkout: string) => join(await homeDir(), '.claude', 'projects', projectSlug(checkout))
 
-const REVIEW_COMMAND_RE = /<command-name>\/?(do-review|do-followup)<\/command-name>(?:\\n|\s)*<command-args>([^<"]*)/
-const ANY_COMMAND_RE = /<command-name>\/?([\w-]+)<\/command-name>/
+// The transcript Claude Code writes for a session started in `checkout`
+export const transcriptPath = async (checkout: string, sessionId: string) =>
+  join(await sessionDir(checkout), `${sessionId}.jsonl`)
+
 const TS_RE = /"timestamp":"([^"]+)"/
+export const captureKind = (s: ReviewSession): CaptureKind | null => captureKindOf(s.command)
 
 // Cache: session files are append-only; once a file's first turn is parsed the result never changes.
 const cache = new Map<string, ReviewSession | null>()
@@ -66,25 +76,22 @@ const scanFile = async (
   worktreeBranch: string | null,
 ): Promise<ReviewSession | null> => {
   if (cache.has(filePath)) return cache.get(filePath) ?? null
-  let result: ReviewSession | null = null
   let command: string | null = null
+  let arg: string | null = null
   let ts: string | null = null
   for (const line of await readHeadLines(filePath)) {
     ts ??= line.match(TS_RE)?.[1] ?? null
-    const review = line.match(REVIEW_COMMAND_RE)
-    if (review) {
-      command = review[1]
-      const branch = review[2].trim()
-      if (branch) result = { sessionId, command, branch, ts, cwd }
-      break
-    }
-    const any = line.match(ANY_COMMAND_RE)
-    if (any) {
-      command = any[1]
-      break
-    }
+    if (command) continue // the first command is the one that opened the session
+    const m = line.match(COMMAND_RE)
+    if (!m) continue
+    command = m[1]
+    arg = (m[2] ?? '').trim() || null
   }
-  if (!result && worktreeBranch) result = { sessionId, command, branch: worktreeBranch, ts, cwd }
+  // An all-digit argument is a PR id, anything else is a branch name — which covers both
+  // `/do-review <branch>` and `/review <pr_id>` without either having to know about the other.
+  const prNumber = arg && /^\d+$/.test(arg) ? Number(arg) : null
+  const branch = (prNumber === null ? arg : null) ?? worktreeBranch
+  const result = branch || prNumber !== null ? { sessionId, command, branch, prNumber, ts, cwd, path: filePath } : null
   cache.set(filePath, result)
   return result
 }
@@ -116,10 +123,13 @@ const scanRepo = async (repoPath: string): Promise<ReviewSession[]> => {
   return sessions.sort((a, b) => (a.ts ?? '').localeCompare(b.ts ?? ''))
 }
 
-// Map branch -> session ids for a repo
+// Map branch -> session ids for a repo. A session placed only by PR number has no branch and stays
+// out: these ids are what `hasSession` reads (sync.ts), and that moves a card to Reviewing — too
+// much to hang on a guess about which card a session belonged to.
 export const scanRepoSessions = async (repoPath: string): Promise<Map<string, string[]>> => {
   const byBranch = new Map<string, string[]>()
   for (const s of await scanRepo(repoPath)) {
+    if (!s.branch) continue
     const ids = byBranch.get(s.branch) ?? []
     ids.push(s.sessionId)
     byBranch.set(s.branch, ids)
@@ -129,6 +139,10 @@ export const scanRepoSessions = async (repoPath: string): Promise<Map<string, st
 
 export const sessionsForBranch = async (repoPath: string, branch: string): Promise<ReviewSession[]> =>
   (await scanRepo(repoPath)).filter((s) => s.branch === branch)
+
+// The sessions something can be read back out of (capture.ts), across every checkout of the repo.
+export const scanRepoReviewSessions = async (repoPath: string): Promise<ReviewSession[]> =>
+  (await scanRepo(repoPath)).filter((s) => captureKind(s) !== null)
 
 // Which checkout a session can be resumed from: `claude --resume` only sees the sessions of the
 // directory it runs in, so resuming a worktree session from the clone would fail to find it.

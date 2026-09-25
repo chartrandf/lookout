@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -19,6 +19,16 @@ const cli = (...argv: string[]) =>
     argv,
     (s) => out.push(String(s)),
     (s) => err.push(String(s)),
+    () => 'piped review body',
+  )
+
+// the stdin a hook payload (or a piped body) arrives on
+const runWithStdin = (stdin: string, ...argv: string[]) =>
+  run(
+    argv,
+    (s) => out.push(String(s)),
+    (s) => err.push(String(s)),
+    () => stdin,
   )
 
 beforeEach(() => {
@@ -345,5 +355,144 @@ describe('lookout mine — my own PRs', () => {
     seedMyPr('owner/repo#7', 'ready')
     expect(cli('mine', 'list', '--json')).toBe(EXIT.ok)
     expect(JSON.parse(out.join(''))[0]).toMatchObject({ id: 'owner/repo#7', column: 'ready', ci_state: 'pass' })
+  })
+})
+
+// --- captured reviews ---------------------------------------------------------------------------
+
+const capturedRows = () => {
+  const h = new DatabaseSync(dbPath)
+  const rows = h.prepare('SELECT * FROM captured_reviews ORDER BY id').all() as Record<string, unknown>[]
+  h.close()
+  return rows
+}
+
+const transcript = (lines: Record<string, unknown>[]): string => {
+  const p = join(mkdtempSync(join(tmpdir(), 'lookout-tx-')), 's1.jsonl')
+  writeFileSync(p, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`)
+  return p
+}
+
+const assistantLine = (text: string) => ({
+  type: 'assistant',
+  message: { role: 'assistant', content: [{ type: 'text', text }] },
+  timestamp: '2026-09-18T10:00:00.000Z',
+})
+const REVIEW_TEXT = `## Review\n${'x'.repeat(300)}`
+
+// the head line a session opened with, which is how the hook tells a review run from any other
+const commandLine = (name: string, args = '') => ({
+  type: 'user',
+  message: { role: 'user', content: `<command-name>/${name}</command-name> <command-args>${args}</command-args>` },
+  timestamp: '2026-09-18T09:00:00.000Z',
+})
+
+describe('review report', () => {
+  it('registers a report file against the card', () => {
+    expect(cli('review', 'report', '--file', '/tmp/repo/r.md', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([
+      { task_id: 'owner/repo#42', branch: 'feature-x', source: 'cli', file_path: '/tmp/repo/r.md', body: null },
+    ])
+  })
+
+  it('stores a body piped in', () => {
+    expect(cli('review', 'report', '--stdin', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ task_id: 'owner/repo#42', source: 'cli', body: 'piped review body' }])
+  })
+
+  it('refreshes the same row when called again for the card', () => {
+    cli('review', 'report', '--stdin', '--pr', '42')
+    cli('review', 'report', '--stdin', '--pr', '42')
+    expect(capturedRows()).toHaveLength(1)
+  })
+
+  it('needs --file or --stdin', () => {
+    expect(cli('review', 'report', '--pr', '42')).toBe(EXIT.error)
+  })
+
+  it('writes nothing on --dry-run', () => {
+    expect(cli('review', 'report', '--file', '/tmp/repo/r.md', '--pr', '42', '--dry-run')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
+  })
+})
+
+describe('review capture', () => {
+  it('stores the final turn of a transcript', () => {
+    const p = transcript([assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ task_id: 'owner/repo#42', source: 'cli', body: REVIEW_TEXT }])
+  })
+
+  it('stores nothing when the session exported its own report', () => {
+    const p = transcript([
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', name: 'Write', input: { file_path: 'AI_TASKS/code-review/x.md' } },
+            { type: 'text', text: REVIEW_TEXT },
+          ],
+        },
+      },
+    ])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
+  })
+
+  it('reads the transcript path and session id out of a hook payload', () => {
+    const p = transcript([commandLine('review', '42'), assistantLine(REVIEW_TEXT)])
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p, hook_event_name: 'Stop' })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ id: 'abc123', session_id: 'abc123', source: 'hook' }])
+  })
+
+  it('stays silent and succeeds when a hook fires outside a known repo', () => {
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: '/nope.jsonl' })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook')).toBe(EXIT.ok)
+    expect(err).toEqual([])
+    expect(out).toEqual([])
+  })
+
+  it('takes --kind followup', () => {
+    const p = transcript([assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42', '--kind', 'followup')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ kind: 'followup' }])
+  })
+
+  it('refuses a kind it does not know', () => {
+    const p = transcript([assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42', '--kind', 'nonsense')).toBe(EXIT.error)
+  })
+
+  it('ignores a hook that fired in a session that is not a review', () => {
+    const p = transcript([commandLine('handle-review'), assistantLine(REVIEW_TEXT)])
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
+  })
+
+  it('takes the kind from the command that opened the session', () => {
+    const p = transcript([commandLine('do-followup', 'feature-x'), assistantLine(REVIEW_TEXT)])
+    const payload = JSON.stringify({ session_id: 'abc123', transcript_path: p })
+    expect(runWithStdin(payload, 'review', 'capture', '--hook', '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toMatchObject([{ kind: 'followup' }])
+  })
+
+  it('leaves a card alone when its branch exports report files', () => {
+    const h = new DatabaseSync(dbPath)
+    h.prepare('UPDATE tasks SET review_files = \'["/tmp/repo/AI_TASKS/code-review/x.md"]\' WHERE id = ?').run(
+      'owner/repo#42',
+    )
+    h.close()
+    const p = transcript([commandLine('review', '42'), assistantLine(REVIEW_TEXT)])
+    expect(cli('review', 'capture', '--transcript', p, '--pr', '42')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
+  })
+
+  it('clears what it stored', () => {
+    cli('review', 'report', '--file', '/tmp/repo/r.md', '--pr', '42')
+    expect(cli('review', 'capture', '--clear')).toBe(EXIT.ok)
+    expect(capturedRows()).toHaveLength(0)
   })
 })

@@ -2,6 +2,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { avatarUrl } from '../lib/avatar'
 import { buildFeed, type FeedEvent, type TimelineSummary } from '../lib/feed'
 import { approvePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
@@ -9,7 +10,7 @@ import { openPrWindow } from '../lib/prwindow'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd } from '../lib/sessions'
 import { canApproveFrom, STAGES } from '../lib/stages'
-import { timeAgo } from '../lib/time'
+import { messageTime } from '../lib/time'
 import type { ActionButton, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
 import { Markdown } from './Markdown'
@@ -248,6 +249,64 @@ const groupLines = (lines: RunLine[]): RunLine[][] =>
     return groups
   }, [])
 
+const feedName = (e: FeedEvent) => (e.actor === 'Lookout' ? 'Lookout' : e.mine ? 'You' : e.actor || 'Lookout')
+
+// Lucide "reply": marks a report as the answer to the session stacked behind it
+const ReplyIcon = () => (
+  <svg
+    width={12}
+    height={12}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <polyline points="9 17 4 12 9 7" />
+    <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+  </svg>
+)
+
+// Who a history message is from: the GitHub picture, or an emoji for what has no account. A login
+// that doesn't resolve (a commit carries a git author name, not a login) falls back to its initial.
+// A badge (my picture, on Lookout's 👀: it acts for me) sits small over the bottom-right corner.
+const FeedAvatar = ({ avatar, name }: { avatar: FeedEvent['avatar']; name: string }) => {
+  const [broken, setBroken] = useState(false)
+  // one visible 28px circle for every kind, so an emoji reads the same size as a photo
+  const cls = 'flex h-7 w-7 items-center justify-center overflow-hidden rounded-full bg-deck-700 ring-1 ring-deck-600'
+  const face =
+    'emoji' in avatar ? (
+      <span className={`${cls} text-lg leading-none`} role="img" aria-label={name}>
+        {avatar.emoji}
+      </span>
+    ) : broken ? (
+      <span className={`${cls} text-sm font-medium text-deck-300`}>{name.charAt(0).toUpperCase()}</span>
+    ) : (
+      <img
+        src={avatar.url ?? avatarUrl(avatar.login)}
+        alt={name}
+        onError={() => setBroken(true)}
+        className={`${cls} object-cover`}
+      />
+    )
+  // mt: clear the name line (leading-4 + mb-0.5) so the avatar sits beside the bubble, not the name
+  return (
+    <span className="relative mt-[20px] shrink-0">
+      {face}
+      {'badge' in avatar && avatar.badge && (
+        <img
+          src={avatarUrl(avatar.badge)}
+          alt=""
+          aria-hidden
+          className="absolute -right-1 -bottom-1.5 h-4 w-4 rounded-full object-cover ring-1 ring-deck-950"
+        />
+      )}
+    </span>
+  )
+}
+
 export const SessionPanel = ({
   task,
   run,
@@ -273,13 +332,13 @@ export const SessionPanel = ({
   const [approved, setApproved] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
-  const [report, setReport] = useState<{ path: string; content: string } | null>(null)
+  const [report, setReport] = useState<{ title: string; content: string } | null>(null)
   const [showRun, setShowRun] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
   const runRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true) // terminal tails the output until you scroll away from the bottom
   const autoTopRef = useRef(-1)
-  const reportRef = useRef<{ path: string; content: string } | null>(null)
+  const reportRef = useRef<{ title: string; content: string } | null>(null)
   reportRef.current = report
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: rebuild feed when switching task
@@ -328,12 +387,17 @@ export const SessionPanel = ({
   }, [runIdle, task.reviewFiles.length])
 
   const openReport = async (path: string) => {
+    const title = path.split('/').at(-1) ?? path
     try {
-      setReport({ path, content: await readTextFile(path) })
+      setReport({ title, content: await readTextFile(path) })
     } catch {
-      setReport({ path, content: '(could not read report file)' })
+      setReport({ title, content: '(could not read report file)' })
     }
   }
+
+  // a captured review has no file behind it: the markdown itself travelled on the feed event, and
+  // the event's own wording is the title — a follow-up must not open under a review's name
+  const openCaptured = (content: string, title: string) => setReport({ title, content })
 
   const send = () => {
     if (!input.trim()) return
@@ -687,54 +751,111 @@ export const SessionPanel = ({
               </h4>
               {!feed && <p className="text-sm text-deck-500">loading history…</p>}
               {feed?.length === 0 && <p className="text-sm text-deck-500">No events yet.</p>}
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col">
                 {feed?.map((e, i) => {
+                  // a report reads as a title ("📄 Review done (See Report)")
+                  const isReport = Boolean(e.filePath || e.body)
+                  const name = feedName(e)
+                  // a run of messages from one person shows who once, on its first message
+                  const prev = feed[i - 1]
+                  const grouped = prev !== undefined && prev.mine === e.mine && feedName(prev) === name
+                  // ✓✓ = that claude session has concluded (not running anymore)
+                  const done = e.sessionId && !(run?.sessionId === e.sessionId && run.status === 'running')
+                  const meta = (
+                    <>
+                      {messageTime(e.ts)}
+                      {done && <span className="ml-1 text-grass-400">✓✓</span>}
+                    </>
+                  )
+                  // messenger-style stamp: an invisible copy at the end of the text reserves the room, so
+                  // the real one, pinned bottom-right and dipping into the bottom padding, shares the last
+                  // line when it fits and wraps when not
                   const body = (
                     <>
                       <span className="mr-1.5">{e.icon}</span>
-                      <span className="font-medium">{e.mine ? 'you' : e.actor}</span> {e.text}
-                      {e.filePath && ' ↗'}
-                      {e.sessionId && ' 👻'}
+                      <span className={e.filePath || e.body || e.url || e.sessionId ? 'group-hover:underline' : ''}>
+                        {e.text}
+                        {isReport && ' (See Report) ↗'}
+                        {e.sessionId && ' 👻'}
+                      </span>
+                      <span aria-hidden className="invisible ml-2 text-[10px]">
+                        {meta}
+                      </span>
+                      <span
+                        className="absolute right-2.5 bottom-1 text-[10px] text-deck-500"
+                        title={`${new Date(e.ts).toLocaleString()}${done ? ' · session completed' : ''}`}
+                      >
+                        {meta}
+                      </span>
                     </>
                   )
-                  const bubbleClass = `max-w-[85%] rounded-2xl px-3 py-1.5 text-sm ${
+                  // 18px = half a one-line bubble (8 + 20 + 8 px tall, leading-5 so an emoji can't grow the
+                  // line): one line reads as a pill, centred, more lines as a softly squared box
+                  const bubbleClass = `relative rounded-[18px] border px-3 py-2 text-sm leading-5 ${
                     e.mine
-                      ? 'rounded-br-sm bg-grass-600/25 text-grass-100'
-                      : 'rounded-bl-sm border border-deck-700 bg-deck-800 text-deck-200'
+                      ? 'border-grass-700/60 bg-grass-600/25 text-grass-100'
+                      : 'border-deck-700 bg-deck-800 text-deck-200'
                   }`
-                  return (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
-                    <li key={i} className={`flex flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
-                      {e.filePath || e.url || e.sessionId ? (
-                        <button
-                          type="button"
-                          title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
-                          onClick={(ev) =>
-                            e.filePath
+                  const bubble =
+                    e.filePath || e.body || e.url || e.sessionId ? (
+                      <button
+                        type="button"
+                        title={e.sessionId ? `Resume session ${e.sessionId} in Ghostty` : undefined}
+                        onClick={(ev) =>
+                          e.body
+                            ? openCaptured(e.body, e.text)
+                            : e.filePath
                               ? openReport(e.filePath)
                               : e.sessionId
                                 ? resumeSession(e.sessionId)
                                 : openPrWindow(e.url as string, task.repo, task.prNumber, ev.metaKey)
-                          }
-                          className={`${bubbleClass} cursor-pointer text-left hover:underline`}
-                        >
-                          {body}
-                        </button>
-                      ) : (
-                        <div className={bubbleClass}>{body}</div>
-                      )}
-                      <span
-                        className={`mt-0.5 text-[10px] text-deck-500 ${e.mine ? 'pr-1' : 'pl-1'}`}
-                        title={new Date(e.ts).toLocaleString()}
+                        }
+                        className={`${bubbleClass} group cursor-pointer text-left`}
                       >
-                        {/* ✓✓ = that claude session has concluded (not running anymore) */}
-                        {e.sessionId && !(run?.sessionId === e.sessionId && run.status === 'running') && (
-                          <span className="mr-1 text-grass-400" title="session completed">
-                            ✓✓
+                        {body}
+                      </button>
+                    ) : (
+                      <div className={bubbleClass}>{body}</div>
+                    )
+                  return (
+                    <li
+                      // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
+                      key={i}
+                      className={`flex items-start gap-2 ${e.mine ? 'flex-row-reverse' : ''} ${i === 0 ? '' : grouped ? 'mt-1' : 'mt-4'}`}
+                    >
+                      {grouped ? <span className="w-7 shrink-0" /> : <FeedAvatar avatar={e.avatar} name={name} />}
+                      <div className={`flex max-w-[60%] min-w-0 flex-col ${e.mine ? 'items-end' : 'items-start'}`}>
+                        {/* a reply always says what it answers, even inside a run from one person */}
+                        {(!grouped || e.replyTo) && (
+                          <span className="mb-0.5 flex items-center gap-1 text-[12px] leading-4 font-bold text-deck-400">
+                            {e.replyTo && <ReplyIcon />}
+                            {e.replyTo ? `Reply from ${name}` : name}
                           </span>
                         )}
-                        {timeAgo(e.ts)}
-                      </span>
+                        {e.replyTo ? (
+                          // the session this report answers sits behind it, like a card under a card:
+                          // 20px further left, same right edge, peeking out on top, squarer, content grayed
+                          <div className="grid">
+                            <div
+                              className="rounded-xl border border-grass-700/40 bg-grass-700/15 px-3 pt-2 pb-5 text-xs text-deck-300"
+                              title={
+                                e.replyTo.exact
+                                  ? 'The session this report was captured from'
+                                  : 'The last session started before this report (the file names none)'
+                              }
+                            >
+                              {/* the bubble stays solid; only what it says is toned down */}
+                              <span className="[filter:grayscale(70%)]">
+                                🤖 {e.replyTo.text} · {messageTime(e.replyTo.ts)}
+                              </span>
+                            </div>
+                            {/* opaque underlay: the front bubble's tint is translucent and would show the back one */}
+                            <div className="-mt-3 ml-[20px] rounded-[18px] bg-deck-950">{bubble}</div>
+                          </div>
+                        ) : (
+                          bubble
+                        )}
+                      </div>
                     </li>
                   )
                 })}
@@ -767,9 +888,7 @@ export const SessionPanel = ({
                 >
                   ← back
                 </button>
-                <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">
-                  {report.path.split('/').at(-1)}
-                </p>
+                <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{report.title}</p>
               </div>
               <Markdown
                 text={report.content}
