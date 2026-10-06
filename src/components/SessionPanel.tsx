@@ -65,6 +65,7 @@ type ReplyBoxProps = {
   placeholder: string
   tools?: ReactNode // options for the message to send, on the box's bottom row
   commands: string[] // skills + slash commands suggested on `/`
+  autoFocus?: boolean // take the caret on mount
 }
 
 const ArrowUpIcon = () => (
@@ -95,8 +96,13 @@ const ReplyBox = ({
   placeholder,
   tools,
   commands,
+  autoFocus,
 }: ReplyBoxProps) => {
   const ref = useRef<HTMLTextAreaElement>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on mount only
+  useEffect(() => {
+    if (autoFocus) ref.current?.focus()
+  }, [])
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure on every value change
   useEffect(() => {
     const el = ref.current
@@ -1102,6 +1108,7 @@ export const SessionPanel = ({
                     running={running}
                     placeholder='send comments from here — e.g. "1,3" or "all"'
                     commands={commands}
+                    autoFocus
                   />
                 </div>
               )}
