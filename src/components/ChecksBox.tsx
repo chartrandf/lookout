@@ -88,7 +88,7 @@ export const ChecksBox = ({ checks, expanded }: { checks: CheckItem[]; expanded:
         >
           <span className="text-red-400">✗</span>
           <span className="text-deck-200">
-            Merge conditions are failing ({failing.length}/{ran})
+            Merge conditions are failing ({by('pass').length}/{ran})
           </span>
           <span className="text-deck-500">{summary} checks</span>
           <span className="ml-auto text-deck-400">{open ? '⌄' : '›'}</span>
