@@ -11,7 +11,7 @@ import { approvePr, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
 import type { CheckItem } from '../lib/prboard'
-import { openPrWindow } from '../lib/prwindow'
+import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd } from '../lib/sessions'
@@ -511,6 +511,17 @@ export const SessionPanel = ({
   useEffect(() => {
     if (runIdle) reloadFeed()
   }, [runIdle])
+
+  // back from the in-app browser (often a merge there): refresh like the ↻ button would
+  const reloadFeedRef = useRef(reloadFeed)
+  reloadFeedRef.current = reloadFeed
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-subscribe per card only
+  useEffect(() => {
+    const sub = onPrWindowClosed(task.repo, task.prNumber, () => reloadFeedRef.current())
+    return () => {
+      sub.then((off) => off())
+    }
+  }, [task.id])
 
   const openReport = async (path: string) => {
     const title = path.split('/').at(-1) ?? path

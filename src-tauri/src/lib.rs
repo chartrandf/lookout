@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_fs::FsExt;
 
 // Watched clones and their worktrees live wherever the user keeps them, so the capability file
@@ -254,13 +254,16 @@ pub fn run() {
         })
         // Cmd+W on the board hides it instead of destroying it, so the Dock icon can bring it back
         // with its state (and running sessions) intact; Cmd+Q still quits
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
+                api.prevent_close();
+                let _ = window.hide();
             }
+            // a PR window closed: the board refetches that card (a merge done in it shows up)
+            tauri::WindowEvent::Destroyed if window.label().starts_with("pr-") => {
+                let _ = window.app_handle().emit("pr-window:closed", window.label());
+            }
+            _ => {}
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
