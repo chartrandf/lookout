@@ -696,11 +696,15 @@ const runSome = async (ws: Watcher[], templates: FlowTemplate[], manual: boolean
             made: 0,
             error: errText(e).slice(0, OUTPUT_MAX),
           })
+        } finally {
+          // done on its own: a quick one doesn't wait on a slow prompt watcher to stop "running"
+          runningWatchers.delete(w.id)
+          notifyStream()
         }
       }),
     )
   } finally {
-    for (const w of todo) runningWatchers.delete(w.id)
+    for (const w of todo) runningWatchers.delete(w.id) // the facts failed to load: nothing ran
     notifyStream() // the watchers panel shows each last run
   }
 }
