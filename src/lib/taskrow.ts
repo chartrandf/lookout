@@ -25,6 +25,7 @@ export type TaskRow = {
   ci_state: string | null
   ci_failed?: number | null // migration 017
   ci_total?: number | null
+  ci_passed?: number | null // migration 023
   conflicts?: number // migration 018
   approved?: number // migration 019
   new_activity: number
@@ -54,7 +55,7 @@ export const toTask = (r: TaskRow): ReviewTask => ({
   followupSummary: r.followup_summary ? JSON.parse(r.followup_summary) : null,
   activityCount: r.activity_count,
   ciState: r.ci_state as ReviewTask['ciState'],
-  ciChecks: ciChecksOf(r.ci_failed, r.ci_total),
+  ciChecks: ciChecksOf(r.ci_failed, r.ci_passed, r.ci_total),
   conflicts: r.conflicts === 1,
   approved: r.approved === 1,
   hasNewActivity: r.new_activity === 1,

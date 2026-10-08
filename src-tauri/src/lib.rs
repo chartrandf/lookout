@@ -230,6 +230,12 @@ pub fn run() {
                             sql: include_str!("../migrations/022_stream.sql"),
                             kind: tauri_plugin_sql::MigrationKind::Up,
                         },
+                        tauri_plugin_sql::Migration {
+                            version: 23,
+                            description: "passed check count",
+                            sql: include_str!("../migrations/023_ci_passed.sql"),
+                            kind: tauri_plugin_sql::MigrationKind::Up,
+                        },
                     ],
                 )
                 .build(),

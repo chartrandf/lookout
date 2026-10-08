@@ -156,6 +156,24 @@ describe('017_ci_checks', () => {
   })
 })
 
+describe('023_ci_passed', () => {
+  it('adds the passed check count to both boards, empty until counted', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'lookout-migrate-')), 'lookout.db')
+    const h = new DatabaseSync(path)
+    applyThrough(h, 22)
+    h.prepare(
+      `INSERT INTO my_prs (id, repo, number, title, url, branch, pr_created_at, derived_column, board_column, updated_at)
+       VALUES ('owner/repo#1', 'owner/repo', 1, 't', 'u', 'b', '2026-01-01T00:00:00Z', 'waiting', 'waiting', '2026-01-01T00:00:00Z')`,
+    ).run()
+    apply(h, '023_ci_passed.sql')
+    const pr = h.prepare('SELECT ci_passed FROM my_prs').get()
+    const cols = (h.prepare('PRAGMA table_info(tasks)').all() as { name: string }[]).map((c) => c.name)
+    h.close()
+    expect(pr).toEqual({ ci_passed: null })
+    expect(cols).toContain('ci_passed')
+  })
+})
+
 describe('018_conflicts', () => {
   it('adds a conflicts flag to both boards, off for existing rows', () => {
     const path = join(mkdtempSync(join(tmpdir(), 'lookout-migrate-')), 'lookout.db')

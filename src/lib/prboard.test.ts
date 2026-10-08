@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { GhMyPr } from './gh'
 import {
+  checkCounts,
   checkDuration,
   checkList,
   ciChecks,
+  ciRatio,
   hasApproval,
   isBoardable,
   isBot,
@@ -236,7 +238,7 @@ describe('ciChecks', () => {
   it('counts the failed checks out of all of them', () => {
     expect(
       ciChecks([{ conclusion: 'FAILURE' }, { conclusion: 'SUCCESS' }, { state: 'ERROR' }, { status: 'IN_PROGRESS' }]),
-    ).toEqual({ failed: 2, total: 4 })
+    ).toEqual({ failed: 2, passed: 1, total: 4 })
   })
 
   it('has nothing to count when the PR has no checks', () => {
@@ -255,12 +257,35 @@ describe('ciChecks — only checks that ran count', () => {
       ]),
     ).toEqual({
       failed: 1,
+      passed: 1,
       total: 2,
     })
   })
 
   it('has nothing to count when no check ran', () => {
     expect(ciChecks([{ conclusion: 'NEUTRAL' }])).toBeNull()
+  })
+})
+
+describe('ciRatio — one CI count everywhere', () => {
+  // 4 green, 1 red, 1 skipped: GitHub's merge box reads 4/5
+  const rollup = [
+    { conclusion: 'SUCCESS' },
+    { conclusion: 'SUCCESS' },
+    { conclusion: 'SUCCESS' },
+    { conclusion: 'SUCCESS' },
+    { conclusion: 'FAILURE' },
+    { conclusion: 'SKIPPED' },
+  ]
+
+  it('reads passed out of the checks that ran', () => {
+    const counts = ciChecks(rollup)
+    expect(counts && ciRatio(counts)).toBe('4/5')
+  })
+
+  it('counts the card badge (from the rollup) like the panel (from the check list)', () => {
+    const mixed = [...rollup, { status: 'IN_PROGRESS' }, { conclusion: 'NEUTRAL' }, { state: 'ERROR' }]
+    expect(ciChecks(mixed)).toEqual(checkCounts(checkList(mixed)))
   })
 })
 

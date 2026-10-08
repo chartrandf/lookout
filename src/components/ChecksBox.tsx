@@ -1,6 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
-import { type CheckItem, checkDuration } from '../lib/prboard'
+import { type CheckItem, checkCounts, checkDuration, ciRatio } from '../lib/prboard'
 import { Tip } from './Tip'
 
 const ICON: Record<CheckItem['state'], { glyph: string; className: string }> = {
@@ -70,7 +70,7 @@ export const ChecksBox = ({ checks, expanded }: { checks: CheckItem[]; expanded:
   const by = (s: CheckItem['state']) => checks.filter((c) => c.state === s)
   const failing = by('fail')
   if (!failing.length) return null
-  const ran = checks.filter((c) => c.state !== 'skipped').length
+  const counts = checkCounts(checks)
   const summary = [
     `${failing.length} failing`,
     by('pending').length && `${by('pending').length} in progress`,
@@ -87,9 +87,7 @@ export const ChecksBox = ({ checks, expanded }: { checks: CheckItem[]; expanded:
           className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1 text-left hover:bg-deck-800"
         >
           <span className="text-red-400">✗</span>
-          <span className="text-deck-200">
-            Merge conditions are failing ({by('pass').length}/{ran})
-          </span>
+          <span className="text-deck-200">Merge conditions are failing{counts && ` (${ciRatio(counts)})`}</span>
           <span className="text-deck-500">{summary} checks</span>
           <span className="ml-auto text-deck-400">{open ? '⌄' : '›'}</span>
         </button>

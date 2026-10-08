@@ -10,7 +10,7 @@ import { buildFeed, type FeedEvent, mergeReports, reportEvents, type TimelineSum
 import { approvePr, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import { MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
-import type { CheckItem } from '../lib/prboard'
+import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
@@ -621,7 +621,7 @@ export const SessionPanel = ({
     if (!method) return
     const label = MERGE_METHODS.find((x) => x.value === method)?.label ?? method
     const red = task.ciState === 'fail'
-    const checks = task.ciChecks ? ` (${task.ciChecks.failed}/${task.ciChecks.total} checks failed)` : ''
+    const checks = task.ciChecks ? ` (${ciRatio(task.ciChecks)} checks passed)` : ''
     setConfirm({
       title: `Merge ${task.repo.split('/')[1]}#${task.prNumber}?`,
       body: red ? (

@@ -23,12 +23,19 @@ export const rollupToCiState = (checks: Check[]): CiState => {
   return 'pass'
 }
 
-// Failed checks out of the ones that ran, for the "✗ CI 4/7" badge; null when none ran.
-export const ciChecks = (checks: Check[]): CiChecks => {
-  const real = ran(checks)
+// How the checks that ran came out; null when none ran. Counted from checkList so the card badge and
+// the panel's checks box can't disagree.
+export const ciChecks = (checks: Check[]): CiChecks => checkCounts(checkList(checks))
+
+export const checkCounts = (items: CheckItem[]): CiChecks => {
+  const real = items.filter((c) => c.state !== 'skipped')
   if (!real.length) return null
-  return { failed: real.filter((c) => isFailure(checkState(c))).length, total: real.length }
+  const count = (s: CheckItem['state']) => real.filter((c) => c.state === s).length
+  return { failed: count('fail'), passed: count('pass'), total: real.length }
 }
+
+// "4/5": passed out of the checks that ran, GitHub's merge-box count. Every CI count shown uses it.
+export const ciRatio = (c: NonNullable<CiChecks>): string => `${c.passed}/${c.total}`
 
 // One check as the card panel lists it, GitHub's "N failing, M successful checks" box
 export type CheckItem = {

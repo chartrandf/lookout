@@ -25,6 +25,7 @@ export type MyPrRow = {
   snoozed?: number // migration 016; absent on an older database the CLI may read
   ci_failed?: number | null // migration 017
   ci_total?: number | null
+  ci_passed?: number | null // migration 023
   conflicts?: number // migration 018
   approved?: number // migration 019
   activity_count?: number | null // migration 020
@@ -49,12 +50,12 @@ export const rowToMyPr = (r: MyPrRow): MyPr => ({
   sortOrder: r.sort_order,
   doneAt: r.done_at,
   snoozed: r.snoozed === 1,
-  ciChecks: ciChecksOf(r.ci_failed, r.ci_total),
+  ciChecks: ciChecksOf(r.ci_failed, r.ci_passed, r.ci_total),
   conflicts: r.conflicts === 1,
   approved: r.approved === 1,
   activityCount: r.activity_count ?? null,
 })
 
-// both counts, or none: a half-written pair is as good as not counted
-export const ciChecksOf = (failed?: number | null, total?: number | null): CiChecks =>
-  failed == null || total == null ? null : { failed, total }
+// all counts, or none: a half-written set (a row counted before 023) is as good as not counted
+export const ciChecksOf = (failed?: number | null, passed?: number | null, total?: number | null): CiChecks =>
+  failed == null || passed == null || total == null ? null : { failed, passed, total }

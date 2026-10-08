@@ -1,10 +1,11 @@
+import { ciRatio } from '../lib/prboard'
 import type { CiChecks } from '../types'
 import { Tip } from './Tip'
 
-// A red build, with how much of it is red: "✗ CI 4/7" (failed / all checks). Bare ✗ until a sync
-// has counted the checks. Clicking it opens the card with the failing checks unfolded.
+// A red build, with how much of it passed: "✗ CI 4/5" (passed / ran, as in the panel's checks box).
+// Bare ✗ until a sync has counted the checks. Clicking it opens the card with the failing checks unfolded.
 export const CiFailBadge = ({ checks, onOpen }: { checks: CiChecks; onOpen?: () => void }) => (
-  <Tip label={`${checks ? `${checks.failed} of ${checks.total} checks failed` : 'CI failed'} — click to see them`}>
+  <Tip label={`${checks ? `${checks.passed} of ${checks.total} checks passed` : 'CI failed'} — click to see them`}>
     <button
       type="button"
       onClick={(e) => {
@@ -13,7 +14,7 @@ export const CiFailBadge = ({ checks, onOpen }: { checks: CiChecks; onOpen?: () 
       }}
       className="cursor-pointer rounded bg-red-500/20 px-1 py-0.5 text-red-300 hover:bg-red-500/40"
     >
-      ✗ CI{checks && ` ${checks.failed}/${checks.total}`}
+      ✗ CI{checks && ` ${ciRatio(checks)}`}
     </button>
   </Tip>
 )

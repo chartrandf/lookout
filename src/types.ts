@@ -15,7 +15,7 @@ export type Stage =
 export type PrState = 'open' | 'merged' | 'closed'
 
 export type CiState = 'pass' | 'fail' | 'pending' | 'neutral' | null // neutral: only neutral/skipped checks
-export type CiChecks = { failed: number; total: number } | null // null = no checks, or not counted yet
+export type CiChecks = { failed: number; passed: number; total: number } | null // null = no checks, or not counted yet
 
 // which column a PR I authored lands in on the Pull Requests board
 export type PrColumn = 'waiting' | 'in_review' | 'ready' | 'done'
