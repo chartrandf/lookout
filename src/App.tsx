@@ -54,6 +54,7 @@ import {
   upsertMyPr,
 } from './lib/db'
 import { setStreamFeed, type TimelineSummary } from './lib/feed'
+import { parseFollowupSummary } from './lib/followup'
 import { resumeInGhostty } from './lib/ghostty'
 import { logError, logWarn, setLogEnabled } from './lib/log'
 import { snoozeMyPr, syncMyPrs } from './lib/myprs'
@@ -124,11 +125,6 @@ const STREAM_WATCH_MS = 60 * 1000
 const STREAM_DIGEST_MS = 15 * 60 * 1000
 // on the Stream tab with the window focused: what's in Needs you counts as seen
 const lookingAtStream = (view: View) => view === 'stream' && document.hasFocus()
-
-const parseFollowupSummary = (text: string) => {
-  const m = text.match(/(\d+)\s*addressed\D*?(\d+)\s*partial\D*?(\d+)\s*pending/i)
-  return m ? { addressed: Number(m[1]), partial: Number(m[2]), pending: Number(m[3]) } : null
-}
 
 const App = () => {
   const [view, setView] = useState<View>(TAB_ORDER[0].view)

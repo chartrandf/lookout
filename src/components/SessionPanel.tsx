@@ -25,6 +25,7 @@ import { ChecksBox } from './ChecksBox'
 import { CloseButton } from './CloseButton'
 import { CommandTextarea } from './CommandTextarea'
 import { type Confirm, ConfirmDialog } from './ConfirmDialog'
+import { FollowupBadge } from './FollowupBadge'
 import { Icon, IconBox } from './Icon'
 import { Markdown } from './Markdown'
 import { PrLink } from './PrLink'
@@ -989,6 +990,16 @@ export const SessionPanel = ({
                           {e.text}
                           {isReport && ' (See Report) ↗'}
                         </span>
+                        {/* its own line, kept whole; the time stamp still shares it when it fits */}
+                        {e.followup && (
+                          <>
+                            <br />
+                            <FollowupBadge
+                              summary={e.followup}
+                              className="mt-1 inline-block text-xs whitespace-nowrap text-deck-300"
+                            />
+                          </>
+                        )}
                         <span aria-hidden className="invisible ml-2 text-[10px]">
                           {meta}
                         </span>

@@ -160,3 +160,37 @@ describe('buildFeed', () => {
     ])
   })
 })
+
+describe('reportEvents', () => {
+  const captured = (kind: 'review' | 'followup', body: string | null) => ({
+    id: 's1',
+    kind,
+    taskId: 'a/b#1',
+    branch: 'b',
+    source: 'sync' as const,
+    sessionId: 's1',
+    filePath: null,
+    body,
+    createdAt: '2026-01-01T10:00:00Z',
+  })
+
+  it('keeps a follow-up result on its own bubble', async () => {
+    const { capturedReviewsForTask } = await import('./db')
+    vi.mocked(capturedReviewsForTask).mockResolvedValue([
+      captured('followup', 'done\nSUMMARY: 2 addressed, 0 partial, 1 pending'),
+      captured('review', 'SUMMARY: 2 addressed, 0 partial, 1 pending'),
+    ])
+    const { reportEvents } = await import('./feed')
+    const [followup, review] = await reportEvents({ id: 'a/b#1', reviewFiles: [] } as never, 'me')
+    expect(followup.followup).toEqual({ addressed: 2, partial: 0, pending: 1 })
+    expect(review.followup).toBeUndefined()
+  })
+
+  it('leaves a follow-up with no summary line without counts', async () => {
+    const { capturedReviewsForTask } = await import('./db')
+    vi.mocked(capturedReviewsForTask).mockResolvedValue([captured('followup', 'nothing to report')])
+    const { reportEvents } = await import('./feed')
+    const [followup] = await reportEvents({ id: 'a/b#1', reviewFiles: [] } as never, 'me')
+    expect(followup.followup).toBeUndefined()
+  })
+})

@@ -1,6 +1,7 @@
-import type { PrState, ReviewFlavor, ReviewTask } from '../types'
+import type { FollowupSummary, PrState, ReviewFlavor, ReviewTask } from '../types'
 import { reviewFileTs } from './alerts'
 import { capturedReviewsForTask, streamEventsForRef } from './db'
+import { parseFollowupSummary } from './followup'
 import { fetchPrTimeline, type GhTimelineEvent } from './gh'
 import type { IconName } from './icons'
 import { logError, logInfo } from './log'
@@ -24,6 +25,7 @@ export type FeedEvent = {
   sessionId?: string // resumes the claude session
   streamItemId?: string // a Stream card's milestone: opens that card on the Stream board
   fromSession?: string // a captured report: the session it was read out of
+  followup?: FollowupSummary // a follow-up's own counts, kept on its bubble (the card shows only the latest)
   // the session a report answers, quoted over it like a chat reply. exact = the capture named it;
   // a report file names none, so it quotes the last session started before it (a guess)
   replyTo?: { icon: IconName; text: string; ts: string; exact: boolean }
@@ -143,7 +145,8 @@ export const reportEvents = async (task: ReviewTask, me: string): Promise<FeedEv
     logError('feed', e, `captured reviews for ${task.id}`)
     return []
   })
-  for (const c of captured)
+  for (const c of captured) {
+    const followup = c.kind === 'followup' && c.body ? parseFollowupSummary(c.body) : null
     events.push({
       ts: c.createdAt,
       icon: c.kind === 'followup' ? 'checklist' : 'file', // a follow-up is a checklist of addressed comments
@@ -152,7 +155,9 @@ export const reportEvents = async (task: ReviewTask, me: string): Promise<FeedEv
       body: c.body ?? undefined,
       fromSession: c.sessionId ?? undefined,
       filePath: c.filePath ?? undefined,
+      ...(followup ? { followup } : {}),
     })
+  }
   const stream = !streamFeed
     ? []
     : await streamEventsForRef(task.id).catch((e) => {
