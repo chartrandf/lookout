@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { WatcherRun } from '../lib/config'
 import type { FlowTemplate } from '../lib/streamflow'
 import {
   DEFAULT_TASK,
   DEFAULT_WATCHERS,
+  nextRunAt,
   WATCHER_CHECKS,
   type Watcher,
   type WatcherCheck,
   type WatcherModel,
+  type WatcherRun,
 } from '../lib/streamwatchers'
 import { messageTime } from '../lib/time'
 import type { WatchedRepo } from '../types'
@@ -16,7 +17,9 @@ type Props = {
   watchers: Watcher[]
   templates: FlowTemplate[]
   repos: WatchedRepo[]
-  runs: Record<string, WatcherRun> // each watcher's last run
+  runs: Record<string, WatcherRun[]> // each watcher's recent runs, newest first
+  running: string[] // ids of the watchers running right now
+  onRunNow: (w: Watcher) => void
   onSave: (watchers: Watcher[]) => void
 }
 
@@ -36,12 +39,67 @@ const blank = (): Watcher => ({
   tools: '',
 })
 
-const lastRun = (r: WatcherRun | undefined) =>
-  !r
-    ? 'never ran'
-    : r.error
-      ? `last run ${messageTime(r.at)} · failed: ${r.error}`
-      : `last run ${messageTime(r.at)} · ${r.made ? `${r.made} card${r.made === 1 ? '' : 's'}` : 'nothing new'}`
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`
+
+// what a run did, in a few words
+const outcome = (r: WatcherRun) =>
+  r.error
+    ? 'failed'
+    : r.made
+      ? plural(r.made, 'new card')
+      : r.found
+        ? `${r.found} found, all have a card already`
+        : 'nothing new'
+
+const duration = (ms: number) => {
+  const s = Math.round(ms / 1000)
+  return s < 1 ? '<1 s' : s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`
+}
+
+const inTime = (ms: number) => {
+  const min = Math.ceil(ms / 60_000)
+  return min < 60 ? `in ${min} min` : `in ${Math.floor(min / 60)} h ${min % 60} min`
+}
+
+// when it runs next, on its saved settings
+const nextRun = (w: Watcher, last: WatcherRun | undefined, now: number) => {
+  const at = nextRunAt(w, last?.at, now)
+  if (at === null) return 'Off: runs only with Run now'
+  return at <= now ? 'Next run: due now' : `Next run ${messageTime(new Date(at).toISOString())} · ${inTime(at - now)}`
+}
+
+// one run in the history: when, how, what it made, and what it saw
+const RunEntry = ({ r }: { r: WatcherRun }) => (
+  <li className="flex flex-col gap-1 border-l-2 border-deck-700 py-0.5 pl-2">
+    <div className="flex flex-wrap items-baseline gap-x-1.5 text-[11px] text-deck-400">
+      <span className="font-medium text-deck-300">{messageTime(r.at)}</span>
+      {r.manual && <span className="rounded bg-deck-700 px-1 text-[10px] text-deck-300">by hand</span>}
+      {r.ms !== undefined && <span>· {duration(r.ms)}</span>}
+      <span className={r.error ? 'text-red-300' : r.made ? 'text-grass-300' : ''}>· {outcome(r)}</span>
+    </div>
+    {r.cards && r.cards.length > 0 && (
+      <ul className="list-disc pl-4 text-[11px] text-deck-300">
+        {r.cards.map((c, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a run's titles are fixed and may repeat
+          <li key={i}>{c}</li>
+        ))}
+      </ul>
+    )}
+    {r.error && (
+      <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-red-950/30 p-1.5 text-[11px] text-red-200">
+        {r.error}
+      </pre>
+    )}
+    {r.output && (
+      <details className="text-[11px] text-deck-400">
+        <summary className="cursor-pointer hover:text-deck-200">Agent's answer</summary>
+        <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-deck-900 p-1.5 text-deck-300">
+          {r.output}
+        </pre>
+      </details>
+    )}
+  </li>
+)
 
 const TrashIcon = () => (
   <svg
@@ -82,11 +140,81 @@ const doesHint = (w: Watcher, templates: FlowTemplate[]) => {
   return `One card: “${DEFAULT_TASK[w.check]('n')}”. Approving its result finishes it.`
 }
 
+// Under each watcher: its last run, when it runs next, Run now, and its history. Runs and timing go by
+// the saved watcher; one not saved yet (or with unsaved edits) can't run until it is.
+const RunBar = ({
+  w,
+  stored,
+  runs,
+  running,
+  now,
+  open,
+  onToggle,
+  onRunNow,
+}: {
+  w: Watcher
+  stored: Watcher | undefined
+  runs: WatcherRun[]
+  running: boolean
+  now: number
+  open: boolean
+  onToggle: () => void
+  onRunNow: (w: Watcher) => void
+}) => {
+  const last = runs[0]
+  const edited = !stored || JSON.stringify(stored) !== JSON.stringify(w)
+  return (
+    <div className="flex flex-col gap-2 border-t border-deck-700/60 pt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-deck-500">
+        <span className={last?.error && !running ? 'text-red-300' : ''}>
+          {running ? 'Running…' : last ? `Last run ${messageTime(last.at)} · ${outcome(last)}` : 'Never ran'}
+        </span>
+        {stored && <span>{nextRun(stored, last, now)}</span>}
+        <div className="ml-auto flex items-center gap-2">
+          {runs.length > 0 && (
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              className="cursor-pointer text-deck-400 hover:text-deck-200"
+            >
+              {open ? 'Hide history' : `History (${runs.length})`}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={running || edited || !stored}
+            onClick={() => stored && onRunNow(stored)}
+            title={edited ? 'Save your changes first' : 'Run it now, whether on or off; its interval restarts'}
+            className="cursor-pointer rounded-md border border-deck-600 px-2 py-0.5 text-deck-200 hover:bg-deck-700 disabled:cursor-default disabled:opacity-40"
+          >
+            {running ? 'Running…' : '▶ Run now'}
+          </button>
+        </div>
+      </div>
+      {open && runs.length > 0 && (
+        <ul className="flex flex-col gap-2">
+          {runs.map((r) => (
+            <RunEntry key={`${r.at}-${r.ms ?? ''}`} r={r} />
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // The watchers: rules that create Stream cards on their own — from what Lookout's sync finds, or from
 // a prompt a read-only agent checks. Edited as a draft and saved together. Their cards land in
 // Queued, where the risk check holds anything outward-facing for my OK.
-export const StreamWatchers = ({ watchers, templates, repos, runs, onSave }: Props) => {
+export const StreamWatchers = ({ watchers, templates, repos, runs, running, onRunNow, onSave }: Props) => {
   const [draft, setDraft] = useState(watchers)
+  const [history, setHistory] = useState<string[]>([]) // watchers whose history is open
+  // the clock the next-run times count down on
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000)
+    return () => clearInterval(t)
+  }, [])
   // reset only when the saved watchers change, not when another setting rebuilds the config
   const saved = JSON.stringify(watchers)
   useEffect(() => setDraft(JSON.parse(saved)), [saved])
@@ -232,9 +360,16 @@ export const StreamWatchers = ({ watchers, templates, repos, runs, onSave }: Pro
               </div>
             )}
 
-            <p className={`text-[11px] ${runs[w.id]?.error ? 'text-red-300' : 'text-deck-500'}`}>
-              {lastRun(runs[w.id])}
-            </p>
+            <RunBar
+              w={w}
+              stored={watchers.find((x) => x.id === w.id)}
+              runs={runs[w.id] ?? []}
+              running={running.includes(w.id)}
+              now={now}
+              open={history.includes(w.id)}
+              onToggle={() => setHistory((h) => (h.includes(w.id) ? h.filter((x) => x !== w.id) : [...h, w.id]))}
+              onRunNow={onRunNow}
+            />
           </li>
         ))}
         {draft.length === 0 && <li className="text-sm text-deck-500">No watchers: cards only come from you.</li>}

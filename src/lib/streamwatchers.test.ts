@@ -3,8 +3,12 @@ import {
   DEFAULT_WATCHERS,
   dueWatchers,
   matchesOf,
+  nextRunAt,
   parseWatcherCards,
+  pushRun,
+  readWatcherRuns,
   readWatchers,
+  WATCHER_HISTORY,
   type Watcher,
   type WatchFacts,
   watcherKey,
@@ -197,5 +201,47 @@ describe('parseWatcherCards', () => {
   it('is no cards for nothing found, or an answer it cannot read', () => {
     expect(parseWatcherCards('{"cards":[]}', null)).toEqual([])
     expect(parseWatcherCards('nothing new today', null)).toEqual([])
+  })
+})
+
+describe('nextRunAt', () => {
+  const now = Date.parse('2026-10-01T12:00:00.000Z')
+
+  it('is the last run plus the interval, now when it never ran or is overdue, null when off', () => {
+    const w = watcher({ every: 15 })
+    expect(nextRunAt(w, '2026-10-01T11:50:00.000Z', now)).toBe(Date.parse('2026-10-01T12:05:00.000Z'))
+    expect(nextRunAt(w, '2026-10-01T11:00:00.000Z', now)).toBe(now)
+    expect(nextRunAt(w, undefined, now)).toBe(now)
+    expect(nextRunAt(watcher({ enabled: false }), undefined, now)).toBeNull()
+  })
+})
+
+describe('readWatcherRuns', () => {
+  it('reads a history, an older single run, or a bare time — newest first', () => {
+    const run = { at: '2026-10-01T11:00:00.000Z', made: 1 }
+    expect(
+      readWatcherRuns({
+        a: [run, { at: 'x' }, null],
+        b: { at: '2026-10-01T10:00:00.000Z', made: 2, error: 'boom' },
+        c: '2026-10-01T09:00:00.000Z',
+        d: 42,
+      }),
+    ).toEqual({
+      a: [run],
+      b: [{ at: '2026-10-01T10:00:00.000Z', made: 2, error: 'boom' }],
+      c: [{ at: '2026-10-01T09:00:00.000Z', made: 0 }],
+    })
+    expect(readWatcherRuns(undefined)).toEqual({})
+  })
+})
+
+describe('pushRun', () => {
+  it('puts the run first and keeps the last ones only', () => {
+    const runs = Array.from({ length: WATCHER_HISTORY }, (_, i) => ({ at: `t${i}`, made: 0 }))
+    const out = pushRun(runs, { at: 'new', made: 1 })
+    expect(out).toHaveLength(WATCHER_HISTORY)
+    expect(out[0].at).toBe('new')
+    expect(out.at(-1)?.at).toBe(`t${WATCHER_HISTORY - 2}`)
+    expect(pushRun(undefined, { at: 'a', made: 0 })).toEqual([{ at: 'a', made: 0 }])
   })
 })

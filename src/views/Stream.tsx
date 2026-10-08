@@ -6,7 +6,7 @@ import { PriorityChip } from '../components/PriorityChip'
 import { SidePanel } from '../components/SidePanel'
 import { actorIcon, RefChip, StreamPanel } from '../components/StreamPanel'
 import { StreamWatchers } from '../components/StreamWatchers'
-import { getWatcherRuns, type WatcherRun } from '../lib/config'
+import { getWatcherRuns } from '../lib/config'
 import {
   addStreamItems,
   askStreamProject,
@@ -45,12 +45,14 @@ import {
   notifyStream,
   onStreamChange,
   runStreamItem,
+  runWatcherNow,
   SHAPE_BRANCH,
   shapeStreamItem,
   unwatchStream,
+  watcherRunning,
 } from '../lib/streamrunner'
 import { waitingLabel } from '../lib/streamwatch'
-import type { Watcher } from '../lib/streamwatchers'
+import type { Watcher, WatcherRun } from '../lib/streamwatchers'
 import { timeAgo } from '../lib/time'
 import type { StreamColumn, StreamItem, StreamPriority, StreamStatus, WatchedRepo } from '../types'
 
@@ -497,19 +499,22 @@ export const Stream = ({
   onSaveWatchers,
 }: Props) => {
   const watchersOn = watchers.filter((w) => w.enabled).length
-  // the watchers side panel, and each watcher's last run (re-read on every board change)
+  // the watchers side panel, each watcher's recent runs and which are running (re-read on every
+  // board change: a watcher run notifies when it starts and ends)
   const [watchersPanel, setWatchersPanel] = useState(false)
-  const [watcherRuns, setWatcherRuns] = useState<Record<string, WatcherRun>>({})
+  const [watcherRuns, setWatcherRuns] = useState<Record<string, WatcherRun[]>>({})
+  const [watchersRunning, setWatchersRunning] = useState<string[]>([])
   useEffect(() => {
     if (!watchersPanel) return
     const load = () => {
+      setWatchersRunning(watchers.filter((w) => watcherRunning(w.id)).map((w) => w.id))
       getWatcherRuns()
         .then(setWatcherRuns)
         .catch(() => null)
     }
     load()
     return onStreamChange(load)
-  }, [watchersPanel])
+  }, [watchersPanel, watchers])
 
   const [items, setItems] = useState<StreamItem[]>([])
   const [version, setVersion] = useState(0) // bumped after every write: the open panel re-reads its feed
@@ -837,6 +842,10 @@ export const Stream = ({
                   templates={templates}
                   repos={repos}
                   runs={watcherRuns}
+                  running={watchersRunning}
+                  onRunNow={(w) => {
+                    runWatcherNow(w, templates).catch((e) => logError('stream', e, `run watcher ${w.name}`))
+                  }}
                   onSave={onSaveWatchers}
                 />
               </div>

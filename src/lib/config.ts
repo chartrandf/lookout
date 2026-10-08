@@ -2,7 +2,7 @@ import { load, type Store } from '@tauri-apps/plugin-store'
 import type { ActionButton, Config, MergePreference, Stage, WatchedRepo } from '../types'
 import { LEGACY_STAGE_IDS } from './stages'
 import { DEFAULT_TEMPLATES, type FlowTemplate, parseSteps } from './streamflow'
-import { readWatchers, type Watcher } from './streamwatchers'
+import { pushRun, readWatcherRuns, readWatchers, type Watcher, type WatcherRun } from './streamwatchers'
 
 // Default buttons reproduce the old fixed actions. /review ships with Claude Code; the follow-up
 // default is a plain prompt. Placeholders: <branch_name>, <pr_id>. Users edit/add/remove these.
@@ -114,22 +114,16 @@ export const setStreamWatchers = async (watchers: Watcher[]) => {
   await s.set('streamWatchers', watchers)
 }
 
-// when each watcher last ran (watcher id → ISO time): state, not a setting
-// a watcher's last run: when, how many cards it made, and what went wrong if it did
-export type WatcherRun = { at: string; made: number; error?: string }
-
-export const getWatcherRuns = async (): Promise<Record<string, WatcherRun>> => {
+// each watcher's recent runs (watcher id → newest first): state, not a setting
+export const getWatcherRuns = async (): Promise<Record<string, WatcherRun[]>> => {
   const s = await getStore()
-  const raw = (await s.get<Record<string, unknown>>('streamWatcherRuns')) ?? {}
-  // an older build stored the bare time
-  return Object.fromEntries(
-    Object.entries(raw).map(([id, v]) => [id, typeof v === 'string' ? { at: v, made: 0 } : (v as WatcherRun)]),
-  )
+  return readWatcherRuns(await s.get<unknown>('streamWatcherRuns'))
 }
 
-export const setWatcherRun = async (id: string, run: WatcherRun) => {
+export const addWatcherRun = async (id: string, run: WatcherRun) => {
   const s = await getStore()
-  await s.set('streamWatcherRuns', { ...(await getWatcherRuns()), [id]: run })
+  const runs = await getWatcherRuns()
+  await s.set('streamWatcherRuns', { ...runs, [id]: pushRun(runs[id], run) })
 }
 
 export const setStreamTemplates = async (templates: FlowTemplate[]) => {

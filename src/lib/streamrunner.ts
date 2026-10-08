@@ -3,7 +3,7 @@ import { exists } from '@tauri-apps/plugin-fs'
 import { Command } from '@tauri-apps/plugin-shell'
 import type { StreamItem, WatchedRepo } from '../types'
 import { ACTION_TOOLS } from './claude'
-import { getWatcherRuns, setWatcherRun } from './config'
+import { addWatcherRun, getWatcherRuns } from './config'
 import {
   addStreamItems,
   addStreamSession,
@@ -54,6 +54,7 @@ import {
   parseWatcherCards,
   type Watcher,
   type WatcherCheck,
+  type WatcherRun,
   type WatchFacts,
   watcherKey,
   watcherPrompt,
@@ -573,8 +574,18 @@ export const rateWaiting = async (items: StreamItem[]) => {
 // they start without me). A structured one reads what the sync stored; a prompt one asks a read-only
 // agent. An event (or a prompt card's key) becomes a card once; a PR with a live card from the same
 // watcher gets no second one until that one is done or skipped. Each run is recorded — when, how
-// many cards, what failed — for the watchers panel.
+// long, which cards, the agent's answer, what failed — for the watchers panel's history.
 const runningWatchers = new Set<string>()
+export const watcherRunning = (id: string) => runningWatchers.has(id)
+
+// runs record side by side: one write at a time, or two would read the same history and drop one
+let recording: Promise<unknown> = Promise.resolve()
+const recordRun = (id: string, run: WatcherRun) => {
+  recording = recording.then(() => addWatcherRun(id, run)).catch((e) => logError('stream', e, 'record watcher run'))
+  return recording
+}
+
+const OUTPUT_MAX = 4000
 
 const cardsOf = (w: Watcher, matches: Match[], template: FlowTemplate | undefined) =>
   matches.map((m) => ({
@@ -604,8 +615,8 @@ const promptCards = async (w: Watcher, known: { key: string; title: string }[], 
     ],
     { cwd: await homeDir() },
   ).execute()
-  if (out.code !== 0) throw new Error(out.stderr.trim() || `claude exited ${out.code}`)
-  return parseWatcherCards(out.stdout, w.repo).map((c) => ({
+  if (out.code !== 0) throw new Error(out.stderr.trim() || out.stdout.trim() || `claude exited ${out.code}`)
+  const cards = parseWatcherCards(out.stdout, w.repo).map((c) => ({
     title: c.title,
     body: c.notes,
     repo: c.repo,
@@ -615,21 +626,31 @@ const promptCards = async (w: Watcher, known: { key: string; title: string }[], 
     dedupeKey: `${w.id}|${c.key}`,
     gate: template ? 'step-now' : undefined,
   }))
+  return { cards, output: out.stdout.trim() }
 }
+
+type Outcome = Pick<WatcherRun, 'made' | 'found' | 'cards' | 'output'>
 
 const runWatcher = async (
   w: Watcher,
   template: FlowTemplate | undefined,
   facts: WatchFacts,
   cards: { key: string; title: string; live: boolean }[],
-) => {
+): Promise<Outcome> => {
   let fresh: Parameters<typeof addStreamItems>[0]
+  let found: number
+  let output: string | undefined
   if (w.check === 'prompt') {
     const mine = cards.filter((c) => c.key.startsWith(`${w.id}|`))
     const known = mine.slice(-30).map((c) => ({ key: c.key.slice(w.id.length + 1), title: c.title }))
-    fresh = (await promptCards(w, known, template)).filter((c) => !cards.some((k) => k.key === c.dedupeKey))
+    const answer = await promptCards(w, known, template)
+    found = answer.cards.length
+    output = answer.output.slice(-OUTPUT_MAX)
+    fresh = answer.cards.filter((c) => !cards.some((k) => k.key === c.dedupeKey))
   } else {
-    const matches = matchesOf(w, facts).filter((m) => {
+    const all = matchesOf(w, facts)
+    found = all.length
+    const matches = all.filter((m) => {
       const key = watcherKey(w, m)
       const prefix = `${w.id}|${m.ref}|`
       return !cards.some((c) => c.key === key || (c.live && c.key.startsWith(prefix)))
@@ -637,47 +658,61 @@ const runWatcher = async (
     fresh = cardsOf(w, matches, template)
   }
   if (fresh.length) await addStreamItems(fresh, 'queued', `by watcher “${w.name}”`, template)
-  return fresh.length
+  return { made: fresh.length, found, cards: fresh.map((c) => c.title), output }
 }
 
-export const runWatchers = async (watchers: Watcher[], templates: FlowTemplate[]) => {
-  const runs = await getWatcherRuns()
-  const due = dueWatchers(
-    watchers.filter((w) => !runningWatchers.has(w.id)),
-    Object.fromEntries(Object.entries(runs).map(([id, r]) => [id, r.at])),
-  )
-  if (!due.length) return
-  for (const w of due) runningWatchers.add(w.id)
+// Run the given watchers now, side by side (prompt ones take seconds to minutes), each recording its
+// own outcome. Skips one already running.
+const runSome = async (ws: Watcher[], templates: FlowTemplate[], manual: boolean) => {
+  const todo = ws.filter((w) => !runningWatchers.has(w.id))
+  if (!todo.length) return
+  for (const w of todo) runningWatchers.add(w.id)
+  notifyStream() // the watchers panel shows them running
   try {
     const [tasks, myPrs, alerts, cards] = await Promise.all([allTasks(), allMyPrs(), watchAlerts(), watcherCards()])
     const facts = { tasks, myPrs, alerts }
-    // prompt watchers take seconds to minutes: they run side by side, each recording its own outcome
     await Promise.all(
-      due.map(async (w) => {
+      todo.map(async (w) => {
         const at = new Date().toISOString()
+        const started = Date.now()
         try {
-          const made = await runWatcher(
+          const out = await runWatcher(
             w,
             templates.find((t) => t.id === w.templateId),
             facts,
             cards,
           )
-          await setWatcherRun(w.id, { at, made })
-          if (made) {
-            logInfo('stream', `watcher ${w.name}: ${made} card${made === 1 ? '' : 's'}`)
+          await recordRun(w.id, { at, ms: Date.now() - started, ...(manual ? { manual } : {}), ...out })
+          if (out.made) {
+            logInfo('stream', `watcher ${w.name}: ${out.made} card${out.made === 1 ? '' : 's'}`)
             notifyStream()
           }
         } catch (e) {
           logError('stream', e, `watcher ${w.name}`)
-          await setWatcherRun(w.id, { at, made: 0, error: errText(e).slice(0, 300) })
+          await recordRun(w.id, {
+            at,
+            ms: Date.now() - started,
+            ...(manual ? { manual } : {}),
+            made: 0,
+            error: errText(e).slice(0, OUTPUT_MAX),
+          })
         }
       }),
     )
   } finally {
-    for (const w of due) runningWatchers.delete(w.id)
+    for (const w of todo) runningWatchers.delete(w.id)
     notifyStream() // the watchers panel shows each last run
   }
 }
+
+export const runWatchers = async (watchers: Watcher[], templates: FlowTemplate[]) => {
+  const runs = await getWatcherRuns()
+  const last = Object.fromEntries(Object.entries(runs).flatMap(([id, r]) => (r[0] ? [[id, r[0].at]] : [])))
+  await runSome(dueWatchers(watchers, last), templates, false)
+}
+
+// my Run now: off or not due, it runs anyway; its run counts as the last one, so the interval restarts
+export const runWatcherNow = (w: Watcher, templates: FlowTemplate[]) => runSome([w], templates, true)
 
 // App start: a run can't outlive the app, so a card still "running" with no live run was cut short.
 // Checked against the live registry, so a hot reload in dev doesn't interrupt a real run.

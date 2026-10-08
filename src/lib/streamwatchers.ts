@@ -156,6 +156,47 @@ export const dueWatchers = (ws: Watcher[], last: Record<string, string>, now = D
     return !at || now - Date.parse(at) >= w.every * 60_000
   })
 
+// when it runs next (ms): its last run plus its interval, now when it never ran or is overdue; null
+// when off. The scheduler asks once a minute, so it starts within a minute of that.
+export const nextRunAt = (w: Watcher, lastAt: string | undefined, now = Date.now()): number | null => {
+  if (!w.enabled) return null
+  const at = lastAt ? Date.parse(lastAt) + w.every * 60_000 : now
+  return Number.isNaN(at) ? now : Math.max(now, at)
+}
+
+// One run of a watcher, for its history: when, how long, how many cards, and what it saw — the cards'
+// titles, the agent's answer for a prompt watcher, or what failed. `manual`: my Run now.
+export type WatcherRun = {
+  at: string
+  made: number
+  error?: string
+  ms?: number
+  manual?: boolean
+  found?: number // what it matched before the dedupe (structured checks)
+  cards?: string[]
+  output?: string
+}
+
+export const WATCHER_HISTORY = 20
+
+const isRun = (v: unknown): v is WatcherRun =>
+  typeof (v as WatcherRun)?.at === 'string' && typeof (v as WatcherRun)?.made === 'number'
+
+// stored runs back to each watcher's history, newest first. Older builds kept the last run only, or
+// its bare time.
+export const readWatcherRuns = (v: unknown): Record<string, WatcherRun[]> =>
+  Object.fromEntries(
+    Object.entries(v && typeof v === 'object' ? v : {}).flatMap(([id, r]): [string, WatcherRun[]][] => {
+      if (Array.isArray(r)) return [[id, r.filter(isRun)]]
+      if (isRun(r)) return [[id, [r]]]
+      if (typeof r === 'string') return [[id, [{ at: r, made: 0 }]]]
+      return []
+    }),
+  )
+
+export const pushRun = (runs: WatcherRun[] | undefined, run: WatcherRun): WatcherRun[] =>
+  [run, ...(runs ?? [])].slice(0, WATCHER_HISTORY)
+
 const isCheck = (v: unknown): v is WatcherCheck => WATCHER_CHECKS.some((c) => c.value === v)
 
 // stored watchers back to watchers (a hand-edited config can't break the board); none = the defaults
