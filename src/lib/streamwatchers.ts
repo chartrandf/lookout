@@ -172,7 +172,7 @@ export type WatcherRun = {
   error?: string
   ms?: number
   manual?: boolean
-  found?: number // what it matched before the dedupe (structured checks)
+  found?: number // what it matched (or the agent answered) before the dedupe
   cards?: string[]
   output?: string
 }

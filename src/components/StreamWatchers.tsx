@@ -169,7 +169,7 @@ const RunBar = ({
         <span className={last?.error && !running ? 'text-red-300' : ''}>
           {running ? 'Running…' : last ? `Last run ${messageTime(last.at)} · ${outcome(last)}` : 'Never ran'}
         </span>
-        {stored && <span>{nextRun(stored, last, now)}</span>}
+        {stored && !running && <span>{nextRun(stored, last, now)}</span>}
         <div className="ml-auto flex items-center gap-2">
           {runs.length > 0 && (
             <button
