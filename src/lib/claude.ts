@@ -1,4 +1,5 @@
 import { type Child, Command } from '@tauri-apps/plugin-shell'
+import { toolDetail } from './transcript'
 
 export type StreamEvent =
   | { type: 'init'; sessionId: string }
@@ -17,9 +18,6 @@ export const ACTION_TOOLS =
   'Bash(gh:*),Bash(git:*),Bash(pnpm:*),Bash(npx:*),Bash(command:*),Bash(lookout:*),Read,Edit,Write,Glob,Grep,Task,TodoWrite,Skill'
 // default used by runs.ts when no allowlist is passed (kept in sync with ACTION_TOOLS)
 export const REVIEW_TOOLS = ACTION_TOOLS
-
-const toolDetail = (input: Record<string, unknown>): string =>
-  String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')
 
 const parseLine = (line: string, onEvent: (e: StreamEvent) => void) => {
   if (!line.trim()) return

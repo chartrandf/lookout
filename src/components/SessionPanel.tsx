@@ -14,9 +14,10 @@ import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
-import { sessionCwd } from '../lib/sessions'
+import { sessionCwd, transcriptPath } from '../lib/sessions'
 import { STAGES } from '../lib/stages'
 import { messageTime } from '../lib/time'
+import { transcriptLines } from '../lib/transcript'
 import type { ActionButton, MergeMethod, MergePreference, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
 import { BackButton } from './BackButton'
@@ -261,6 +262,48 @@ const groupLines = (lines: RunLine[]): RunLine[][] =>
     return groups
   }, [])
 
+// A run's log as the terminal shows it, live or replayed from a session's transcript
+const RunLog = ({ lines, onLink }: { lines: RunLine[]; onLink: (url: string, external: boolean) => void }) => (
+  <>
+    {groupLines(lines).map((group, gi) => {
+      const kind = group[0].kind
+      const key = gi // append-only log: groups only ever grow or get appended to
+      if (kind === 'tool')
+        return (
+          <div key={key} className="flex flex-col rounded bg-deck-900/60 px-2 py-1">
+            {group.map((l, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+              <ToolLine key={i} text={l.text} />
+            ))}
+          </div>
+        )
+      if (kind === 'text')
+        return (
+          <Markdown key={key} className="md-console" text={group.map((l) => l.text).join('\n\n')} onLink={onLink} />
+        )
+      if (kind === 'user')
+        return (
+          <div key={key} className="flex flex-col gap-1">
+            {group.map((l, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+              <UserLine key={i} text={l.text} onOpen={onLink} />
+            ))}
+          </div>
+        )
+      return (
+        <div key={key} className="flex flex-col gap-1">
+          {group.map((l, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
+            <p key={i} className="font-mono text-xs text-red-400">
+              <Linkify text={l.text} onOpen={onLink} />
+            </p>
+          ))}
+        </div>
+      )
+    })}
+  </>
+)
+
 const feedName = (e: FeedEvent) => (e.actor === 'Lookout' ? 'Lookout' : e.mine ? 'You' : e.actor || 'Lookout')
 
 // Lucide "reply": marks a report as the answer to the session stacked behind it
@@ -373,13 +416,18 @@ export const SessionPanel = ({
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [report, setReport] = useState<{ title: string; content: string } | null>(null)
+  // a past session read back in Lookout (⌘+click on its bubble), instead of resuming it in Ghostty
+  const [transcript, setTranscript] = useState<{ id: string; title: string; lines: RunLine[] | null } | null>(null)
   const [checks, setChecks] = useState<CheckItem[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const runRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true) // terminal tails the output until you scroll away from the bottom
+  const [termOpen, setTermOpen] = useState(true) // the terminal folds down to its $ claude title bar
   const autoTopRef = useRef(-1)
   const reportRef = useRef<{ title: string; content: string } | null>(null)
   reportRef.current = report
+  const transcriptRef = useRef(false)
+  transcriptRef.current = !!transcript
   const confirmOpenRef = useRef(false)
   confirmOpenRef.current = !!confirm
   const methodMenuRef = useRef(false)
@@ -410,6 +458,7 @@ export const SessionPanel = ({
   useEffect(() => {
     setFeed(null)
     setReport(null)
+    setTranscript(null)
     scrollRef.current?.scrollTo({ top: 0 }) // column-reverse: top 0 is the bottom, newest events
     loadFeed()
   }, [task.id])
@@ -485,6 +534,13 @@ export const SessionPanel = ({
     followRef.current = true
   }, [run, task.id])
 
+  const running = run?.status === 'running'
+  // a new turn (or another card) unfolds the terminal so its output is seen
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-open triggers only
+  useEffect(() => {
+    if (running) setTermOpen(true)
+  }, [running, task.id])
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: follow the growing log
   useEffect(() => {
     const el = runRef.current
@@ -555,12 +611,15 @@ export const SessionPanel = ({
       setPickerOpen(false)
       return true
     }
+    if (transcriptRef.current) {
+      setTranscript(null)
+      return true
+    }
     if (!reportRef.current) return false
     setReport(null)
     return true
   }, [])
 
-  const running = run?.status === 'running'
   const sessionId = run?.sessionId ?? task.sessionIds.at(-1)
   // generic chat, always there: the input talks to the latest session (live run -> reply into it;
   // none -> resume the last one), and with no session yet it starts a new one on the PR's branch.
@@ -651,6 +710,20 @@ export const SessionPanel = ({
     if (!task.repoPath) return
     await resumeInGhostty(await checkoutFor(id), id)
   }
+
+  const readSession = async (id: string, title: string) => {
+    if (!task.repoPath) return
+    setTranscript({ id, title, lines: null })
+    let lines: RunLine[]
+    try {
+      lines = transcriptLines((await readTextFile(await transcriptPath(await checkoutFor(id), id))).split('\n'))
+    } catch {
+      lines = [{ kind: 'error', text: "could not read this session's transcript" }]
+    }
+    setTranscript((t) => (t?.id === id ? { ...t, lines } : t))
+  }
+
+  const openLink = (url: string, external: boolean) => openPrWindow(url, task.repo, task.prNumber, external)
 
   return (
     <SidePanel onClose={onClose} onEscape={onEscape}>
@@ -850,28 +923,46 @@ export const SessionPanel = ({
 
           {/* terminal sits above the chat, capped so history always keeps room; each scrolls on its own */}
           {run && (running || run.lines.length > 0) && (
-            <div className="flex max-h-[45vh] shrink-0 flex-col border-b border-deck-800 p-4 pb-3">
+            <div
+              className={`flex shrink-0 flex-col border-b border-deck-800 p-4 ${termOpen ? 'max-h-[45vh] pb-3' : ''}`}
+            >
               {/* terminal window: title bar ($ claude · status · command), darker console body below */}
               <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-deck-700 bg-deck-900">
-                <div className="relative flex w-full items-center gap-2 border-b border-deck-700 px-4 py-2.5 font-mono text-sm">
-                  <span className="text-grass-400">$</span>
-                  <span className="text-deck-200">claude</span>
-                  {running && (
-                    <>
-                      <span className="relative flex h-2.5 w-2.5 shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+                <div
+                  className={`relative flex w-full items-center gap-2 px-4 py-2.5 font-mono text-sm ${termOpen ? 'border-b border-deck-700' : ''}`}
+                >
+                  <Tip label={termOpen ? 'Collapse the terminal' : 'Expand the terminal'}>
+                    <button
+                      type="button"
+                      onClick={() => setTermOpen((o) => !o)}
+                      aria-expanded={termOpen}
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+                    >
+                      <span
+                        className={`shrink-0 text-xs text-deck-500 transition-transform ${termOpen ? 'rotate-90' : ''}`}
+                      >
+                        ▸
                       </span>
-                      <span className="text-amber-200">is working…</span>
-                    </>
-                  )}
-                  {run.command && <span className="ml-auto truncate text-xs text-deck-500">{run.command}</span>}
+                      <span className="text-grass-400">$</span>
+                      <span className="text-deck-200">claude</span>
+                      {running && (
+                        <>
+                          <span className="relative flex h-2.5 w-2.5 shrink-0">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+                          </span>
+                          <span className="text-amber-200">is working…</span>
+                        </>
+                      )}
+                      {run.command && <span className="ml-auto truncate text-xs text-deck-500">{run.command}</span>}
+                    </button>
+                  </Tip>
                   {running && (
                     <Tip label="Stop this run (the session stays resumable)">
                       <button
                         type="button"
                         onClick={onKill}
-                        className={`shrink-0 cursor-pointer rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 font-sans text-xs text-red-200 hover:bg-red-500/40 ${run.command ? '' : 'ml-auto'}`}
+                        className="shrink-0 cursor-pointer rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 font-sans text-xs text-red-200 hover:bg-red-500/40"
                       >
                         ■ stop
                       </button>
@@ -887,51 +978,10 @@ export const SessionPanel = ({
                 <div
                   ref={runRef}
                   onScroll={onRunScroll}
+                  hidden={!termOpen}
                   className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-deck-950 px-4 py-3 text-sm"
                 >
-                  {groupLines(run.lines).map((group, gi) => {
-                    const openLink = (url: string, external: boolean) =>
-                      openPrWindow(url, task.repo, task.prNumber, external)
-                    const kind = group[0].kind
-                    const key = gi // append-only log: groups only ever grow or get appended to
-                    if (kind === 'tool')
-                      return (
-                        <div key={key} className="flex flex-col rounded bg-deck-900/60 px-2 py-1">
-                          {group.map((l, i) => (
-                            // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                            <ToolLine key={i} text={l.text} />
-                          ))}
-                        </div>
-                      )
-                    if (kind === 'text')
-                      return (
-                        <Markdown
-                          key={key}
-                          className="md-console"
-                          text={group.map((l) => l.text).join('\n\n')}
-                          onLink={openLink}
-                        />
-                      )
-                    if (kind === 'user')
-                      return (
-                        <div key={key} className="flex flex-col gap-1">
-                          {group.map((l, i) => (
-                            // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                            <UserLine key={i} text={l.text} onOpen={openLink} />
-                          ))}
-                        </div>
-                      )
-                    return (
-                      <div key={key} className="flex flex-col gap-1">
-                        {group.map((l, i) => (
-                          // biome-ignore lint/suspicious/noArrayIndexKey: append-only log
-                          <p key={i} className="font-mono text-xs text-red-400">
-                            <Linkify text={l.text} onOpen={openLink} />
-                          </p>
-                        ))}
-                      </div>
-                    )
-                  })}
+                  <RunLog lines={run.lines} onLink={openLink} />
                   {running && <span className="h-4 w-2 shrink-0 animate-pulse bg-grass-400/80" aria-hidden />}
                 </div>
               </div>
@@ -1027,7 +1077,9 @@ export const SessionPanel = ({
                                 : e.filePath
                                   ? openReport(e.filePath)
                                   : e.sessionId
-                                    ? resumeSession(e.sessionId)
+                                    ? ev.metaKey
+                                      ? readSession(e.sessionId, e.text)
+                                      : resumeSession(e.sessionId)
                                     : openPrWindow(e.url as string, task.repo, task.prNumber, ev.metaKey)
                           }
                           className={`${bubbleClass} cursor-pointer text-left transition-colors duration-150 ${
@@ -1041,6 +1093,12 @@ export const SessionPanel = ({
                       ) : (
                         <div className={bubbleClass}>{body}</div>
                       )
+                    const onlySession = e.sessionId && !e.streamItemId && !e.body && !e.filePath
+                    const bubbleTipped = onlySession ? (
+                      <Tip label="Resume in Ghostty (⌘+click to read it here)">{bubble}</Tip>
+                    ) : (
+                      bubble
+                    )
                     return (
                       <li
                         // biome-ignore lint/suspicious/noArrayIndexKey: static snapshot list
@@ -1068,10 +1126,10 @@ export const SessionPanel = ({
                                 </span>
                               </div>
                               {/* opaque underlay: the front bubble's tint is translucent and would show the back one */}
-                              <div className="-mt-3 ml-[20px] rounded-[18px] bg-deck-950">{bubble}</div>
+                              <div className="-mt-3 ml-[20px] rounded-[18px] bg-deck-950">{bubbleTipped}</div>
                             </div>
                           ) : (
-                            bubble
+                            bubbleTipped
                           )}
                         </div>
                       </li>
@@ -1134,6 +1192,30 @@ export const SessionPanel = ({
                   />
                 </div>
               )}
+            </div>
+          )}
+          {transcript && (
+            <div className="absolute inset-0 z-30 flex flex-col bg-deck-900">
+              <div className="flex items-center gap-2 border-b border-deck-800 px-4 py-2.5">
+                <BackButton onClick={() => setTranscript(null)} title="Back to the PR panel" />
+                <p className="min-w-0 flex-1 truncate font-mono text-xs text-deck-400">{transcript.title}</p>
+                <Tip label="Resume this session in Ghostty">
+                  <button
+                    type="button"
+                    onClick={() => resumeSession(transcript.id)}
+                    className="shrink-0 cursor-pointer rounded border border-deck-600 px-2 py-0.5 text-xs text-deck-300 hover:bg-deck-800 hover:text-deck-100"
+                  >
+                    Resume in terminal
+                  </button>
+                </Tip>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-deck-950 px-4 py-3 text-sm">
+                {transcript.lines ? (
+                  <RunLog lines={transcript.lines} onLink={openLink} />
+                ) : (
+                  <p className="m-auto text-deck-500">Loading session…</p>
+                )}
+              </div>
             </div>
           )}
           {confirm && <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />}

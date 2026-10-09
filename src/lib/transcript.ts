@@ -1,4 +1,5 @@
 import type { ActionButton } from '../types'
+import type { RunLine } from './runs'
 // Reading a review out of a Claude Code transcript. Pure line-level parsing, no file access and no
 // Tauri: the app reads the tail through plugin-fs (capture.ts) and the `lookout` CLI through
 // node:fs, and both must decide the same way about the same lines.
@@ -59,7 +60,7 @@ export type CaptureResult =
   | { kind: 'exported' } // the session wrote its own report: that flow already works, leave it alone
   | { kind: 'none' }
 
-type Entry = { type?: string; message?: { role?: string; content?: unknown }; timestamp?: string }
+type Entry = { type?: string; isMeta?: boolean; message?: { role?: string; content?: unknown }; timestamp?: string }
 type Block = Record<string, unknown>
 
 const parse = (line: string): Entry | null => {
@@ -145,3 +146,41 @@ export const reviewFromLines = (lines: string[]): CaptureResult => {
   const body = turn.body.length > MAX_BODY ? `${cut(turn.body, MAX_BODY)}\n\n_(truncated by Lookout)_` : turn.body
   return { kind: 'captured', body, ts: turn.ts }
 }
+
+// What a tool call reads as on one terminal line: the command, file or search it was about
+export const toolDetail = (input: Record<string, unknown>): string =>
+  String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')
+
+// A human turn as typed: a slash command shows as `/name args`, the CLI's own wrappers (command
+// output, the skill text it injects) as nothing
+const promptText = (e: Entry): string => {
+  const content = e.message?.content
+  const raw =
+    typeof content === 'string'
+      ? content
+      : blocks(e)
+          .filter((b) => b.type === 'text' && typeof b.text === 'string')
+          .map((b) => b.text as string)
+          .join('\n')
+  const m = raw.match(COMMAND_RE)
+  if (m) return `/${m[1]} ${(m[2] ?? '').trim()}`.trim()
+  return raw.startsWith('<local-command-') ? '' : raw.trim()
+}
+
+// A whole session replayed as the terminal shows a live run: prompts, Claude's text, its tool calls
+export const transcriptLines = (lines: string[]): RunLine[] =>
+  parseLines(lines).flatMap((e): RunLine[] => {
+    if (e.isMeta) return []
+    if (isHumanTurn(e)) {
+      const text = promptText(e)
+      return text ? [{ kind: 'user', text }] : []
+    }
+    if (e.type !== 'assistant') return []
+    return blocks(e).flatMap((b): RunLine[] =>
+      b.type === 'text' && typeof b.text === 'string' && b.text.trim()
+        ? [{ kind: 'text', text: b.text }]
+        : b.type === 'tool_use'
+          ? [{ kind: 'tool', text: `${b.name} ${toolDetail((b.input ?? {}) as Block)}`.trim() }]
+          : [],
+    )
+  })

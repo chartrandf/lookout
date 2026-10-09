@@ -6,6 +6,7 @@ import {
   promptCaptureKind,
   reviewFromLines,
   runCaptureKind,
+  transcriptLines,
 } from './transcript'
 
 // --- transcript line builders -------------------------------------------------------------
@@ -171,5 +172,46 @@ describe('runCaptureKind', () => {
 
   it('leaves a reply with no button to Haiku', () => {
     expect(runCaptureKind(undefined)).toBeNull()
+  })
+})
+
+describe('transcriptLines', () => {
+  it('turns prompts, text and tool calls into terminal lines, without thinking or tool results', () => {
+    expect(
+      transcriptLines([
+        userPrompt('fix the flaky test'),
+        assistant([thinking('hmm'), text('On it.'), toolUse('Bash', { command: 'pnpm test' })]),
+        toolResult('ok'),
+        assistant([toolUse('Edit', { file_path: 'src/a.ts' }), text('Fixed.')]),
+      ]),
+    ).toEqual([
+      { kind: 'user', text: 'fix the flaky test' },
+      { kind: 'text', text: 'On it.' },
+      { kind: 'tool', text: 'Bash pnpm test' },
+      { kind: 'tool', text: 'Edit src/a.ts' },
+      { kind: 'text', text: 'Fixed.' },
+    ])
+  })
+
+  it('shows a slash command as typed, and skips meta lines and command output', () => {
+    const meta = JSON.stringify({ type: 'user', isMeta: true, message: { role: 'user', content: 'Caveat: …' } })
+    expect(
+      transcriptLines([
+        meta,
+        userPrompt(
+          '<command-message>do-review</command-message>\n<command-name>/do-review</command-name>\n<command-args>feat-x</command-args>',
+        ),
+        userPrompt('<local-command-stdout>done</local-command-stdout>'),
+        userPrompt('Base directory for this skill: /x', '2026-09-18T09:00:01.000Z').replace(
+          '"type":"user"',
+          '"type":"user","isMeta":true',
+        ),
+      ]),
+    ).toEqual([{ kind: 'user', text: '/do-review feat-x' }])
+  })
+
+  it('reads a prompt sent as text blocks and ignores lines that are not JSON', () => {
+    const blocksPrompt = JSON.stringify({ type: 'user', message: { role: 'user', content: [text('hello')] } })
+    expect(transcriptLines(['{torn', blocksPrompt])).toEqual([{ kind: 'user', text: 'hello' }])
   })
 })
