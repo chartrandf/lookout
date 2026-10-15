@@ -180,7 +180,7 @@ const CheckIcon = () => (
   </svg>
 )
 
-// a session's state, after its bubble's text: spinning while it runs, then how it went
+// a session's state: spinning in place of the bubble's icon while it runs, then how it went after the text
 const STATUS_ICON: Record<NonNullable<FeedEvent['outcome']>, IconName> = {
   running: 'sync',
   ok: 'check-circle-fill',
@@ -1058,7 +1058,6 @@ export const SessionPanel = ({
                       e.outcome === 'running' ||
                       (!!e.sessionId && run?.sessionId === e.sessionId && run.status === 'running')
                     const done = e.sessionId && !running
-                    const status = running ? 'running' : e.outcome
                     const meta = (
                       <>
                         {messageTime(e.ts)}
@@ -1070,7 +1069,11 @@ export const SessionPanel = ({
                     // line when it fits and wraps when not
                     const body = (
                       <>
-                        <IconBox name={e.icon} className="mr-1.5" />
+                        {/* a running session spins in place of its own icon */}
+                        <IconBox
+                          name={running ? STATUS_ICON.running : e.icon}
+                          className={`mr-1.5 ${running ? 'animate-spin' : ''}`}
+                        />
                         <span
                           // a commit message reads like GitHub's: mono, always underlined
                           className={isCommit ? 'font-mono text-xs underline' : ''}
@@ -1078,12 +1081,7 @@ export const SessionPanel = ({
                           {e.text}
                           {isReport && (isOutput ? ' (See output) ↗' : ' (See Report) ↗')}
                         </span>
-                        {status && (
-                          <IconBox
-                            name={STATUS_ICON[status]}
-                            className={`ml-1.5 ${status === 'running' ? 'animate-spin' : ''}`}
-                          />
-                        )}
+                        {!running && e.outcome && <IconBox name={STATUS_ICON[e.outcome]} className="ml-1.5" />}
                         {/* its own line, kept whole; the time stamp still shares it when it fits */}
                         {e.followup && (
                           <>
