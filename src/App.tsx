@@ -60,7 +60,14 @@ import { setStreamFeed, type TimelineSummary } from './lib/feed'
 import { parseFollowupSummary } from './lib/followup'
 import { resumeInGhostty } from './lib/ghostty'
 import { errText, logError, logWarn, setLogEnabled } from './lib/log'
-import { DEFAULT_MERGE_HOOK, MERGE_HOOK_COMMAND, mergeHookText } from './lib/mergehook'
+import {
+  DEFAULT_MERGE_HOOK,
+  MERGE_HOOK_COMMAND,
+  MERGE_HOOK_STATUS_ASK,
+  type MergeHookOutcome,
+  mergeHookOutcome,
+  mergeHookText,
+} from './lib/mergehook'
 import { snoozeMyPr, syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick, setNotificationsEnabled } from './lib/notify'
 import { classifyColumn } from './lib/prboard'
@@ -575,27 +582,28 @@ const App = () => {
     const text = mergeHookText(hook, t.branch, t.prNumber)
     if (!text) return
     const id = await addCardEvent(t.id, 'merge_prompt', text)
-    const end = (status: 'ok' | 'failed', output: string | null = null) =>
+    const end = (status: MergeHookOutcome, output: string | null = null) =>
       updateCardEvent(id, t.id, { status, output }).catch((e) => logError('merge-hook', e, `${t.id}: save result`))
     const repoPath = t.repoPath
     if (!repoPath) return end('failed', `no local clone configured for ${t.repo}`)
     // its own run, beside the card's: it must not replace a session still open in the panel. It
     // never touches the card either — the card event is its whole record.
-    let failed = false
+    let outcome: MergeHookOutcome | undefined
     startRun(
       `${t.id}:merge`,
       MERGE_HOOK_COMMAND,
       board,
-      text,
+      `${text}\n\n${MERGE_HOOK_STATUS_ASK}`,
       repoPath,
       {
         onSession: (_, sessionId) => {
           updateCardEvent(id, t.id, { sessionId }).catch((e) => logError('merge-hook', e, `${t.id}: save session`))
         },
-        onResult: (_, __, isError) => {
-          failed ||= isError
+        onResult: (_, resultText, isError) => {
+          outcome = mergeHookOutcome(resultText, isError)
         },
-        onEnd: (_, status) => end(failed || status === 'error' ? 'failed' : 'ok'),
+        // no result at all: claude died before answering, or ended without a word
+        onEnd: (_, status) => end(status === 'error' ? 'failed' : (outcome ?? 'attention')),
       },
       ACTION_TOOLS,
     ).catch((e) => {

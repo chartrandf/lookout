@@ -224,6 +224,14 @@ describe('cardFeedEvents', () => {
     expect(e.text).toBe('On merge: /clean feat-x failed')
     expect(e.body).toContain('no local clone')
   })
+
+  it('tags a merge action with where it stands', () => {
+    const outcome = (status: CardEvent['status']) => cardFeedEvents([ev({ status })], 'me')[0].outcome
+    expect(outcome('running')).toBe('running')
+    expect(outcome('ok')).toBe('ok')
+    expect(outcome('attention')).toBe('attention')
+    expect(outcome('failed')).toBe('failed')
+  })
 })
 
 describe('mergeReports with merge actions', () => {

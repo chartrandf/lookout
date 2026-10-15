@@ -25,6 +25,7 @@ export type FeedEvent = {
   sessionId?: string // resumes the claude session
   streamItemId?: string // a Stream card's milestone: opens that card on the Stream board
   cardEventId?: number // something Lookout did on the card by itself, like the merge action (card_events)
+  outcome?: CardEvent['status'] // where that stands: still running, or how it finished
   fromSession?: string // a captured report: the session it was read out of
   followup?: FollowupSummary // a follow-up's own counts, kept on its bubble (the card shows only the latest)
   // the session a report answers, quoted over it like a chat reply. exact = the capture named it;
@@ -187,6 +188,7 @@ export const cardFeedEvents = (events: CardEvent[], me: string): FeedEvent[] =>
       ...lookout(me),
       text,
       cardEventId: e.id,
+      outcome: e.status,
       ...(e.sessionId ? { sessionId: e.sessionId } : {}),
       ...(fence(e.output) ? { body: fence(e.output) } : {}),
     }

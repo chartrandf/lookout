@@ -10,6 +10,7 @@ import { subscribeCardEvents } from '../lib/db'
 import { buildFeed, type FeedEvent, mergeReports, reportEvents, type TimelineSummary } from '../lib/feed'
 import { approvePr, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
+import type { IconName } from '../lib/icons'
 import { MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
 import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
@@ -178,6 +179,14 @@ const CheckIcon = () => (
     <path d="m4 12.5 5.5 5.5L20 6.5" />
   </svg>
 )
+
+// a session's state, after its bubble's text: spinning while it runs, then how it went
+const STATUS_ICON: Record<NonNullable<FeedEvent['outcome']>, IconName> = {
+  running: 'sync',
+  ok: 'check-circle-fill',
+  attention: 'alert',
+  failed: 'x-circle',
+}
 
 // URLs in session output: click to open in the in-app browser window
 // (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
@@ -1044,7 +1053,12 @@ export const SessionPanel = ({
                     const prev = feed[i - 1]
                     const grouped = prev !== undefined && prev.mine === e.mine && feedName(prev) === name
                     // ✓✓ = that claude session has concluded (not running anymore)
-                    const done = e.sessionId && !(run?.sessionId === e.sessionId && run.status === 'running')
+                    // a merge action runs beside the card's run, so its own status tells
+                    const running =
+                      e.outcome === 'running' ||
+                      (!!e.sessionId && run?.sessionId === e.sessionId && run.status === 'running')
+                    const done = e.sessionId && !running
+                    const status = running ? 'running' : e.outcome
                     const meta = (
                       <>
                         {messageTime(e.ts)}
@@ -1064,6 +1078,12 @@ export const SessionPanel = ({
                           {e.text}
                           {isReport && (isOutput ? ' (See output) ↗' : ' (See Report) ↗')}
                         </span>
+                        {status && (
+                          <IconBox
+                            name={STATUS_ICON[status]}
+                            className={`ml-1.5 ${status === 'running' ? 'animate-spin' : ''}`}
+                          />
+                        )}
                         {/* its own line, kept whole; the time stamp still shares it when it fits */}
                         {e.followup && (
                           <>

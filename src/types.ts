@@ -167,7 +167,7 @@ export type CardEvent = {
   kind: 'merge_prompt'
   text: string // what was sent: the filled prompt
   sessionId: string | null // the claude session a prompt started
-  status: 'running' | 'ok' | 'failed'
+  status: 'running' | 'ok' | 'attention' | 'failed' // attention: the session says I need to look
   output: string | null // why it failed
 }
 
