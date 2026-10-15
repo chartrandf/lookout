@@ -131,7 +131,10 @@ export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorde
   const visible = active.filter(
     (t) => (showSnoozed || !t.snoozed || t.stage === 'done') && matchesFilter(filter, t.repo, t.ciState, t.prAuthor),
   )
-  const snoozedCount = active.filter((t) => t.snoozed && t.stage !== 'done').length
+  // only cards a column shows: a removed (back in Discovery) or ignored card isn't on the board
+  const snoozedCount = active.filter(
+    (t) => t.snoozed && t.stage !== 'done' && COLUMNS.some((c) => c.stage.includes(t.stage)),
+  ).length
   const runByTask = new Map(runs.map((r) => [r.taskId, r]))
 
   // hide the insertion line when dropping there wouldn't move the card
