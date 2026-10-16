@@ -6,7 +6,6 @@
 - [ENHANCED] PR header in panel looks like GitHub hovercard
 - [ENHANCED] Copy PR URL or branch on hover
 - [ENHANCED] Merge hook bubble shows one hook icon tinted by outcome
-- [FIX] Fixed crash from inherited stdio during release
 
 ## v0.4.21 — 2026-10-16
 
