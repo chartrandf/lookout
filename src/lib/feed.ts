@@ -177,22 +177,27 @@ export const reportEvents = async (task: ReviewTask, me: string): Promise<FeedEv
 
 const fence = (output: string | null) => (output ? `\`\`\`\n${output}\n\`\`\`` : undefined)
 
+// how a merge action ended, after its prompt (still running: just the ellipsis)
+const HOOK_OUTCOME: Record<CardEvent['status'], string> = {
+  running: '…',
+  ok: '… OK',
+  attention: '… needs a look',
+  failed: '… failed',
+}
+
 // What Lookout did on the card by itself, on my side like the reports. A prompt's session resumes
 // from its bubble; why it failed opens like a report.
 export const cardFeedEvents = (events: CardEvent[], me: string): FeedEvent[] =>
-  events.map((e) => {
-    const text = e.status === 'failed' ? `On merge: ${e.text} failed` : `On merge: sent ${e.text}`
-    return {
-      ts: e.ts,
-      icon: 'git-merge',
-      ...lookout(me),
-      text,
-      cardEventId: e.id,
-      outcome: e.status,
-      ...(e.sessionId ? { sessionId: e.sessionId } : {}),
-      ...(fence(e.output) ? { body: fence(e.output) } : {}),
-    }
-  })
+  events.map((e) => ({
+    ts: e.ts,
+    icon: 'webhook',
+    ...lookout(me),
+    text: `After merge hook: ${e.text} ${HOOK_OUTCOME[e.status]}`,
+    cardEventId: e.id,
+    outcome: e.status,
+    ...(e.sessionId ? { sessionId: e.sessionId } : {}),
+    ...(fence(e.output) ? { body: fence(e.output) } : {}),
+  }))
 
 // Stream is a beta behind a Settings flag (App sets this): off, a PR's history shows none of it
 let streamFeed = false

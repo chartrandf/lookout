@@ -22,6 +22,7 @@ import {
   RepoPushIcon,
   StopIcon,
   SyncIcon,
+  WebhookIcon,
   WorkflowIcon,
   XCircleIcon,
 } from '@primer/octicons-react'
@@ -50,6 +51,7 @@ const OCTICONS: Record<IconName, OcticonType> = {
   'repo-push': RepoPushIcon,
   stop: StopIcon,
   sync: SyncIcon,
+  webhook: WebhookIcon,
   workflow: WorkflowIcon,
   'x-circle': XCircleIcon,
 }
@@ -68,9 +70,20 @@ const TONE: Partial<Record<IconName, string>> = {
 }
 
 // An Octicon sitting in a line of text: vertically centred on it, 14px unless told otherwise
-export const Icon = ({ name, size = 14, className = '' }: { name: IconName; size?: number; className?: string }) => {
+// tone = another glyph's color, for one whose color depends on what happened (a hook's outcome)
+export const Icon = ({
+  name,
+  size = 14,
+  className = '',
+  tone = name,
+}: {
+  name: IconName
+  size?: number
+  className?: string
+  tone?: IconName
+}) => {
   const Octicon = OCTICONS[name]
-  return <Octicon size={size} className={`inline-block shrink-0 align-[-2px] ${TONE[name] ?? ''} ${className}`} />
+  return <Octicon size={size} className={`inline-block shrink-0 align-[-2px] ${TONE[tone] ?? ''} ${className}`} />
 }
 
 // the box's tint, in the glyph's color; the rest sits in a neutral box
@@ -93,16 +106,18 @@ export const IconBox = ({
   name,
   small = false,
   className = '',
+  tone = name,
 }: {
   name: IconName
   small?: boolean
   className?: string
+  tone?: IconName
 }) => (
   <span
     className={`inline-flex shrink-0 items-center justify-center rounded-full border align-top ${small ? 'size-4' : 'size-5'} ${
-      BOX_TONE[name] ?? 'border-deck-600 bg-deck-700 text-deck-300'
+      BOX_TONE[tone] ?? 'border-deck-600 bg-deck-700 text-deck-300'
     } ${className}`}
   >
-    <Icon name={name} size={small ? 10 : 12} />
+    <Icon name={name} size={small ? 10 : 12} tone={tone} />
   </span>
 )

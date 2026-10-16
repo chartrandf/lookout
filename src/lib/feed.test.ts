@@ -215,14 +215,25 @@ describe('cardFeedEvents', () => {
 
   it('shows a prompt sent on merge as its session, resumable from the history', () => {
     const [e] = cardFeedEvents([ev({ sessionId: 's1', status: 'ok' })], 'me')
-    expect(e).toMatchObject({ text: 'On merge: sent /clean feat-x', icon: 'git-merge', sessionId: 's1', mine: true })
+    expect(e).toMatchObject({
+      text: 'After merge hook: /clean feat-x … OK',
+      icon: 'webhook',
+      sessionId: 's1',
+      mine: true,
+    })
     expect(e.cardEventId).toBe(1)
   })
 
   it('says when a merge action failed, with what went wrong', () => {
     const [e] = cardFeedEvents([ev({ status: 'failed', output: 'no local clone' })], 'me')
-    expect(e.text).toBe('On merge: /clean feat-x failed')
+    expect(e.text).toBe('After merge hook: /clean feat-x … failed')
     expect(e.body).toContain('no local clone')
+  })
+
+  it('says where a merge action stands after its prompt', () => {
+    const text = (status: CardEvent['status']) => cardFeedEvents([ev({ status })], 'me')[0].text
+    expect(text('running')).toBe('After merge hook: /clean feat-x …')
+    expect(text('attention')).toBe('After merge hook: /clean feat-x … needs a look')
   })
 
   it('tags a merge action with where it stands', () => {

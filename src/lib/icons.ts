@@ -23,5 +23,6 @@ export type IconName =
   | 'repo-push'
   | 'stop'
   | 'sync'
+  | 'webhook'
   | 'workflow'
   | 'x-circle'

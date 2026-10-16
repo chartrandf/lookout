@@ -180,7 +180,7 @@ const CheckIcon = () => (
   </svg>
 )
 
-// a session's state: spinning in place of the bubble's icon while it runs, then how it went after the text
+// a session's state: spinning in place of the bubble's icon while it runs, then its color tints that icon
 const STATUS_ICON: Record<NonNullable<FeedEvent['outcome']>, IconName> = {
   running: 'sync',
   ok: 'check-circle-fill',
@@ -1145,6 +1145,7 @@ export const SessionPanel = ({
                         {/* a running session spins in place of its own icon */}
                         <IconBox
                           name={running ? STATUS_ICON.running : e.icon}
+                          tone={!running && e.outcome ? STATUS_ICON[e.outcome] : undefined}
                           className={`mr-1.5 ${running ? 'animate-spin' : ''}`}
                         />
                         <span
@@ -1154,7 +1155,6 @@ export const SessionPanel = ({
                           {e.text}
                           {isReport && (isOutput ? ' (See output) ↗' : ' (See Report) ↗')}
                         </span>
-                        {!running && e.outcome && <IconBox name={STATUS_ICON[e.outcome]} className="ml-1.5" />}
                         {/* its own line, kept whole; the time stamp still shares it when it fits */}
                         {e.followup && (
                           <>
