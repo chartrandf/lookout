@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 
-// Runs from the `version` lifecycle hook, after npm bumps package.json and
-// before it commits. Keeps the Tauri/Cargo versions in lockstep.
+// Run by release.mjs after package.json is bumped, before it commits.
+// Keeps the Tauri/Cargo versions in lockstep.
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
 
 const sync = (file, pattern) => {

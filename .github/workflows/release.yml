@@ -1,9 +1,9 @@
 name: release
 
+# Started by publishing the GitHub release (`pnpm release`), whose notes are the CHANGELOG.md section
 on:
-  push:
-    tags:
-      - "v*"
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,62 +14,20 @@ permissions:
   contents: write
 
 jobs:
-  # Creates the release up front so the macOS and Linux builds can run in parallel and only upload
-  # to it (tauri-action finds it by tag). `view ||` keeps a workflow_dispatch re-run from failing.
+  # The release exists up front so the macOS and Linux builds can run in parallel and only upload
+  # to it (tauri-action finds it by tag). A workflow_dispatch of a tag with no release creates it.
   release:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+
       - name: create the release
         run: |
           gh release view "$TAG" > /dev/null 2>&1 && exit 0
           flags=()
           [[ "$TAG" == *-* ]] && flags+=(--prerelease)
-          gh release create "$TAG" --verify-tag --title "Lookout $TAG" "${flags[@]}" --notes-file - <<'EOF'
-          <details>
-          <summary><b>Install on macOS</b></summary>
-
-          Universal build (Apple Silicon + Intel), macOS 11+.
-
-          **Homebrew** (recommended — no Gatekeeper prompt, puts `lookout` CLI on PATH):
-
-          ```bash
-          brew tap chartrandf/lookout https://github.com/chartrandf/lookout
-          brew trust --cask chartrandf/lookout/lookout
-          brew install --cask lookout
-          ```
-
-          All three lines, in order. Upgrade later with `brew upgrade --cask lookout`.
-
-          **Manual** (`.dmg`) — the app is ad-hoc signed but **not notarized**:
-
-          1. Download `Lookout_*_universal.dmg` below, open it, drag **Lookout** to Applications.
-          2. Double-click it — the launch is blocked.
-          3. **System Settings → Privacy & Security → Open Anyway** (one-time).
-
-          Or from Terminal: `xattr -dr com.apple.quarantine /Applications/Lookout.app`.
-
-          </details>
-
-          <details>
-          <summary><b>Install on Linux</b></summary>
-
-          x86_64 only. Needs webkit2gtk-4.1 (Ubuntu 22.04+, Debian 12+).
-
-          **Debian / Ubuntu** (`.deb`):
-
-          ```bash
-          sudo apt install ./Lookout_*_amd64.deb
-          ```
-
-          **Other distros** (`.AppImage`):
-
-          ```bash
-          chmod +x Lookout_*_amd64.AppImage
-          ./Lookout_*_amd64.AppImage
-          ```
-
-          </details>
-          EOF
+          gh release create "$TAG" --verify-tag --title "Lookout $TAG" "${flags[@]}" \
+            --notes-file .github/release-install.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -116,7 +74,7 @@ jobs:
 
       # This repo doubles as the Homebrew tap: point the cask at the release we just cut. The sha256
       # is only knowable now, so it lands on main right after the build (the version came from
-      # `pnpm version`, so usually only the hash actually changes).
+      # `pnpm release`, so usually only the hash actually changes).
       # Skipped for prerelease tags (v1.2.3-rc.1): the bundle is named after tauri.conf.json's
       # version, not the tag, so the cask URL would point at a missing .dmg.
       - name: update the Homebrew cask

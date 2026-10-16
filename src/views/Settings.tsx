@@ -6,6 +6,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { exists } from '@tauri-apps/plugin-fs'
 import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener'
 import { useEffect, useState } from 'react'
+import changelog from '../../CHANGELOG.md?raw'
 import { ActionChip, ActionEditor, Switch } from '../components/ActionEditor'
 import { CloseButton } from '../components/CloseButton'
 import { type Confirm, ConfirmDialog } from '../components/ConfirmDialog'
@@ -16,6 +17,7 @@ import { StreamTemplates } from '../components/StreamTemplates'
 import { Tip } from '../components/Tip'
 import { dropAction } from '../lib/actionlist'
 import { avatarUrl } from '../lib/avatar'
+import { type ChangeTag, parseChangelog } from '../lib/changelog'
 import { listSlashCommands } from '../lib/commands'
 import { DEFAULT_PR_BUTTONS, DEFAULT_REVIEW_BUTTONS } from '../lib/config'
 import { capturedReviewCount, clearCapturedReviews } from '../lib/db'
@@ -339,6 +341,15 @@ const ActionList = ({
   )
 }
 
+const RELEASES = parseChangelog(changelog)
+
+// a changelog line's kind, as a badge: new in green, improved in amber, fixed neutral
+const CHANGE_BADGE: Record<ChangeTag, { label: string; className: string }> = {
+  NEW: { label: 'New', className: 'bg-grass-500/20 text-grass-300' },
+  ENHANCED: { label: 'Improved', className: 'bg-amber-500/20 text-amber-300' },
+  FIX: { label: 'Fixed', className: 'bg-deck-700 text-deck-200' },
+}
+
 export const Settings = ({
   config,
   tasks,
@@ -393,6 +404,7 @@ export const Settings = ({
   const [autostart, setAutostart] = useState(false)
   const [notifStatus, setNotifStatus] = useState<NotificationStatus>('prompt')
   const [version, setVersion] = useState('')
+  const [changelogOpen, setChangelogOpen] = useState(false)
   const [logFile, setLogFile] = useState('')
   const [captured, setCaptured] = useState(0)
   const [copiedHook, setCopiedHook] = useState(false)
@@ -541,7 +553,15 @@ export const Settings = ({
     <div className="flex max-w-[1000px] flex-col gap-10">
       <div>
         <h2 className="text-2xl font-bold">Settings</h2>
-        {version && <p className="mt-0.5 text-xs font-light text-deck-500">v{version}</p>}
+        {version && (
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            className="mt-0.5 block cursor-pointer text-xs font-light text-deck-500 hover:text-deck-200"
+          >
+            v{version} — See what's new
+          </button>
+        )}
         <p className="mt-5 flex items-center gap-2 text-sm text-deck-400">
           {config.githubUser ? (
             <Tip label="Open GitHub profile">
@@ -845,6 +865,47 @@ export const Settings = ({
                   onBlur={openBoard.persist}
                   onDelete={() => openBoard.remove(editingButton)}
                 />
+              </div>
+            </>
+          )}
+        </SidePanel>
+      )}
+      {changelogOpen && (
+        <SidePanel onClose={() => setChangelogOpen(false)} initialWidth={560}>
+          {({ close }) => (
+            <>
+              <div className="flex items-center gap-2 border-b border-deck-800 px-4 py-3">
+                <h2 className="text-sm font-semibold text-white">Changelog</h2>
+                <div className="ml-auto">
+                  <CloseButton onClick={close} />
+                </div>
+              </div>
+              <div className="flex flex-1 flex-col gap-6 overflow-y-auto p-4">
+                {RELEASES.map((r) => (
+                  <section key={r.title}>
+                    <h3 className="flex items-baseline gap-2 text-base font-bold text-deck-100">
+                      {r.title.split(' — ')[0]}
+                      <span className="text-xs font-normal text-deck-500">({r.title.split(' — ')[1]})</span>
+                    </h3>
+                    <ul className="mt-2 flex flex-col gap-1.5">
+                      {r.items.map((it) => (
+                        <li key={it.text} className="flex items-start gap-2 text-sm text-deck-200">
+                          <span aria-hidden className="leading-5 text-deck-500">
+                            •
+                          </span>
+                          {it.tag && (
+                            <span
+                              className={`shrink-0 rounded-md px-1.5 text-xs leading-5 font-bold ${CHANGE_BADGE[it.tag].className}`}
+                            >
+                              {CHANGE_BADGE[it.tag].label}
+                            </span>
+                          )}
+                          <span className="leading-5">{it.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
               </div>
             </>
           )}
