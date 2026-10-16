@@ -40,6 +40,8 @@ export const summaryPrompt = (subjects) =>
     '- At most 6 lines, each at most 12 words, plain text, no markdown or backticks.',
     '- Each line: `- [NEW] text`, `- [ENHANCED] text` or `- [FIX] text`; NEW first, then ENHANCED, then FIX.',
     '- Leave out chores, refactors, CI, tests, docs and anything users cannot see.',
+    '- Leave out fixes to the build, release or dev tooling (e.g. a release script crash): users never saw the bug.',
+    '- The tag already says the kind: never repeat it in the text (no "[FIX] Fixed …", "[NEW] Added …", "[ENHANCED] Improved …").',
     '- If nothing is user-facing, output nothing.',
     'Output only the lines.',
     '',
