@@ -14,7 +14,8 @@ import {
 // pnpm release <patch|minor|major>: CHANGELOG.md + version bump in one commit, a tag, then the
 // GitHub release, whose publishing starts the build (.github/workflows/release.yml)
 const kind = process.argv[2]
-const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { encoding: 'utf8', ...opts }).trim()
+// null output when stdio is inherited
+const run = (cmd, args, opts = {}) => (execFileSync(cmd, args, { encoding: 'utf8', ...opts }) ?? '').trim()
 const git = (...args) => run('git', args)
 const fail = (msg) => {
   console.error(`release: ${msg}`)

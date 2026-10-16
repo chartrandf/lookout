@@ -52,7 +52,9 @@ export const parseSummary = (text) => {
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean)
-  return lines.every((l) => /^- \[(NEW|ENHANCED|FIX)\] \S/.test(l)) ? lines : null
+  if (!lines.every((l) => /^- \[(NEW|ENHANCED|FIX)\] \S/.test(l))) return null
+  // NEW, ENHANCED then FIX whatever order it came in
+  return ORDER.flatMap((tag) => lines.filter((l) => l.startsWith(`- [${tag}]`)))
 }
 
 const TITLE = '# Changelog\n\n'

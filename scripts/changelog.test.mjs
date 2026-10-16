@@ -49,6 +49,10 @@ describe('parseSummary', () => {
     expect(parseSummary('\n- [NEW] Stream board\n- [FIX] Snooze\n')).toEqual(['- [NEW] Stream board', '- [FIX] Snooze'])
   })
 
+  it('puts NEW first, then ENHANCED, then FIX', () => {
+    expect(parseSummary('- [FIX] a\n- [ENHANCED] b\n- [NEW] c')).toEqual(['- [NEW] c', '- [ENHANCED] b', '- [FIX] a'])
+  })
+
   it('rejects an answer with anything else in it', () => {
     expect(parseSummary('Here is the changelog:\n- [NEW] Stream board')).toBeNull()
   })
