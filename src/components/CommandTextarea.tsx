@@ -1,4 +1,5 @@
 import { type KeyboardEvent, type RefObject, useRef, useState } from 'react'
+import { droppedPaths, fileRefs } from '../lib/filerefs'
 
 type Props = {
   value: string
@@ -98,6 +99,21 @@ export const CommandTextarea = ({
           refresh(e.target)
         }}
         onClick={(e) => refresh(e.currentTarget)}
+        // a dropped file goes in as `@path` at the caret, not the bare path the webview would paste
+        onDrop={(e) => {
+          const paths = droppedPaths(e.dataTransfer.getData('text/uri-list'), e.dataTransfer.getData('text/plain'))
+          if (paths.length === 0) return
+          e.preventDefault()
+          const el = e.currentTarget
+          const at = el.selectionStart ?? value.length
+          const inserted = fileRefs(paths, value.slice(0, at))
+          onChange(value.slice(0, at) + inserted + value.slice(el.selectionEnd ?? at))
+          const pos = at + inserted.length
+          requestAnimationFrame(() => {
+            el.focus()
+            el.setSelectionRange(pos, pos)
+          })
+        }}
         onKeyUp={(e) => {
           if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) refresh(e.currentTarget)
         }}
