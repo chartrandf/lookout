@@ -2,7 +2,7 @@ import { GitMergeIcon } from '@primer/octicons-react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react'
 import { avatarUrl } from '../lib/avatar'
 import { cardActions, snoozeAction } from '../lib/cardactions'
 import { listSlashCommands } from '../lib/commands'
@@ -315,6 +315,100 @@ const RunLog = ({ lines, onLink }: { lines: RunLine[]; onLink: (url: string, ext
   </>
 )
 
+type TerminalWindowProps = {
+  label: string // right of `$ claude`: the run's command, or the session's title
+  running: boolean
+  open?: boolean // folded down to its title bar when false
+  onToggle?: () => void // a title bar that folds the window; none = always open
+  onKill?: () => void
+  bodyRef?: Ref<HTMLDivElement>
+  onScroll?: () => void
+  className?: string
+  children: ReactNode
+}
+
+// terminal window: title bar ($ claude · status · label), darker console body below. The live run
+// above the history and a past session read back here (⌘+click) look the same
+const TerminalWindow = ({
+  label,
+  running,
+  open = true,
+  onToggle,
+  onKill,
+  bodyRef,
+  onScroll,
+  className = '',
+  children,
+}: TerminalWindowProps) => {
+  const title = (
+    <>
+      {onToggle && (
+        <span className={`shrink-0 text-xs text-deck-500 transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
+      )}
+      <span className="text-grass-400">$</span>
+      <span className="text-deck-200">claude</span>
+      {running && (
+        <>
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
+          </span>
+          <span className="text-amber-200">is working…</span>
+        </>
+      )}
+      {label && <span className="ml-auto truncate text-xs text-deck-500">{label}</span>}
+    </>
+  )
+  return (
+    <div className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-deck-700 bg-deck-900 ${className}`}>
+      <div
+        className={`relative flex w-full items-center gap-2 px-4 py-2.5 font-mono text-sm ${open ? 'border-b border-deck-700' : ''}`}
+      >
+        {onToggle ? (
+          <Tip label={open ? 'Collapse the terminal' : 'Expand the terminal'}>
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={open}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
+            >
+              {title}
+            </button>
+          </Tip>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
+        )}
+        {running && onKill && (
+          <Tip label="Stop this run (the session stays resumable)">
+            <button
+              type="button"
+              onClick={onKill}
+              className="shrink-0 cursor-pointer rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 font-sans text-xs text-red-200 hover:bg-red-500/40"
+            >
+              ■ stop
+            </button>
+          </Tip>
+        )}
+        {/* progress runs along the header's bottom border, under the $ claude line */}
+        {running && (
+          <div className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden" aria-hidden>
+            <div className="terminal-progress h-full bg-amber-400" />
+          </div>
+        )}
+      </div>
+      <div
+        ref={bodyRef}
+        onScroll={onScroll}
+        hidden={!open}
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-deck-950 px-4 py-3 text-sm"
+      >
+        {children}
+        {running && <span className="h-4 w-2 shrink-0 animate-pulse bg-grass-400/80" aria-hidden />}
+      </div>
+    </div>
+  )
+}
+
 const feedName = (e: FeedEvent) => (e.actor === 'Lookout' ? 'Lookout' : e.mine ? 'You' : e.actor || 'Lookout')
 
 // Lucide "reply": marks a report as the answer to the session stacked behind it
@@ -429,7 +523,16 @@ export const SessionPanel = ({
   const [refreshing, setRefreshing] = useState(false)
   const [report, setReport] = useState<{ title: string; content: string } | null>(null)
   // a past session read back in Lookout (⌘+click on its bubble), instead of resuming it in Ghostty
-  const [transcript, setTranscript] = useState<{ id: string; title: string; lines: RunLine[] | null } | null>(null)
+  // `from`: where the live run's lines go past what the file held when read (the run was live then)
+  const [transcript, setTranscript] = useState<{
+    id: string
+    title: string
+    lines: RunLine[] | null
+    base?: Run
+    from: number
+  } | null>(null)
+  const transcriptBodyRef = useRef<HTMLDivElement>(null)
+  const transcriptFollowRef = useRef(true) // like the terminal: tail the session until scrolled away
   const [checks, setChecks] = useState<CheckItem[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const runRef = useRef<HTMLDivElement>(null)
@@ -745,7 +848,9 @@ export const SessionPanel = ({
 
   const readSession = async (id: string, title: string) => {
     if (!task.repoPath) return
-    setTranscript({ id, title, lines: null })
+    const base = run?.sessionId === id ? run : undefined
+    setTranscript({ id, title, lines: null, base, from: base?.lines.length ?? 0 })
+    transcriptFollowRef.current = true
     let lines: RunLine[]
     try {
       lines = transcriptLines((await readTextFile(await transcriptPath(await checkoutFor(id), id))).split('\n'))
@@ -753,6 +858,22 @@ export const SessionPanel = ({
       lines = [{ kind: 'error', text: "could not read this session's transcript" }]
     }
     setTranscript((t) => (t?.id === id ? { ...t, lines } : t))
+  }
+
+  // a message sent from the session view streams in under its transcript, from the card's run
+  const transcriptLive = !!transcript && !!run && run.sessionId === transcript.id
+  const transcriptTail = transcriptLive && run ? run.lines.slice(run === transcript?.base ? transcript.from : 0) : []
+  const transcriptRunning = transcriptLive && running
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the transcript and its live tail
+  useEffect(() => {
+    const el = transcriptBodyRef.current
+    if (el && transcriptFollowRef.current) el.scrollTop = el.scrollHeight
+  }, [transcript?.lines, transcriptTail.length])
+
+  const onTranscriptScroll = () => {
+    const el = transcriptBodyRef.current
+    if (el) transcriptFollowRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 16
   }
 
   const openLink = (url: string, external: boolean) => openPrWindow(url, task.repo, task.prNumber, external)
@@ -958,65 +1079,17 @@ export const SessionPanel = ({
             <div
               className={`flex shrink-0 flex-col border-b border-deck-800 p-4 ${termOpen ? 'max-h-[45vh] pb-3' : ''}`}
             >
-              {/* terminal window: title bar ($ claude · status · command), darker console body below */}
-              <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-deck-700 bg-deck-900">
-                <div
-                  className={`relative flex w-full items-center gap-2 px-4 py-2.5 font-mono text-sm ${termOpen ? 'border-b border-deck-700' : ''}`}
-                >
-                  <Tip label={termOpen ? 'Collapse the terminal' : 'Expand the terminal'}>
-                    <button
-                      type="button"
-                      onClick={() => setTermOpen((o) => !o)}
-                      aria-expanded={termOpen}
-                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left"
-                    >
-                      <span
-                        className={`shrink-0 text-xs text-deck-500 transition-transform ${termOpen ? 'rotate-90' : ''}`}
-                      >
-                        ▸
-                      </span>
-                      <span className="text-grass-400">$</span>
-                      <span className="text-deck-200">claude</span>
-                      {running && (
-                        <>
-                          <span className="relative flex h-2.5 w-2.5 shrink-0">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-400" />
-                          </span>
-                          <span className="text-amber-200">is working…</span>
-                        </>
-                      )}
-                      {run.command && <span className="ml-auto truncate text-xs text-deck-500">{run.command}</span>}
-                    </button>
-                  </Tip>
-                  {running && (
-                    <Tip label="Stop this run (the session stays resumable)">
-                      <button
-                        type="button"
-                        onClick={onKill}
-                        className="shrink-0 cursor-pointer rounded border border-red-400/40 bg-red-500/20 px-2 py-0.5 font-sans text-xs text-red-200 hover:bg-red-500/40"
-                      >
-                        ■ stop
-                      </button>
-                    </Tip>
-                  )}
-                  {/* progress runs along the header's bottom border, under the $ claude line */}
-                  {running && (
-                    <div className="absolute inset-x-0 -bottom-px h-0.5 overflow-hidden" aria-hidden>
-                      <div className="terminal-progress h-full bg-amber-400" />
-                    </div>
-                  )}
-                </div>
-                <div
-                  ref={runRef}
-                  onScroll={onRunScroll}
-                  hidden={!termOpen}
-                  className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-deck-950 px-4 py-3 text-sm"
-                >
-                  <RunLog lines={run.lines} onLink={openLink} />
-                  {running && <span className="h-4 w-2 shrink-0 animate-pulse bg-grass-400/80" aria-hidden />}
-                </div>
-              </div>
+              <TerminalWindow
+                label={run.command}
+                running={running}
+                open={termOpen}
+                onToggle={() => setTermOpen((o) => !o)}
+                onKill={onKill}
+                bodyRef={runRef}
+                onScroll={onRunScroll}
+              >
+                <RunLog lines={run.lines} onLink={openLink} />
+              </TerminalWindow>
             </div>
           )}
 
@@ -1251,12 +1324,34 @@ export const SessionPanel = ({
                   </button>
                 </Tip>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-deck-950 px-4 py-3 text-sm">
-                {transcript.lines ? (
-                  <RunLog lines={transcript.lines} onLink={openLink} />
-                ) : (
-                  <p className="m-auto text-deck-500">Loading session…</p>
-                )}
+              <div className="flex min-h-0 flex-1 flex-col p-4">
+                <TerminalWindow
+                  label=""
+                  running={transcriptRunning}
+                  onKill={onKill}
+                  bodyRef={transcriptBodyRef}
+                  onScroll={onTranscriptScroll}
+                  className="flex-1"
+                >
+                  {transcript.lines ? (
+                    <RunLog lines={[...transcript.lines, ...transcriptTail]} onLink={openLink} />
+                  ) : (
+                    <p className="m-auto text-deck-500">Loading session…</p>
+                  )}
+                </TerminalWindow>
+              </div>
+              <div className="border-t border-deck-800 p-3">
+                <ReplyBox
+                  value={input}
+                  onChange={setInput}
+                  onSend={() => send(transcript.id)}
+                  onCancel={onCancel}
+                  canReply={!running && !!task.repoPath}
+                  running={running}
+                  placeholder="Message this session…"
+                  commands={commands}
+                  autoFocus
+                />
               </div>
             </div>
           )}
