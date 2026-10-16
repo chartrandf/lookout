@@ -188,6 +188,36 @@ const STATUS_ICON: Record<NonNullable<FeedEvent['outcome']>, IconName> = {
   failed: 'x-circle',
 }
 
+// Hidden until its row is hovered (or it has focus, or just copied), then slides in from the left.
+// Tailwind needs the full group-hover class names in the source, hence the map.
+const SHOW_ON_HOVER = {
+  url: 'group-hover/url:translate-x-0 group-hover/url:opacity-100',
+  branch: 'group-hover/branch:translate-x-0 group-hover/branch:opacity-100',
+}
+const CopyButton = ({
+  label,
+  copied,
+  onCopy,
+  group,
+}: {
+  label: string
+  copied: boolean
+  onCopy: () => void
+  group: keyof typeof SHOW_ON_HOVER
+}) => (
+  <Tip label={copied ? 'Copied' : label}>
+    <button
+      type="button"
+      onClick={onCopy}
+      className={`flex cursor-pointer items-center text-deck-500 transition duration-150 hover:text-grass-300 focus-visible:translate-x-0 focus-visible:opacity-100 ${
+        copied ? 'opacity-100' : '-translate-x-1 opacity-0'
+      } ${SHOW_ON_HOVER[group]}`}
+    >
+      <Icon name={copied ? 'check' : 'copy'} size={10} />
+    </button>
+  </Tip>
+)
+
 // URLs in session output: click to open in the in-app browser window
 // (capture group -> odd split indexes are URLs; last char must not be trailing punctuation)
 const URL_SPLIT = /(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]])/g
@@ -510,6 +540,7 @@ export const SessionPanel = ({
   const isPr = variant === 'pr'
   const [input, setInput] = useState('')
   const [copiedBranch, setCopiedBranch] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState(false)
   const [approving, setApproving] = useState(false)
   const [approved, setApproved] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
@@ -777,6 +808,12 @@ export const SessionPanel = ({
     setTimeout(() => setCopiedBranch(false), 1500)
   }
 
+  const copyUrl = async () => {
+    await writeText(task.prUrl)
+    setCopiedUrl(true)
+    setTimeout(() => setCopiedUrl(false), 1500)
+  }
+
   // Approve and Merge never show together: not approved yet -> Approve, approved -> Merge, at any stage.
   // task.approved is the DB's copy from the last sync, so the buttons don't wait for the feed; the feed
   // catches an approval given since that sync, and `approved` one just given from this panel.
@@ -883,15 +920,19 @@ export const SessionPanel = ({
       {({ close }) => (
         <>
           <div className="border-b border-deck-800 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <PrLink
-                url={task.prUrl}
-                repo={task.repo}
-                prNumber={task.prNumber}
-                className="shrink-0 text-xs text-deck-400 hover:text-grass-300"
-              >
-                {task.repo}#{task.prNumber} ↗
-              </PrLink>
+            {/* GitHub's hovercard line: repo#number, the copy icon slides in on row hover */}
+            <div className="group/url flex items-center gap-2">
+              <span className="shrink-0 text-xs text-deck-500">
+                <PrLink
+                  url={task.prUrl}
+                  repo={task.repo}
+                  prNumber={task.prNumber}
+                  className="text-deck-400 underline decoration-deck-600 hover:text-grass-300"
+                >
+                  {task.repo}#{task.prNumber}
+                </PrLink>
+              </span>
+              <CopyButton label="Copy PR URL" copied={copiedUrl} onCopy={copyUrl} group="url" />
               <div className="ml-auto flex items-center gap-1.5">
                 {!isPr && (
                   <select
@@ -964,20 +1005,12 @@ export const SessionPanel = ({
                 <CloseButton onClick={close} />
               </div>
             </div>
-            <h2 className="mt-1.5 text-lg font-semibold leading-snug text-white">{task.prTitle}</h2>
-            <div className="mt-2 flex items-center gap-1.5 text-xs">
+            <h2 className="mt-2.5 text-[20px] font-semibold leading-snug text-white">{task.prTitle}</h2>
+            <div className="group/branch mt-1.5 flex items-center gap-1.5 text-xs">
               <code className="truncate rounded border border-deck-700 bg-deck-800 px-1.5 py-0.5 font-mono text-deck-300">
                 {task.branch}
               </code>
-              <Tip label="Copy branch name">
-                <button
-                  type="button"
-                  onClick={copyBranch}
-                  className="cursor-pointer text-deck-500 hover:text-grass-300"
-                >
-                  {copiedBranch ? 'copied!' : '⧉'}
-                </button>
-              </Tip>
+              <CopyButton label="Copy branch name" copied={copiedBranch} onCopy={copyBranch} group="branch" />
             </div>
           </div>
 

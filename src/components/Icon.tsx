@@ -3,11 +3,13 @@ import {
   ChatIcon,
   CheckCircleFillIcon,
   CheckCircleIcon,
+  CheckIcon,
   ChecklistIcon,
   CircleIcon,
   CodeReviewIcon,
   CommentDiscussionIcon,
   CommentIcon,
+  CopyIcon,
   DependabotIcon,
   EyeIcon,
   FileDiffIcon,
@@ -31,6 +33,7 @@ import type { IconName } from '../lib/icons'
 const OCTICONS: Record<IconName, OcticonType> = {
   alert: AlertIcon,
   chat: ChatIcon,
+  check: CheckIcon,
   'check-circle': CheckCircleIcon,
   'check-circle-fill': CheckCircleFillIcon,
   checklist: ChecklistIcon,
@@ -38,6 +41,7 @@ const OCTICONS: Record<IconName, OcticonType> = {
   'code-review': CodeReviewIcon,
   comment: CommentIcon,
   'comment-discussion': CommentDiscussionIcon,
+  copy: CopyIcon,
   dependabot: DependabotIcon,
   eye: EyeIcon,
   file: FileIcon,
@@ -59,6 +63,7 @@ const OCTICONS: Record<IconName, OcticonType> = {
 // the color a glyph always means (GitHub's: merged is purple, closed red…); the rest takes the text's
 const TONE: Partial<Record<IconName, string>> = {
   alert: 'text-amber-400',
+  check: 'text-grass-400',
   'check-circle': 'text-grass-400',
   'check-circle-fill': 'text-grass-400',
   'file-diff': 'text-red-400',

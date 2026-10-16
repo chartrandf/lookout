@@ -3,6 +3,7 @@
 export type IconName =
   | 'alert'
   | 'chat'
+  | 'check'
   | 'check-circle'
   | 'check-circle-fill'
   | 'checklist'
@@ -10,6 +11,7 @@ export type IconName =
   | 'code-review'
   | 'comment'
   | 'comment-discussion'
+  | 'copy'
   | 'dependabot'
   | 'eye'
   | 'file'
