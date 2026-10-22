@@ -11,7 +11,7 @@ import { buildFeed, type FeedEvent, mergeReports, reportEvents, type TimelineSum
 import { approvePr, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import type { IconName } from '../lib/icons'
-import { MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
+import { defaultAuto, MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
 import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { sessionOptions } from '../lib/replytarget'
@@ -547,6 +547,8 @@ export const SessionPanel = ({
   const [mergeOpts, setMergeOpts] = useState<MergeOptions | null>(null)
   const [method, setMethod] = useState<MergeMethod | null>(null) // what the Merge button will do
   const [methodMenu, setMethodMenu] = useState(false)
+  const [auto, setAuto] = useState(false) // the Merge button enables auto-merge instead of merging now
+  const [autoOn, setAutoOn] = useState(false) // auto-merge enabled from this panel: nothing left to click
   const [merging, setMerging] = useState(false)
   const [mergeError, setMergeError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
@@ -660,6 +662,7 @@ export const SessionPanel = ({
     setMergeOpts(null)
     setMergeError(null)
     setMethodMenu(false)
+    setAutoOn(false)
     if (task.prState !== 'open') return
     fetchMergeOptions(task.repo)
       .then((o) => {
@@ -668,6 +671,11 @@ export const SessionPanel = ({
       })
       .catch(() => setMergeOpts(null)) // logged by gh.ts; no button rather than a broken one
   }, [task.id, task.prState])
+
+  // auto-merge leads while CI runs, a plain merge once it's green (defaultAuto)
+  useEffect(() => {
+    setAuto(!!mergeOpts && defaultAuto(mergeOpts, task.ciState))
+  }, [mergeOpts, task.ciState])
 
   // the strategy menu closes on any click outside the Merge button and its menu
   useEffect(() => {
@@ -835,6 +843,12 @@ export const SessionPanel = ({
     setMerging(true)
     setMergeError(null)
     try {
+      if (auto) {
+        // nothing merged yet: the card stays put, GitHub merges once the requirements pass
+        await mergePr(task.repo, task.prNumber, m, true)
+        setAutoOn(true)
+        return
+      }
       await mergePr(task.repo, task.prNumber, m)
       if (!isPr) onStageChange('done')
       // the board's merge action: stored before the feed reloads, so the history shows it at once
@@ -851,10 +865,18 @@ export const SessionPanel = ({
   const askMerge = () => {
     if (!method) return
     const label = MERGE_METHODS.find((x) => x.value === method)?.label ?? method
+    const repoPr = `${task.repo.split('/')[1]}#${task.prNumber}`
+    if (auto)
+      return setConfirm({
+        title: `Enable auto-merge on ${repoPr}?`,
+        body: `${label} once all requirements pass.`,
+        confirmLabel: 'Enable auto-merge',
+        onConfirm: () => merge(method),
+      })
     const red = task.ciState === 'fail'
     const checks = task.ciChecks ? ` (${ciRatio(task.ciChecks)} checks passed)` : ''
     setConfirm({
-      title: `Merge ${task.repo.split('/')[1]}#${task.prNumber}?`,
+      title: `Merge ${repoPr}?`,
       body: red ? (
         <>
           {label}. <Icon name="alert" /> CI is red{checks} — merge anyway?
@@ -873,6 +895,8 @@ export const SessionPanel = ({
       ? 'Draft — mark it ready for review first'
       : null
   const showMerge = task.prState === 'open' && prApproved && !!method && !!mergeOpts
+  const methodLabel = MERGE_METHODS.find((x) => x.value === method)?.label
+  const hasMenu = !!mergeOpts && (mergeOpts.allowed.length > 1 || mergeOpts.autoMerge)
 
   // same label + tooltip as the ⋯ menu's row (cardactions.ts), for the PR panel's standalone button
   const snooze = snoozeAction(task.snoozed)
@@ -1050,28 +1074,43 @@ export const SessionPanel = ({
               )}
               {showMerge && mergeOpts && method && (
                 <div ref={mergeBoxRef} className="relative flex">
-                  <Tip label={mergeBlocked ?? `${MERGE_METHODS.find((x) => x.value === method)?.label} on GitHub`}>
+                  <Tip
+                    label={
+                      mergeBlocked ??
+                      (autoOn
+                        ? 'GitHub merges it once all requirements pass'
+                        : auto
+                          ? `${methodLabel} once all requirements pass`
+                          : `${methodLabel} on GitHub`)
+                    }
+                  >
                     <button
                       type="button"
                       onClick={askMerge}
-                      disabled={merging || !!mergeBlocked}
+                      disabled={merging || !!mergeBlocked || (auto && autoOn)}
                       className={`cursor-pointer bg-grass-600 px-3 py-1.5 text-sm hover:bg-grass-500 disabled:cursor-not-allowed disabled:opacity-50 ${
-                        mergeOpts.allowed.length > 1 ? 'rounded-l-md' : 'rounded-md'
+                        hasMenu ? 'rounded-l-md' : 'rounded-md'
                       }`}
                     >
                       <span className="flex items-center gap-1.5">
                         <GitMergeIcon size={14} />
                         {merging
-                          ? 'Merging…'
-                          : method === 'merge'
-                            ? 'Merge PR'
-                            : method === 'squash'
-                              ? 'Squash & merge'
-                              : 'Rebase & merge'}
+                          ? auto
+                            ? 'Enabling…'
+                            : 'Merging…'
+                          : auto
+                            ? autoOn
+                              ? 'Auto-merge on'
+                              : 'Enable auto-merge'
+                            : method === 'merge'
+                              ? 'Merge PR'
+                              : method === 'squash'
+                                ? 'Squash & merge'
+                                : 'Rebase & merge'}
                       </span>
                     </button>
                   </Tip>
-                  {mergeOpts.allowed.length > 1 && (
+                  {hasMenu && (
                     <Tip label="Pick another merge strategy">
                       <button
                         type="button"
@@ -1085,17 +1124,31 @@ export const SessionPanel = ({
                   )}
                   {methodMenu && (
                     <div className="absolute right-0 top-full z-40 mt-1 flex w-56 flex-col rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl">
+                      {mergeOpts.autoMerge && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAuto(true)
+                            setMethodMenu(false)
+                          }}
+                          className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-deck-200 hover:bg-deck-700"
+                        >
+                          <span className="w-3 text-grass-400">{auto ? '✓' : ''}</span>
+                          Enable auto-merge
+                        </button>
+                      )}
                       {MERGE_METHODS.filter((m) => mergeOpts.allowed.includes(m.value)).map((m) => (
                         <button
                           key={m.value}
                           type="button"
                           onClick={() => {
                             setMethod(m.value)
+                            setAuto(false)
                             setMethodMenu(false)
                           }}
                           className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-sm text-deck-200 hover:bg-deck-700"
                         >
-                          <span className="w-3 text-grass-400">{m.value === method ? '✓' : ''}</span>
+                          <span className="w-3 text-grass-400">{!auto && m.value === method ? '✓' : ''}</span>
                           {m.label}
                         </button>
                       ))}

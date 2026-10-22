@@ -185,22 +185,28 @@ export const approvePr = async (repo: string, prNumber: number) => {
   await gh(['pr', 'review', String(prNumber), '--repo', repo, '--approve'])
 }
 
-export const fetchMergeOptions = async (repo: string): Promise<MergeOptions> =>
-  parseMergeOptions(
-    JSON.parse(
-      await gh([
-        'repo',
-        'view',
-        repo,
-        '--json',
-        'mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,viewerDefaultMergeMethod',
-      ]),
-    ) as GhMergeSettings,
-  )
+// Repo settings barely move: one `gh repo view` per repo per launch, on the first panel opened for it.
+// A failed read isn't kept, so the next open tries again.
+const mergeOptionsCache = new Map<string, Promise<MergeOptions>>()
+
+export const fetchMergeOptions = (repo: string): Promise<MergeOptions> => {
+  const cached = mergeOptionsCache.get(repo)
+  if (cached) return cached
+  const fresh = gh([
+    'repo',
+    'view',
+    repo,
+    '--json',
+    'mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,viewerDefaultMergeMethod,autoMergeAllowed',
+  ]).then((out) => parseMergeOptions(JSON.parse(out) as GhMergeSettings))
+  mergeOptionsCache.set(repo, fresh)
+  fresh.catch(() => mergeOptionsCache.delete(repo))
+  return fresh
+}
 
 // branch deletion is left to the repo's "automatically delete head branches" setting
-export const mergePr = async (repo: string, prNumber: number, method: MergeMethod) => {
-  await gh(mergeArgs(repo, prNumber, method))
+export const mergePr = async (repo: string, prNumber: number, method: MergeMethod, auto = false) => {
+  await gh(mergeArgs(repo, prNumber, method, auto))
 }
 
 export type GhReview = { author: { login?: string; is_bot?: boolean } | null; state: string; submittedAt: string }
