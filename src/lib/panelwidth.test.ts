@@ -20,13 +20,20 @@ describe('stepPanelWidth', () => {
 })
 
 describe('isTextField', () => {
-  const el = (tagName: string, isContentEditable = false) => ({ tagName, isContentEditable }) as unknown as Element
+  const el = (tagName: string, isContentEditable = false, value = 'text') =>
+    ({ tagName, isContentEditable, value, textContent: value }) as unknown as Element
 
   it('matches inputs, textareas, selects and contenteditable', () => {
     expect(isTextField(el('INPUT'))).toBe(true)
     expect(isTextField(el('TEXTAREA'))).toBe(true)
     expect(isTextField(el('SELECT'))).toBe(true)
     expect(isTextField(el('DIV', true))).toBe(true)
+  })
+
+  it('ignores an empty field: the caret has nowhere to go, the shortcut is free', () => {
+    expect(isTextField(el('INPUT', false, ''))).toBe(false)
+    expect(isTextField(el('TEXTAREA', false, ''))).toBe(false)
+    expect(isTextField(el('DIV', true, ''))).toBe(false)
   })
 
   it('ignores other elements and null', () => {
