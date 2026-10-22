@@ -557,6 +557,8 @@ export const SessionPanel = ({
   const [report, setReport] = useState<{ title: string; content: string } | null>(null)
   // a past session read back in Lookout (⌘+click on its bubble), instead of resuming it in Ghostty
   // `from`: where the live run's lines go past what the file held when read (the run was live then)
+  // a past session picked under the input: the terminal shows its transcript (null lines = loading)
+  const [picked, setPicked] = useState<{ id: string; lines: RunLine[] | null } | null>(null)
   const [transcript, setTranscript] = useState<{
     id: string
     title: string
@@ -921,6 +923,40 @@ export const SessionPanel = ({
     setTranscript((t) => (t?.id === id ? { ...t, lines } : t))
   }
 
+  // A session picked under the input takes over the terminal: the live run when it's that session (or
+  // one still starting), else what its transcript has stored.
+  const showPicked = typeof pick === 'string' && run?.sessionId !== pick && !(running && !run?.sessionId)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reload per picked session only
+  useEffect(() => {
+    if (!showPicked || !task.repoPath) return setPicked(null)
+    const id = pick as string
+    let live = true
+    setPicked({ id, lines: null })
+    setTermOpen(true)
+    followRef.current = true
+    checkoutFor(id)
+      .then((cwd) => transcriptPath(cwd, id))
+      .then(readTextFile)
+      .then((text) => transcriptLines(text.split('\n')))
+      .catch(() => []) // nothing stored: the terminal says so
+      .then((lines) => live && setPicked({ id, lines }))
+    return () => {
+      live = false
+    }
+  }, [showPicked, pick, task.id])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the picked session's output
+  useEffect(() => {
+    const el = runRef.current
+    if (el && followRef.current) el.scrollTop = el.scrollHeight
+  }, [picked?.lines])
+
+  const pickedOption = picked ? options.find((o) => o.sessionId === picked.id) : undefined
+  const pickedLabel = pickedOption
+    ? `${pickedOption.label}${pickedOption.ts ? ` · ${new Date(pickedOption.ts).toLocaleString()}` : ''}`
+    : 'session'
+  const showRun = !picked && !!run && (running || run.lines.length > 0)
+
   // a message sent from the session view streams in under its transcript, from the card's run
   const transcriptLive = !!transcript && !!run && run.sessionId === transcript.id
   const transcriptTail = transcriptLive && run ? run.lines.slice(run === transcript?.base ? transcript.from : 0) : []
@@ -1160,25 +1196,6 @@ export const SessionPanel = ({
             {mergeError && <p className="w-full text-xs text-red-300">could not merge: {mergeError}</p>}
           </div>
 
-          {/* terminal sits above the chat, capped so history always keeps room; each scrolls on its own */}
-          {run && (running || run.lines.length > 0) && (
-            <div
-              className={`flex shrink-0 flex-col border-b border-deck-800 p-4 ${termOpen ? 'max-h-[45vh] pb-3' : ''}`}
-            >
-              <TerminalWindow
-                label={run.command}
-                running={running}
-                open={termOpen}
-                onToggle={() => setTermOpen((o) => !o)}
-                onKill={onKill}
-                bodyRef={runRef}
-                onScroll={onRunScroll}
-              >
-                <RunLog lines={run.lines} onLink={openLink} />
-              </TerminalWindow>
-            </div>
-          )}
-
           <div className="flex min-h-0 flex-1 flex-col bg-deck-950">
             <h4 className="flex shrink-0 items-center justify-between px-4 pt-4 pb-2 text-xs font-semibold uppercase tracking-wide text-deck-400">
               history
@@ -1194,7 +1211,7 @@ export const SessionPanel = ({
               </Tip>
             </h4>
             {/* column-reverse anchors the chat to the bottom natively: short history sits next to the
-                reply box, and the view stays pinned to the newest event while the terminal above resizes */}
+                terminal and reply box, and the view stays pinned to the newest event while the terminal resizes */}
             <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 pb-4">
               {!feed ? (
                 <FeedSkeleton />
@@ -1342,7 +1359,33 @@ export const SessionPanel = ({
           </div>
 
           <ChecksBox checks={checks} expanded={expandChecks} />
-          <div className="border-t border-deck-800 p-3">
+          {/* terminal sits on the chat input, capped so history always keeps room; each scrolls on its own */}
+          <div className="flex shrink-0 flex-col gap-2 border-t border-deck-800 p-3">
+            {(showRun || picked) && (
+              <div className={termOpen ? 'flex max-h-[45vh] min-h-0 flex-col' : ''}>
+                <TerminalWindow
+                  label={picked ? pickedLabel : (run?.command ?? '')}
+                  running={!picked && running}
+                  open={termOpen}
+                  onToggle={() => setTermOpen((o) => !o)}
+                  onKill={onKill}
+                  bodyRef={runRef}
+                  onScroll={onRunScroll}
+                >
+                  {!picked ? (
+                    <RunLog lines={run?.lines ?? []} onLink={openLink} />
+                  ) : picked.lines === null ? (
+                    <p className="text-deck-500">Loading {pickedLabel}…</p>
+                  ) : picked.lines.length === 0 ? (
+                    <p className="text-deck-500">
+                      Inside {pickedLabel}. No output stored for it — a message sent here resumes it.
+                    </p>
+                  ) : (
+                    <RunLog lines={picked.lines} onLink={openLink} />
+                  )}
+                </TerminalWindow>
+              </div>
+            )}
             <ReplyBox
               value={input}
               onChange={setInput}
