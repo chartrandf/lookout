@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { GhMyPr } from './gh'
 import {
+  applyTimeline,
   checkCounts,
   checkDuration,
   checkList,
@@ -339,5 +340,48 @@ describe('checkDuration', () => {
     expect(checkDuration(9)).toBe('9s')
     expect(checkDuration(250)).toBe('4m')
     expect(checkDuration(3 * 3600 + 120)).toBe('3h 2m')
+  })
+})
+
+describe('applyTimeline — card refresh from the PR timeline on open / history reload', () => {
+  const NOW = '2026-07-02T10:00:00Z'
+  const card = (o: Partial<GhMyPr> = {}) => toMyPr(raw(o), REPO, '/clone')
+  const sum = (o: Partial<Parameters<typeof applyTimeline>[1]> = {}) => ({
+    prState: null,
+    isDraft: null,
+    humanReview: null,
+    botReview: null,
+    ...o,
+  })
+
+  it('picks up a draft marked ready for review', () =>
+    expect(applyTimeline(card({ isDraft: true }), sum({ isDraft: false }), NOW).isDraft).toBe(false))
+
+  it('picks up a PR converted to draft', () =>
+    expect(applyTimeline(card(), sum({ isDraft: true }), NOW).isDraft).toBe(true))
+
+  it('keeps the stored draft flag when the timeline never toggled it', () =>
+    expect(applyTimeline(card({ isDraft: true }), sum(), NOW).isDraft).toBe(true))
+
+  it('moves a merged PR to Done', () => {
+    const next = applyTimeline(card(), sum({ prState: 'merged' }), NOW)
+    expect(next.column).toBe('done')
+    expect(next.doneAt).toBe(NOW)
+  })
+
+  it('moves a closed PR dragged out of Done back to Done', () => {
+    const prev = { ...card({ state: 'CLOSED' }), column: 'in_review' as const }
+    expect(prev.derivedColumn).toBe('done')
+    expect(applyTimeline(prev, sum({ prState: 'closed' }), NOW).column).toBe('done')
+  })
+
+  it('moves a PR already stored as merged to Done when its timeline says so again', () => {
+    const prev = { ...card({ state: 'MERGED' }), column: 'ready' as const }
+    expect(applyTimeline(prev, sum(), NOW).column).toBe('done')
+  })
+
+  it('leaves an open card where it was dragged', () => {
+    const prev = { ...card(), column: 'ready' as const }
+    expect(applyTimeline(prev, sum({ prState: 'open' }), NOW).column).toBe('ready')
   })
 })

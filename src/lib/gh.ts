@@ -82,7 +82,17 @@ export const listCommentedByMe = async (repo: string, me: string): Promise<Set<n
 
 export type GhTimelineEvent = {
   ts: string
-  kind: 'commit' | 'comment' | 'review' | 'review_requested' | 'merged' | 'closed' | 'reopened' | 'force_pushed'
+  kind:
+    | 'commit'
+    | 'comment'
+    | 'review'
+    | 'review_requested'
+    | 'merged'
+    | 'closed'
+    | 'reopened'
+    | 'force_pushed'
+    | 'ready_for_review'
+    | 'convert_to_draft'
   actor: string
   text: string
   url?: string
@@ -117,6 +127,15 @@ const toEvent = (e: any): GhTimelineEvent | null => {
       return { ts: e.created_at, kind: 'reopened', actor: e.actor?.login ?? '', text: 'reopened the PR' }
     case 'head_ref_force_pushed':
       return { ts: e.created_at, kind: 'force_pushed', actor: e.actor?.login ?? '', text: 'force-pushed' }
+    case 'ready_for_review':
+      return {
+        ts: e.created_at,
+        kind: 'ready_for_review',
+        actor: e.actor?.login ?? '',
+        text: 'marked ready for review',
+      }
+    case 'convert_to_draft':
+      return { ts: e.created_at, kind: 'convert_to_draft', actor: e.actor?.login ?? '', text: 'converted to draft' }
     default:
       return null
   }

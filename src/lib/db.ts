@@ -114,6 +114,11 @@ export const setPrState = async (id: string, prState: string) => {
   )
 }
 
+export const setDraft = async (id: string, isDraft: boolean) => {
+  const d = await getDb()
+  await d.execute('UPDATE tasks SET is_draft = $1 WHERE id = $2', [isDraft ? 1 : 0, id])
+}
+
 export const setApproved = async (id: string, approved: boolean) => {
   const d = await getDb()
   await d.execute('UPDATE tasks SET approved = $1 WHERE id = $2', [approved ? 1 : 0, id])

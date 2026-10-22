@@ -39,6 +39,12 @@ describe('toTimelineEvent', () => {
     expect(e?.avatar).toBe('https://avatars.githubusercontent.com/u/2002?v=4')
   })
 
+  it('reads a draft toggled either way', () => {
+    const at = { created_at: '2026-01-03T10:00:00Z', actor: { login: 'octo-dev' } }
+    expect(toTimelineEvent({ event: 'ready_for_review', ...at })?.kind).toBe('ready_for_review')
+    expect(toTimelineEvent({ event: 'convert_to_draft', ...at })?.kind).toBe('convert_to_draft')
+  })
+
   it('leaves the avatar out when GitHub sent none', () => {
     const e = toTimelineEvent({
       event: 'committed',

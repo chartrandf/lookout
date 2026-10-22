@@ -70,6 +70,8 @@ const KIND_ICONS: Record<Exclude<GhTimelineEvent['kind'], 'review'>, IconName> =
   closed: 'git-pull-request-closed',
   reopened: 'issue-reopened',
   force_pushed: 'repo-push',
+  ready_for_review: 'git-pull-request',
+  convert_to_draft: 'git-pull-request-draft',
 }
 
 // Merge consecutive commits by the same actor into one "pushed N commits" event
@@ -89,10 +91,11 @@ const groupCommits = (events: FeedEvent[]): FeedEvent[] => {
 }
 
 // Card summary reconstructed from the PR timeline already fetched for the feed — lets a card refresh its
-// own review verdict / state on open without a second network call. CI + draft aren't in the timeline, so
-// they're intentionally absent here (they stay as the last full sync left them).
+// own review verdict / state / draft on open without a second network call. CI isn't in the timeline, so
+// it's intentionally absent here (it stays as the last full sync left it).
 export type TimelineSummary = {
   prState: PrState | null // from merged/closed/reopened events; null = no state event seen
+  isDraft: boolean | null // from ready_for_review/convert_to_draft events; null = never toggled
   humanReview: ReviewFlavor
   botReview: ReviewFlavor
 }
@@ -109,6 +112,7 @@ const REVIEW_STATE: Record<string, string> = {
 const deriveSummary = (events: GhTimelineEvent[]): TimelineSummary => {
   const latest = new Map<string, string>() // actor login -> latest review state
   let prState: PrState | null = null
+  let isDraft: boolean | null = null
   for (const e of events) {
     if (e.kind === 'review') {
       const state = REVIEW_STATE[e.text]
@@ -117,10 +121,13 @@ const deriveSummary = (events: GhTimelineEvent[]): TimelineSummary => {
     // a merge also emits a 'closed' event right after; merged wins, so don't let it downgrade the state
     else if (e.kind === 'closed') prState = prState === 'merged' ? 'merged' : 'closed'
     else if (e.kind === 'reopened') prState = 'open'
+    else if (e.kind === 'ready_for_review') isDraft = false
+    else if (e.kind === 'convert_to_draft') isDraft = true
   }
   const reviews = [...latest].map(([login, state]) => ({ author: { login }, state }))
   return {
     prState,
+    isDraft,
     humanReview: reviewFlavor(reviews.filter((r) => !isBot(r.author))),
     botReview: reviewFlavor(reviews.filter((r) => isBot(r.author))),
   }

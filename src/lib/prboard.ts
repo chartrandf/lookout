@@ -1,5 +1,6 @@
 import type { CiChecks, CiState, MyPr, PrColumn, PrState, ReviewFlavor } from '../types'
 import type { GhMyPr } from './gh'
+import { resolveColumn } from './prcolumns'
 
 type Check = { conclusion?: string; status?: string; state?: string }
 
@@ -187,5 +188,31 @@ export const toMyPr = (raw: GhMyPr, repo: string, repoPath: string | null): MyPr
     activityCount: null, // the list call doesn't carry comments; syncMyPrs fills it from the exchange
     doneAt: raw.mergedAt ?? raw.closedAt ?? null,
     snoozed: false, // syncMyPrs carries a stored snooze over
+  }
+}
+
+// Per-card refresh on open / history reload (PR board): re-derive the card from its PR timeline. State,
+// draft and verdicts come from the timeline (CI stays as the last sync left it); an event the timeline
+// never saw keeps the stored value. A merged or closed PR always lands in Done, even one dragged out of it.
+export const applyTimeline = (
+  prev: MyPr,
+  s: { prState: PrState | null; isDraft: boolean | null; humanReview: ReviewFlavor; botReview: ReviewFlavor },
+  now: string,
+): MyPr => {
+  const state = s.prState ?? prev.state
+  const isDraft = s.isDraft ?? prev.isDraft
+  // a snoozed card keeps the verdicts the last sync stored: the timeline can't see a pending
+  // re-review request, so its verdict can differ from the list call's and wake the card next sync
+  const { humanReview, botReview } = prev.snoozed ? prev : s
+  const derivedColumn = classifyColumn({ state, isDraft, humanReview })
+  return {
+    ...prev,
+    state,
+    isDraft,
+    humanReview,
+    botReview,
+    derivedColumn,
+    column: state === 'open' ? resolveColumn(prev.column, prev.derivedColumn, derivedColumn) : 'done',
+    doneAt: state === 'open' ? null : (prev.doneAt ?? now),
   }
 }

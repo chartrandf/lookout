@@ -42,6 +42,7 @@ import {
   clearNewActivity,
   markAlertRead,
   markAllAlertsRead,
+  setDraft,
   setFollowupSummary,
   setLinks,
   setMyPrColumn,
@@ -70,8 +71,7 @@ import {
 } from './lib/mergehook'
 import { snoozeMyPr, syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick, setNotificationsEnabled } from './lib/notify'
-import { classifyColumn } from './lib/prboard'
-import { resolveColumn } from './lib/prcolumns'
+import { applyTimeline } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
 import { setOpenLinksInBrowser } from './lib/prwindow'
 import { sortReposByNames } from './lib/repoorder'
@@ -113,7 +113,6 @@ import type {
   Config,
   MyPr,
   PrColumn,
-  PrState,
   ReviewTask,
   Stage,
   StreamItem,
@@ -672,38 +671,31 @@ const App = () => {
     await setMyPrOrders(orderedIds)
   }
 
-  // Per-card refresh on open (PR board): re-derive the opened card from the timeline just fetched for
-  // its feed, without a full list sync. Only review verdicts + PR state come from the timeline;
-  // CI/draft stay as the last sync left them. Goes through resolveColumn and the table like any sync,
-  // so opening a card can never demote it and the placement survives the next poll.
+  // Per-card refresh on open / history reload (PR board), without a full list sync (applyTimeline)
   const refreshMyPrFromTimeline = async (id: string, s: TimelineSummary) => {
     const prev = myPrs.find((p) => p.id === id)
     if (!prev) return
-    const state = s.prState ?? prev.state
-    // a snoozed card keeps the verdicts the last sync stored: the timeline can't see a pending
-    // re-review request, so its verdict can differ from the list call's and wake the card next sync
-    const { humanReview, botReview } = prev.snoozed ? prev : s
-    const derivedColumn = classifyColumn({ state, isDraft: prev.isDraft, humanReview })
-    const next: MyPr = {
-      ...prev,
-      state,
-      humanReview,
-      botReview,
-      derivedColumn,
-      column: resolveColumn(prev.column, prev.derivedColumn, derivedColumn),
-      doneAt: state === 'open' ? null : (prev.doneAt ?? new Date().toISOString()),
-    }
+    const next = applyTimeline(prev, s, new Date().toISOString())
     setMyPrs((cur) => cur.map((p) => (p.id === id ? next : p)))
     await upsertMyPr(next)
   }
 
-  // Per-card refresh on open (Reviews board): only PR state is safely derivable from the timeline
-  // (activity uses a different counting path in the full sync, CI isn't in the timeline at all).
-  const refreshTaskFromTimeline = async (id: string, prState: PrState | null) => {
+  // Per-card refresh on open / history reload (Reviews board): PR state and draft come from the timeline
+  // (activity uses a different counting path in the full sync, CI isn't in the timeline at all). A merged
+  // or closed PR always lands in Done, even when the stored state already said so.
+  const refreshTaskFromTimeline = async (id: string, s: TimelineSummary) => {
     const t = tasks.find((x) => x.id === id)
-    if (!prState || !t || t.prState === prState) return
-    await setPrState(id, prState)
-    setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, prState } : x)))
+    if (!t) return
+    const prState = s.prState ?? t.prState
+    const isDraft = s.isDraft ?? t.isDraft
+    if (prState !== t.prState) await setPrState(id, prState)
+    if (isDraft !== t.isDraft) await setDraft(id, isDraft)
+    // like sync's merge reconcile: Done without closing the card's run
+    if (prState !== 'open' && t.stage !== 'done') {
+      await setStage(id, 'done')
+      return reload()
+    }
+    setTasks((prev) => prev.map((x) => (x.id === id ? { ...x, prState, isDraft } : x)))
   }
 
   const openCard = (t: ReviewTask) => {
@@ -1044,7 +1036,7 @@ const App = () => {
           expandChecks={panelChecksFor === panelTask.id}
           onRefresh={(summary) => {
             if (panelIsPr) refreshMyPrFromTimeline(panelTask.id, summary)
-            else refreshTaskFromTimeline(panelTask.id, summary.prState)
+            else refreshTaskFromTimeline(panelTask.id, summary)
           }}
         />
       )}

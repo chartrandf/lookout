@@ -20,6 +20,7 @@ export type IconName =
   | 'git-merge'
   | 'git-pull-request'
   | 'git-pull-request-closed'
+  | 'git-pull-request-draft'
   | 'issue-reopened'
   | 'paper-airplane'
   | 'repo-push'

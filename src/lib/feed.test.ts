@@ -166,6 +166,31 @@ describe('buildFeed', () => {
   })
 })
 
+describe('buildFeed summary', () => {
+  const gh = (kind: string, ts: string) => ({ ts, kind, actor: 'octo-dev', text: kind })
+
+  it('takes the draft flag from the latest draft toggle', async () => {
+    const { fetchPrTimeline } = await import('./gh')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([
+      gh('convert_to_draft', '2026-01-01T10:00:00Z'),
+      gh('ready_for_review', '2026-01-02T10:00:00Z'),
+    ] as never)
+    const { buildFeed } = await import('./feed')
+    const task = { id: 'a/b#1', repo: 'a/b', prNumber: 1, branch: 'b', repoPath: null, reviewFiles: [] }
+    const { summary } = await buildFeed(task as never, 'me')
+    expect(summary.isDraft).toBe(false)
+  })
+
+  it('knows nothing of the draft flag when the timeline never toggled it', async () => {
+    const { fetchPrTimeline } = await import('./gh')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([gh('merged', '2026-01-01T10:00:00Z')] as never)
+    const { buildFeed } = await import('./feed')
+    const task = { id: 'a/b#1', repo: 'a/b', prNumber: 1, branch: 'b', repoPath: null, reviewFiles: [] }
+    const { summary } = await buildFeed(task as never, 'me')
+    expect(summary).toMatchObject({ prState: 'merged', isDraft: null })
+  })
+})
+
 describe('reportEvents', () => {
   const captured = (kind: 'review' | 'followup', body: string | null) => ({
     id: 's1',
