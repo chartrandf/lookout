@@ -98,6 +98,7 @@ export type GhTimelineEvent = {
   url?: string
   // the picture GitHub sent: github.com/<login>.png has none for a bot (`some-app[bot]`) or a git name
   avatar?: string
+  comments?: number // a review's inline comments (its body not counted); absent when it left none
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
@@ -141,12 +142,26 @@ const toEvent = (e: any): GhTimelineEvent | null => {
   }
 }
 
+// review id -> its inline comments. The timeline's `reviewed` event carries only the verdict and body;
+// the comments come as `line-commented` threads, each naming the review it was posted in.
+// biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
+export const reviewCommentCounts = (raw: any[]): Map<number, number> => {
+  const counts = new Map<number, number>()
+  for (const e of raw)
+    if (e.event === 'line-commented')
+      for (const c of e.comments ?? [])
+        if (c.pull_request_review_id)
+          counts.set(c.pull_request_review_id, (counts.get(c.pull_request_review_id) ?? 0) + 1)
+  return counts
+}
+
 // A timeline commit carries only the git author (name, email); `commitAvatars` (sha -> avatar_url,
 // from the PR's commit list) is what knows the GitHub account behind it.
 export const toTimelineEvent = (
   // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
   e: any,
   commitAvatars: Map<string, string> = new Map(),
+  reviewComments: Map<number, number> = new Map(),
 ): GhTimelineEvent | null => {
   if (e.event === 'committed') {
     const avatar = commitAvatars.get(e.sha)
@@ -160,8 +175,10 @@ export const toTimelineEvent = (
     }
   }
   const out = toEvent(e)
+  if (!out) return null
   const avatar = eventAvatar(e)
-  return out && avatar ? { ...out, avatar } : out
+  const comments = out.kind === 'review' ? reviewComments.get(e.id) : undefined
+  return { ...out, ...(avatar ? { avatar } : {}), ...(comments ? { comments } : {}) }
 }
 
 export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<GhTimelineEvent[]> => {
@@ -176,8 +193,9 @@ export const fetchPrTimeline = async (repo: string, prNumber: number): Promise<G
     // biome-ignore lint/suspicious/noExplicitAny: untyped REST payload
     (commits as any[]).filter((c) => c.author?.avatar_url).map((c) => [c.sha, c.author.avatar_url]),
   )
+  const reviewComments = reviewCommentCounts(raw)
   return (raw as unknown[])
-    .map((e) => toTimelineEvent(e, commitAvatars))
+    .map((e) => toTimelineEvent(e, commitAvatars, reviewComments))
     .filter((e): e is GhTimelineEvent => e !== null && Boolean(e.ts))
 }
 

@@ -62,6 +62,10 @@ const REVIEW_ICONS: Record<string, IconName> = {
   commented: 'code-review',
 }
 
+// an approval that still left nits says so: "approved with 2 comments" (inline only, never its body)
+const approvalComments = (e: GhTimelineEvent) =>
+  e.text === 'approved' && e.comments ? ` with ${e.comments} comment${e.comments === 1 ? '' : 's'}` : ''
+
 const KIND_ICONS: Record<Exclude<GhTimelineEvent['kind'], 'review'>, IconName> = {
   commit: 'git-commit',
   comment: 'chat',
@@ -320,7 +324,7 @@ export const buildFeed = async (
         ts: e.ts,
         icon: REVIEW_ICONS[e.text] ?? 'code-review',
         actor: e.actor,
-        text: `review: ${e.text}`,
+        text: `review: ${e.text}${approvalComments(e)}`,
         url: e.url,
         mine,
         avatar: ghAvatar(e.actor, e.avatar),

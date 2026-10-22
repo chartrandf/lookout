@@ -825,7 +825,7 @@ export const SessionPanel = ({
   // Approve and Merge never show together: not approved yet -> Approve, approved -> Merge, at any stage.
   // task.approved is the DB's copy from the last sync, so the buttons don't wait for the feed; the feed
   // catches an approval given since that sync, and `approved` one just given from this panel.
-  const iApproved = feed?.some((e) => e.mine && e.text === 'review: approved')
+  const iApproved = feed?.some((e) => e.mine && e.text.startsWith('review: approved'))
   const prApproved = task.approved || approved || !!iApproved
 
   const approve = async () => {

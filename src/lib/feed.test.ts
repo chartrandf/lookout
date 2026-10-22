@@ -191,6 +191,37 @@ describe('buildFeed summary', () => {
   })
 })
 
+describe('buildFeed approvals', () => {
+  const review = (text: string, comments?: number) => ({
+    ts: '2026-01-01T10:00:00Z',
+    kind: 'review',
+    actor: 'octo-dev',
+    text,
+    ...(comments ? { comments } : {}),
+  })
+  const task = { id: 'a/b#1', repo: 'a/b', prNumber: 1, branch: 'b', repoPath: null, reviewFiles: [] }
+
+  it.each([
+    [1, 'review: approved with 1 comment'],
+    [3, 'review: approved with 3 comments'],
+    [undefined, 'review: approved'],
+  ])('an approval with %s inline comments reads "%s"', async (comments, text) => {
+    const { fetchPrTimeline } = await import('./gh')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([review('approved', comments)] as never)
+    const { buildFeed } = await import('./feed')
+    const { feed } = await buildFeed(task as never, 'me')
+    expect(feed.at(-1)).toMatchObject({ icon: 'check-circle-fill', text })
+  })
+
+  it('leaves other verdicts as they were', async () => {
+    const { fetchPrTimeline } = await import('./gh')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([review('changes requested', 2)] as never)
+    const { buildFeed } = await import('./feed')
+    const { feed } = await buildFeed(task as never, 'me')
+    expect(feed.at(-1)?.text).toBe('review: changes requested')
+  })
+})
+
 describe('reportEvents', () => {
   const captured = (kind: 'review' | 'followup', body: string | null) => ({
     id: 's1',
