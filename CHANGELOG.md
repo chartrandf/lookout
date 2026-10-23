@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.4.23 — 2026-10-22
+
+- [NEW] Terminal session view under history
+- [NEW] Auto-merge option for eligible repos
+- [ENHANCED] Approval shows inline comment count
+- [FIX] Cmd+arrow resize from empty input
+- [FIX] History reload syncs drafts and card states
+
 ## v0.4.22 — 2026-10-16
 
 - [NEW] Changelog now shown in Settings
