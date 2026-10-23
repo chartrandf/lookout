@@ -9,7 +9,7 @@ import { cardActions, snoozeAction } from '../lib/cardactions'
 import { listSlashCommands } from '../lib/commands'
 import { subscribeCardEvents } from '../lib/db'
 import { buildFeed, type FeedEvent, mergeReports, reportEvents, type TimelineSummary } from '../lib/feed'
-import { approvePr, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
+import { approvePr, fetchAutoMerge, fetchChecks, fetchMergeOptions, mergePr } from '../lib/gh'
 import { resumeInGhostty } from '../lib/ghostty'
 import type { IconName } from '../lib/icons'
 import { defaultAuto, MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
@@ -549,7 +549,7 @@ export const SessionPanel = ({
   const [method, setMethod] = useState<MergeMethod | null>(null) // what the Merge button will do
   const [methodMenu, setMethodMenu] = useState(false)
   const [auto, setAuto] = useState(false) // the Merge button enables auto-merge instead of merging now
-  const [autoOn, setAutoOn] = useState(false) // auto-merge enabled from this panel: nothing left to click
+  const [autoOn, setAutoOn] = useState(false) // auto-merge already on (from here or GitHub): nothing left to click
   const [merging, setMerging] = useState(false)
   const [mergeError, setMergeError] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<Confirm | null>(null)
@@ -667,18 +667,29 @@ export const SessionPanel = ({
     setMethodMenu(false)
     setAutoOn(false)
     if (task.prState !== 'open') return
-    fetchMergeOptions(task.repo)
-      .then((o) => {
+    let live = true
+    Promise.all([
+      fetchMergeOptions(task.repo),
+      // auto-merge may already be on; a failed read just leaves the button offering it
+      fetchAutoMerge(task.repo, task.prNumber).catch(() => null),
+    ])
+      .then(([o, enabled]) => {
+        if (!live) return
         setMergeOpts(o)
-        setMethod(pickMethod(o, mergeMethod))
+        setMethod(enabled ?? pickMethod(o, mergeMethod))
+        setAutoOn(!!enabled)
       })
-      .catch(() => setMergeOpts(null)) // logged by gh.ts; no button rather than a broken one
+      .catch(() => live && setMergeOpts(null)) // logged by gh.ts; no button rather than a broken one
+    return () => {
+      live = false
+    }
   }, [task.id, task.prState])
 
-  // auto-merge leads while CI runs, a plain merge once it's green (defaultAuto)
+  // auto-merge leads while CI runs, a plain merge once it's green (defaultAuto); once it's on, the
+  // button says so whatever CI does
   useEffect(() => {
-    setAuto(!!mergeOpts && defaultAuto(mergeOpts, task.ciState))
-  }, [mergeOpts, task.ciState])
+    setAuto(autoOn || (!!mergeOpts && defaultAuto(mergeOpts, task.ciState)))
+  }, [mergeOpts, task.ciState, autoOn])
 
   // the strategy menu closes on any click outside the Merge button and its menu
   useEffect(() => {

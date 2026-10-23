@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { defaultAuto, type MergeOptions, mergeArgs, parseMergeOptions, pickMethod } from './merge'
+import {
+  defaultAuto,
+  type MergeOptions,
+  mergeArgs,
+  mergeOptionsArgs,
+  parseAutoMerge,
+  parseMergeOptions,
+  pickMethod,
+} from './merge'
 
 // a repo allowing every strategy, where my GitHub default is squash — override per test
 const opts = (o: Partial<MergeOptions> = {}): MergeOptions => ({
@@ -44,6 +52,30 @@ describe('pickMethod — preference, else GitHub default, else first allowed', (
   it('falls back to the first allowed when the GitHub default is off too', () =>
     expect(pickMethod(opts({ allowed: ['rebase'], viewerDefault: 'squash' }), 'merge')).toBe('rebase'))
   it('is null when the repo allows nothing', () => expect(pickMethod(opts({ allowed: [] }), 'merge')).toBe(null))
+})
+
+describe('mergeOptionsArgs', () => {
+  // gh repo view --json knows no autoMergeAllowed: asking for it failed the whole read
+  it('reads the settings, auto-merge included, from GraphQL', () => {
+    const args = mergeOptionsArgs('acme/web')
+    expect(args.slice(0, 6)).toEqual(['api', 'graphql', '-f', 'owner=acme', '-f', 'name=web'])
+    expect(args.at(-3)).toMatch(/autoMergeAllowed/)
+    expect(args.slice(-2)).toEqual(['--jq', '.data.repository'])
+    expect(args).not.toContain('view')
+  })
+})
+
+describe('parseAutoMerge — auto-merge already on the PR', () => {
+  it('gives its strategy, null when off', () => {
+    expect(parseAutoMerge({ autoMergeRequest: { mergeMethod: 'SQUASH' } })).toBe('squash')
+    expect(parseAutoMerge({ autoMergeRequest: { mergeMethod: 'MERGE' } })).toBe('merge')
+    expect(parseAutoMerge({ autoMergeRequest: null })).toBeNull()
+    expect(parseAutoMerge({})).toBeNull()
+  })
+
+  it('still counts as on with a strategy it does not know', () => {
+    expect(parseAutoMerge({ autoMergeRequest: {} })).toBe('merge')
+  })
 })
 
 describe('mergeArgs', () => {

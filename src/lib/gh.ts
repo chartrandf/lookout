@@ -1,7 +1,14 @@
 import { Command } from '@tauri-apps/plugin-shell'
 import type { CiChecks, CiState, MergeMethod } from '../types'
 import { errText, logError } from './log'
-import { type GhMergeSettings, type MergeOptions, mergeArgs, parseMergeOptions } from './merge'
+import {
+  type GhMergeSettings,
+  type MergeOptions,
+  mergeArgs,
+  mergeOptionsArgs,
+  parseAutoMerge,
+  parseMergeOptions,
+} from './merge'
 import { type CheckItem, checkList, ciChecks, hasApproval, hasConflicts, rollupToCiState } from './prboard'
 
 // Every gh failure is logged here rather than at the call sites: most of them swallow the rejection
@@ -210,17 +217,15 @@ const mergeOptionsCache = new Map<string, Promise<MergeOptions>>()
 export const fetchMergeOptions = (repo: string): Promise<MergeOptions> => {
   const cached = mergeOptionsCache.get(repo)
   if (cached) return cached
-  const fresh = gh([
-    'repo',
-    'view',
-    repo,
-    '--json',
-    'mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed,viewerDefaultMergeMethod,autoMergeAllowed',
-  ]).then((out) => parseMergeOptions(JSON.parse(out) as GhMergeSettings))
+  const fresh = gh(mergeOptionsArgs(repo)).then((out) => parseMergeOptions(JSON.parse(out) as GhMergeSettings))
   mergeOptionsCache.set(repo, fresh)
   fresh.catch(() => mergeOptionsCache.delete(repo))
   return fresh
 }
+
+// auto-merge already enabled on the PR (here or on GitHub): its strategy, or null
+export const fetchAutoMerge = async (repo: string, prNumber: number): Promise<MergeMethod | null> =>
+  parseAutoMerge(JSON.parse(await gh(['pr', 'view', String(prNumber), '--repo', repo, '--json', 'autoMergeRequest'])))
 
 // branch deletion is left to the repo's "automatically delete head branches" setting
 export const mergePr = async (repo: string, prNumber: number, method: MergeMethod, auto = false) => {

@@ -19,6 +19,24 @@ export type GhMergeSettings = {
   autoMergeAllowed?: boolean
 }
 
+// `gh repo view --json` has no autoMergeAllowed field (gh 2.102 rejects the whole call, so no Merge
+// button showed anywhere): the settings come from GraphQL, the same names, in one call
+export const mergeOptionsArgs = (repo: string): string[] => {
+  const [owner, name] = repo.split('/')
+  return [
+    'api',
+    'graphql',
+    '-f',
+    `owner=${owner}`,
+    '-f',
+    `name=${name}`,
+    '-f',
+    'query=query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { mergeCommitAllowed squashMergeAllowed rebaseMergeAllowed viewerDefaultMergeMethod autoMergeAllowed } }',
+    '--jq',
+    '.data.repository',
+  ]
+}
+
 export const parseMergeOptions = (raw: GhMergeSettings): MergeOptions => {
   const on: Record<MergeMethod, boolean> = {
     merge: raw.mergeCommitAllowed,
@@ -39,6 +57,14 @@ export const pickMethod = (o: MergeOptions, pref: MergePreference): MergeMethod 
   if (pref !== 'github' && o.allowed.includes(pref)) return pref
   if (o.viewerDefault && o.allowed.includes(o.viewerDefault)) return o.viewerDefault
   return o.allowed[0] ?? null
+}
+
+// The strategy auto-merge is already set to on a PR (`gh pr view --json autoMergeRequest`), or null
+// when it isn't on: the panel shows "Auto-merge on" whoever enabled it, here or on GitHub
+export const parseAutoMerge = (raw: { autoMergeRequest?: { mergeMethod?: string } | null }): MergeMethod | null => {
+  const m = raw.autoMergeRequest?.mergeMethod?.toLowerCase()
+  if (!raw.autoMergeRequest) return null
+  return MERGE_METHODS.some((x) => x.value === m) ? (m as MergeMethod) : 'merge'
 }
 
 // Auto-merge leads the Merge button while CI still runs; once green a plain merge leads and auto-merge
