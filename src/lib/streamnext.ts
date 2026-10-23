@@ -1,4 +1,4 @@
-import { Command } from '@tauri-apps/plugin-shell'
+import { agentBin, askAgent } from './agent'
 import { errText, logWarn } from './log'
 import { isTrigger, type Trigger } from './streamwatch'
 
@@ -78,17 +78,9 @@ export const suggestNextStep = async (
     .filter(Boolean)
     .join('\n')
   try {
-    const out = await Command.create('claude', [
-      '-p',
-      PROMPT(task, result),
-      '--model',
-      'haiku',
-      '--tools',
-      '', // advice needs no tools
-      '--no-session-persistence', // or the adviser's own transcript would show up as a session
-    ]).execute()
+    const out = await askAgent(PROMPT(task, result))
     if (out.code !== 0) {
-      logWarn('stream', `next step: claude exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
+      logWarn('stream', `next step: ${agentBin()} exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
       return null
     }
     return parseNextStep(out.stdout)

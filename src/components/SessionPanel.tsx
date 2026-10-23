@@ -3,6 +3,7 @@ import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react'
+import { agentBin } from '../lib/agent'
 import { avatarUrl } from '../lib/avatar'
 import { cardActions, snoozeAction } from '../lib/cardactions'
 import { listSlashCommands } from '../lib/commands'
@@ -132,7 +133,7 @@ const ReplyBox = ({
           }
         }}
         disabled={!canReply}
-        placeholder={running ? 'claude is working… stop to send something else' : placeholder}
+        placeholder={running ? `${agentBin()} is working… stop to send something else` : placeholder}
         className="max-h-40 w-full resize-none overflow-y-auto bg-transparent px-3 pt-3 pb-1 text-sm outline-none placeholder:text-deck-500 disabled:opacity-50"
       />
       <div className="flex items-center gap-2 px-2 pb-2">
@@ -376,7 +377,7 @@ const TerminalWindow = ({
         <span className={`shrink-0 text-xs text-deck-500 transition-transform ${open ? 'rotate-90' : ''}`}>▸</span>
       )}
       <span className="text-grass-400">$</span>
-      <span className="text-deck-200">claude</span>
+      <span className="text-deck-200">{agentBin()}</span>
       {running && (
         <>
           <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -805,7 +806,7 @@ export const SessionPanel = ({
     ? `No local clone for ${task.repo} — add it in Settings to chat`
     : chatTo
       ? 'Message this session…'
-      : 'Ask claude about this PR (starts a new session)…'
+      : `Ask ${agentBin()} about this PR (starts a new session)…`
 
   // Resuming only works from the directory the session ran in, which for a PR branch is usually a
   // worktree, not the clone. A live run already knows its own cwd; otherwise go find it.

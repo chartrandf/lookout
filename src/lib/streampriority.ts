@@ -1,5 +1,5 @@
-import { Command } from '@tauri-apps/plugin-shell'
 import type { StreamItem, StreamPriority } from '../types'
+import { agentBin, askAgent } from './agent'
 import { errText, logWarn } from './log'
 import { columnOf } from './stream'
 
@@ -60,17 +60,9 @@ export const ratePriorities = async (cards: RateCard[]): Promise<Rating[]> => {
   if (!cards.length) return []
   const none = parsePriorities('', cards.length)
   try {
-    const out = await Command.create('claude', [
-      '-p',
-      PROMPT(cards),
-      '--model',
-      'haiku',
-      '--tools',
-      '', // a rating needs no tools
-      '--no-session-persistence', // or the rater's own transcript would show up as a session
-    ]).execute()
+    const out = await askAgent(PROMPT(cards))
     if (out.code !== 0) {
-      logWarn('stream', `priority: claude exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
+      logWarn('stream', `priority: ${agentBin()} exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
       return none
     }
     return parsePriorities(out.stdout, cards.length)

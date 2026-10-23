@@ -1,5 +1,5 @@
-import { Command } from '@tauri-apps/plugin-shell'
 import type { StreamItem } from '../types'
+import { agentBin, askAgent } from './agent'
 import { errText, logWarn } from './log'
 
 // Risk check: whether a card may start on its own (Auto-run) or waits for my OK. Only for a card's
@@ -81,18 +81,10 @@ export const assessRisk = async (x: Card): Promise<Risk> => {
   const known = verdicts.get(text)
   if (known) return known
   try {
-    const out = await Command.create('claude', [
-      '-p',
-      PROMPT(text),
-      '--model',
-      'haiku',
-      '--tools',
-      '', // a verdict needs no tools
-      '--no-session-persistence', // or the checker's own transcript would show up as a session
-    ]).execute()
+    const out = await askAgent(PROMPT(text))
     if (out.code !== 0) {
-      logWarn('stream', `risk: claude exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
-      return { risky: true, reason: 'The risk check could not run (claude failed)' }
+      logWarn('stream', `risk: ${agentBin()} exited ${out.code}: ${out.stderr?.trim() ?? ''}`)
+      return { risky: true, reason: `The risk check could not run (${agentBin()} failed)` }
     }
     const v = parseRisk(out.stdout)
     if (v !== UNCLEAR) verdicts.set(text, v)

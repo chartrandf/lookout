@@ -302,7 +302,7 @@ export const StreamPanel = ({ item, version, repos, onAction, onRun, busy, onPro
             )}
             {projectGateTarget(item.gate) && (
               <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-                <p className="text-amber-200">Which project is this for? Haiku couldn't tell from the text.</p>
+                <p className="text-amber-200">Which project is this for? AI couldn't tell from the text.</p>
                 <div className="flex flex-wrap gap-1.5">
                   {repos.map((r) => (
                     <button
@@ -455,7 +455,7 @@ export const StreamPanel = ({ item, version, repos, onAction, onRun, busy, onPro
                                 aria-hidden="true"
                                 className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-deck-500 border-t-transparent"
                               />
-                              Haiku is working out the next step…
+                              AI is working out the next step…
                             </span>
                           ) : (
                             <span className="text-xs text-deck-500">or reply below to send it back with a note</span>

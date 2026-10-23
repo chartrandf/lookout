@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('./claude', () => ({ REVIEW_TOOLS: '', spawnClaude: vi.fn() }))
+vi.mock('./claude', () => ({ REVIEW_TOOLS: '' }))
+vi.mock('./agent', () => ({ agentBin: () => 'claude', spawnAgent: vi.fn() }))
 vi.mock('./log', () => ({ errText: (e: unknown) => String(e), logError: vi.fn(), logInfo: vi.fn(), logWarn: vi.fn() }))
 
 import { failRun, getRun } from './runs'

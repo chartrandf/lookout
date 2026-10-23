@@ -3,6 +3,8 @@
 // what the sync already stored (tasks, my PRs, alerts): no `gh` call of its own. Created cards land
 // in Queued, where the risk check decides whether they may start without me.
 
+import type { ModelTier } from './agent'
+
 export type WatcherCheck = 'review_requested' | 'author_pushed' | 'my_pr_reviewed' | 'my_pr_ci_red' | 'prompt'
 
 export const WATCHER_CHECKS: { value: WatcherCheck; label: string; hint: string }[] = [
@@ -45,6 +47,10 @@ export type Watcher = {
 }
 
 export type WatcherModel = 'haiku' | 'sonnet' | 'default'
+
+// The stored values predate the opencode option and name Claude's models; they stand for the agent's
+// fast and strong tiers (Settings → Agent picks the opencode models)
+export const WATCHER_TIERS: Record<WatcherModel, ModelTier> = { haiku: 'fast', sonnet: 'strong', default: 'default' }
 
 const NO_PROMPT = { prompt: '', model: 'haiku' as const, tools: '' }
 

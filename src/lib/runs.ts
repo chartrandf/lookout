@@ -1,6 +1,7 @@
 import type { Child } from '@tauri-apps/plugin-shell'
 import type { ButtonBoard } from '../types'
-import { REVIEW_TOOLS, spawnClaude } from './claude'
+import { agentBin, spawnAgent } from './agent'
+import { REVIEW_TOOLS } from './claude'
 import { errText, logError, logInfo, logWarn } from './log'
 
 // which board a run belongs to: a PR board's action button, or a Stream item's agent
@@ -58,7 +59,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
   notify()
   logInfo('run', `${run.taskId}: ${run.command} in ${run.repoPath}${resumeSessionId ? ' (resume)' : ''}`)
   try {
-    run.child = await spawnClaude(
+    run.child = await spawnAgent(
       prompt,
       run.repoPath,
       (e) => {
@@ -79,7 +80,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
         } else if (e.type === 'exit') {
           run.child = null
           if (run.status === 'running') run.status = e.code === 0 ? 'closed' : 'error'
-          if (e.code !== 0) logWarn('run', `${run.taskId}: claude exited with code ${e.code}`)
+          if (e.code !== 0) logWarn('run', `${run.taskId}: ${agentBin()} exited with code ${e.code}`)
           callbacks.onEnd?.(run.taskId, run.status)
         }
         notify()
@@ -92,8 +93,8 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
     // claude never started (missing from PATH, cwd gone, denied by the shell scope). Without this the
     // promise rejected into nothing and the card sat on "running" forever with an empty transcript.
     run.status = 'error'
-    run.lines.push({ kind: 'error', text: `could not start claude: ${errText(e)}` })
-    logError('run', e, `${run.taskId}: spawn claude in ${run.repoPath}`)
+    run.lines.push({ kind: 'error', text: `could not start ${agentBin()}: ${errText(e)}` })
+    logError('run', e, `${run.taskId}: spawn ${agentBin()} in ${run.repoPath}`)
     callbacks.onEnd?.(run.taskId, run.status)
   }
   notify()
@@ -187,7 +188,7 @@ export const failRun = (
     sessionId: null,
     lines: [
       { kind: 'user', text },
-      { kind: 'error', text: `could not start claude: ${errText(error)}` },
+      { kind: 'error', text: `could not start ${agentBin()}: ${errText(error)}` },
     ],
     status: 'error',
     child: null,

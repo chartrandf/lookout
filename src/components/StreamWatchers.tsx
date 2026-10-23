@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { tierLabel } from '../lib/agent'
 import type { WatcherRun } from '../lib/config'
 import type { FlowTemplate } from '../lib/streamflow'
 import {
@@ -209,14 +210,14 @@ export const StreamWatchers = ({ watchers, templates, repos, runs, onSave }: Pro
                   />
                 </Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Field label="Model" hint="Haiku is cheap enough to run often.">
+                  <Field label="Model" hint="The fast model is cheap enough to run often.">
                     <select
                       value={w.model}
                       onChange={(e) => patch(w.id, (x) => ({ ...x, model: e.target.value as WatcherModel }))}
                       className={`${control} w-full cursor-pointer`}
                     >
-                      <option value="haiku">Haiku</option>
-                      <option value="sonnet">Sonnet</option>
+                      <option value="haiku">Fast — {tierLabel('fast')}</option>
+                      <option value="sonnet">Strong — {tierLabel('strong')}</option>
                       <option value="default">My default model</option>
                     </select>
                   </Field>

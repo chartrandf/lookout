@@ -32,6 +32,7 @@
         { "name": "gh", "cmd": "gh", "args": true },
         { "name": "git", "cmd": "git", "args": true },
         { "name": "claude", "cmd": "claude", "args": true },
+        { "name": "opencode", "cmd": "opencode", "args": true },
         { "name": "code", "cmd": "code", "args": true },
         { "name": "open", "cmd": "open", "args": true }
       ]
@@ -42,6 +43,19 @@
         { "name": "gh", "cmd": "gh", "args": true },
         { "name": "git", "cmd": "git", "args": true },
         { "name": "claude", "cmd": "claude", "args": true },
+        {
+          "name": "opencode-run",
+          "cmd": "sh",
+          "args": [
+            "-c",
+            "exec opencode run --format json ${1:+--session \"$1\"} ${2:+--model \"$2\"} ${3:+--command \"$3\"} \"$4\" </dev/null",
+            "sh",
+            { "validator": "(ses_[A-Za-z0-9]+)?" },
+            { "validator": "[A-Za-z0-9._@/:+-]*" },
+            { "validator": "[A-Za-z0-9._:/-]*" },
+            { "validator": "(?s).*" }
+          ]
+        },
         { "name": "code", "cmd": "code", "args": true },
         { "name": "open", "cmd": "open", "args": true }
       ]

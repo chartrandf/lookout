@@ -1,5 +1,6 @@
 import { load, type Store } from '@tauri-apps/plugin-store'
 import type { ActionButton, ButtonBoard, Config, MergeHook, MergePreference, Stage, WatchedRepo } from '../types'
+import { type AgentSettings, readAgent, setAgent } from './agent'
 import { readMergeHook } from './mergehook'
 import { LEGACY_STAGE_IDS } from './stages'
 import { DEFAULT_TEMPLATES, type FlowTemplate, parseSteps } from './streamflow'
@@ -64,6 +65,9 @@ const getStore = async () => {
 
 export const getConfig = async (): Promise<Config> => {
   const s = await getStore()
+  // the agent calls read the CLI from agent.ts, not from here: every config read keeps it current
+  const agent = readAgent(await s.get<unknown>('agent'))
+  setAgent(agent)
   return {
     githubUser: (await s.get<string>('githubUser')) ?? '',
     githubName: (await s.get<string>('githubName')) ?? '',
@@ -90,6 +94,7 @@ export const getConfig = async (): Promise<Config> => {
     // the shipped flows until I save my own; a stored list is read as is (steps re-validated)
     streamTemplates: readTemplates(await s.get<unknown>('streamTemplates')),
     streamWatchers: readWatchers(await s.get<unknown>('streamWatchers')),
+    agent,
   }
 }
 
@@ -174,6 +179,11 @@ export const setCaptureReviews = async (captureReviews: boolean) => {
 export const setLogging = async (logging: boolean) => {
   const s = await getStore()
   await s.set('logging', logging)
+}
+
+export const setAgentSettings = async (agent: AgentSettings) => {
+  const s = await getStore()
+  await s.set('agent', agent)
 }
 
 export const setAnimations = async (animations: boolean) => {

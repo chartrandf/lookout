@@ -1,4 +1,4 @@
-import { Command } from '@tauri-apps/plugin-shell'
+import { agentBin, askAgent } from './agent'
 import { errText, logWarn } from './log'
 
 // A Stream dump under "All projects" with no #tag: Haiku reads each task and names the watched
@@ -34,17 +34,9 @@ export const guessProjects = async (titles: string[], repos: string[]): Promise<
   if (!titles.length) return []
   const none = titles.map(() => null)
   try {
-    const out = await Command.create('claude', [
-      '-p',
-      PROMPT(repos, titles),
-      '--model',
-      'haiku',
-      '--tools',
-      '', // a classification needs no tools
-      '--no-session-persistence', // or the guesser's own transcript would show up as a session
-    ]).execute()
+    const out = await askAgent(PROMPT(repos, titles))
     if (out.code !== 0) {
-      logWarn('stream', `project guess: claude exited ${out.code}: ${out.stderr.trim()}`)
+      logWarn('stream', `project guess: ${agentBin()} exited ${out.code}: ${out.stderr.trim()}`)
       return none
     }
     return parseProjectGuesses(out.stdout, repos, titles.length)

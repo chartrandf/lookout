@@ -44,7 +44,7 @@ export const MergeHookEditor = ({ board, hook: h, commands, onChange, onBlur }: 
       </div>
     </Section>
 
-    <Section title="Prompt to Claude">
+    <Section title="Prompt to the agent">
       <CommandTextarea
         value={h.prompt}
         commands={commands}

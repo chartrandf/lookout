@@ -72,3 +72,30 @@ export const releaseNotes = (file, version) => {
   const end = body.indexOf('\n## ')
   return (end < 0 ? body : body.slice(0, end)).trim()
 }
+
+// The summary runs on the agent picked in Settings → Agent (the app's `agent` key), on its strong
+// model (empty: sonnet, or big-pickle on opencode, as the app's defaults): claude reads the prompt from stdin; opencode takes it as the message, with stdin empty
+// (it reads stdin to the end before starting) and answers in JSON events.
+export const summaryCommand = (agent, prompt) => {
+  const model = typeof agent?.strongModel === 'string' ? agent.strongModel.trim() : ''
+  if (agent?.cli === 'opencode')
+    return { cmd: 'opencode', args: ['run', '--format', 'json', '--model', model || 'opencode/big-pickle', prompt], input: '' }
+  return { cmd: 'claude', args: ['-p', '--model', model || 'sonnet'], input: prompt }
+}
+
+// opencode's final answer: the text of its last step, null on an error event
+export const opencodeAnswer = (stdout) => {
+  let answer = ''
+  for (const line of stdout.split('\n')) {
+    let msg
+    try {
+      msg = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (msg.type === 'error') return null
+    if (msg.type === 'step_start') answer = ''
+    else if (msg.type === 'text' && msg.part?.text) answer = answer ? `${answer}\n\n${msg.part.text}` : msg.part.text
+  }
+  return answer || null
+}

@@ -46,11 +46,13 @@ export const spawnClaude = async (
   resumeSessionId?: string,
   allowedTools: string = REVIEW_TOOLS,
   disallowedTools?: string,
+  model?: string, // unset: Claude Code's own default model
 ): Promise<Child> => {
   const args = [
     '-p',
     prompt,
     ...(resumeSessionId ? ['--resume', resumeSessionId] : []),
+    ...(model ? ['--model', model] : []),
     '--output-format',
     'stream-json',
     '--verbose',

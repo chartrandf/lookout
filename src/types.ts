@@ -1,3 +1,4 @@
+import type { AgentSettings } from './lib/agent'
 import type { FlowTemplate, TemplateStep } from './lib/streamflow'
 import type { WaitFor } from './lib/streamwatch'
 import type { Watcher } from './lib/streamwatchers'
@@ -193,6 +194,7 @@ export type Config = {
   streamAutoRun: boolean // Stream: agents pick queued cards on their own (off = only Run now starts one)
   streamTemplates: FlowTemplate[] // Stream flow templates (Settings → Stream)
   streamWatchers: Watcher[] // Stream watchers: rules that create cards (Settings → Stream)
+  agent: AgentSettings // which coding-agent CLI runs everything (claude by default) and its models
 }
 
 // Stream: things I dumped for Lookout's agents to work through (src/lib/stream.ts).

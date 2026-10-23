@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { bumpVersion, commitLines, parseSummary, prependSection, releaseNotes, renderSection } from './changelog.mjs'
+import {
+  bumpVersion,
+  commitLines,
+  opencodeAnswer,
+  parseSummary,
+  prependSection,
+  releaseNotes,
+  renderSection,
+  summaryCommand,
+} from './changelog.mjs'
 
 describe('bumpVersion', () => {
   it('bumps the asked part and resets the smaller ones', () => {
@@ -73,5 +82,47 @@ describe('releaseNotes', () => {
     const file = '# Changelog\n\n## v2 — d\n\n- [NEW] b\n\n## v1 — d\n\n- [FIX] a\n'
     expect(releaseNotes(file, '2')).toBe('- [NEW] b')
     expect(releaseNotes(file, '1')).toBe('- [FIX] a')
+  })
+})
+
+describe('summaryCommand', () => {
+  it('asks claude on Sonnet when the app picked no agent or model', () => {
+    expect(summaryCommand(null, 'p')).toEqual({ cmd: 'claude', args: ['-p', '--model', 'sonnet'], input: 'p' })
+    expect(summaryCommand({ cli: 'claude', strongModel: 'opus' }, 'p').args).toEqual(['-p', '--model', 'opus'])
+  })
+
+  it('runs opencode with the prompt as message and an empty stdin', () => {
+    expect(summaryCommand({ cli: 'opencode', strongModel: 'acme/big' }, 'p')).toEqual({
+      cmd: 'opencode',
+      args: ['run', '--format', 'json', '--model', 'acme/big', 'p'],
+      input: '',
+    })
+    expect(summaryCommand({ cli: 'opencode', strongModel: '' }, 'p').args).toEqual([
+      'run',
+      '--format',
+      'json',
+      '--model',
+      'opencode/big-pickle',
+      'p',
+    ])
+  })
+})
+
+describe('opencodeAnswer', () => {
+  const ev = (o) => JSON.stringify(o)
+  it('keeps the last step text', () => {
+    const out = [
+      ev({ type: 'step_start' }),
+      ev({ type: 'text', part: { text: 'thinking' } }),
+      ev({ type: 'step_start' }),
+      ev({ type: 'text', part: { text: '- feat: x' } }),
+      ev({ type: 'step_finish', part: { reason: 'stop' } }),
+    ].join('\n')
+    expect(opencodeAnswer(out)).toBe('- feat: x')
+  })
+
+  it('is null on an error or no text', () => {
+    expect(opencodeAnswer(ev({ type: 'error', error: { name: 'APIError' } }))).toBeNull()
+    expect(opencodeAnswer('')).toBeNull()
   })
 })

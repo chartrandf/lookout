@@ -5,6 +5,7 @@ import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationBell } from './components/NotificationBell'
 import { SessionPanel } from './components/SessionPanel'
 import { Tip } from './components/Tip'
+import { DEFAULT_AGENT } from './lib/agent'
 import { visibleButtons } from './lib/buttons'
 import { type CardActionId, cardActions } from './lib/cardactions'
 import { CHAT_COMMAND, chatPrompt } from './lib/chat'
@@ -14,6 +15,7 @@ import {
   DEFAULT_REVIEW_BUTTONS,
   getConfig,
   getStreamMarks,
+  setAgentSettings,
   setAnimations,
   setCaptureReviews,
   setLogging,
@@ -156,6 +158,7 @@ const App = () => {
     streamAutoRun: false,
     streamTemplates: [],
     streamWatchers: [],
+    agent: DEFAULT_AGENT,
   })
   const [tasks, setTasks] = useState<ReviewTask[]>([])
   const [myPrs, setMyPrs] = useState<MyPr[]>([])
@@ -788,7 +791,7 @@ const App = () => {
       >
         {/* the wordmark doubles as a home button: back to the first tab */}
         <h1 data-tauri-drag-region className="mr-3">
-          <Tip label={anyRunning ? 'A claude run is live' : `Back to ${TAB_ORDER[0].label}`}>
+          <Tip label={anyRunning ? 'An agent run is live' : `Back to ${TAB_ORDER[0].label}`}>
             <button
               type="button"
               onClick={() => switchView(TAB_ORDER[0].view)}
@@ -972,6 +975,10 @@ const App = () => {
             }}
             onSaveStreamEnabled={async (on) => {
               await setStreamEnabled(on)
+              setConfig(await getConfig())
+            }}
+            onSaveAgent={async (agent) => {
+              await setAgentSettings(agent)
               setConfig(await getConfig())
             }}
             onSaveStreamTemplates={async (templates) => {

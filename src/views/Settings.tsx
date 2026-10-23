@@ -16,6 +16,7 @@ import { SidePanel } from '../components/SidePanel'
 import { StreamTemplates } from '../components/StreamTemplates'
 import { Tip } from '../components/Tip'
 import { dropAction } from '../lib/actionlist'
+import { AGENT_CLIS, type AgentCli, type AgentSettings, defaultModel, listModels, type PickedTier } from '../lib/agent'
 import { avatarUrl } from '../lib/avatar'
 import { type ChangeTag, parseChangelog } from '../lib/changelog'
 import { listSlashCommands } from '../lib/commands'
@@ -52,6 +53,7 @@ type Props = {
   onSaveMergeHook: (board: ButtonBoard, hook: MergeHook) => void
   onSaveStreamTemplates: (templates: FlowTemplate[]) => void
   onSaveStreamEnabled: (on: boolean) => void
+  onSaveAgent: (agent: AgentSettings) => void
 }
 
 // What to paste into ~/.claude/settings.json for instant capture. Lookout does not write that file
@@ -101,6 +103,67 @@ const ToggleRow = ({
     {children}
   </div>
 )
+
+// A model picker: the CLI's default, then what the CLI lists. A saved model it no longer lists stays
+// pickable, so opening Settings never changes it behind my back.
+const ModelRow = ({
+  label,
+  hint,
+  value,
+  fallback,
+  models,
+  onChange,
+}: {
+  label: string
+  hint: string
+  value: string
+  fallback: string
+  models: string[] | null // null while the CLI is asked
+  onChange: (model: string) => void
+}) => (
+  <div className="flex items-center justify-between gap-3 p-3">
+    <div>
+      <p className="text-sm font-medium text-deck-200">{label}</p>
+      <p className="text-xs text-deck-500">
+        {hint}
+        {models?.length === 0 && ' The CLI listed no models: is it on your PATH, with a provider set up?'}
+      </p>
+    </div>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={models === null}
+      aria-label={label}
+      className="h-7 w-56 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 font-mono text-xs text-deck-200 outline-none disabled:opacity-60"
+    >
+      <option value="">{models === null ? 'Loading models…' : fallback}</option>
+      {[...(value && !models?.includes(value) ? [value] : []), ...(models ?? [])].map((m) => (
+        <option key={m} value={m}>
+          {m}
+        </option>
+      ))}
+    </select>
+  </div>
+)
+
+const MODEL_ROWS: { tier: PickedTier; label: string; hint: string }[] = [
+  {
+    tier: 'fast',
+    label: 'Fast model',
+    hint: "The cheap background checks: what a run was, a card's priority, project, risk and next step.",
+  },
+  {
+    tier: 'strong',
+    label: 'Strong model',
+    hint: 'What a watcher set to Strong runs on, and the release notes summary.',
+  },
+  { tier: 'work', label: 'Work model', hint: 'The heavy work: action buttons, chats and Stream cards.' },
+]
+const MODEL_KEYS: Record<PickedTier, (a: AgentSettings) => string> = {
+  fast: (a) => a.fastModel,
+  strong: (a) => a.strongModel,
+  work: (a) => a.workModel,
+}
 
 const BOARD_META: Record<ButtonBoard, { title: string; hint: string }> = {
   review: {
@@ -365,6 +428,7 @@ export const Settings = ({
   onSaveMergeHook,
   onSaveStreamTemplates,
   onSaveStreamEnabled,
+  onSaveAgent,
 }: Props) => {
   // the one action open in the side panel; id null = the board's merge action
   const [editing, setEditing] = useState<{ board: ButtonBoard; id: string | null } | null>(null)
@@ -399,6 +463,14 @@ export const Settings = ({
     setHooks((h) => ({ ...h, [board]: next }))
     if (persist) onSaveMergeHook(board, next)
   }
+  const agent = config.agent
+  const claude = agent.cli === 'claude'
+  // what the picked CLI says it can run, for the model pickers
+  const [models, setModels] = useState<string[] | null>(null)
+  useEffect(() => {
+    setModels(null)
+    listModels(agent.cli).then(setModels)
+  }, [agent.cli])
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
   const [autostart, setAutostart] = useState(false)
@@ -631,6 +703,52 @@ export const Settings = ({
 
       <div className="flex flex-col gap-3">
         <div>
+          <h3 className="text-lg font-semibold text-deck-200">Agent</h3>
+          <p className="mt-0.5 text-xs text-deck-500">
+            The coding-agent CLI behind the action buttons, Stream cards and the background checks.
+          </p>
+        </div>
+        <div className="flex flex-col divide-y divide-deck-800 rounded-lg border border-deck-700">
+          <div className="flex items-center justify-between gap-3 p-3">
+            <div>
+              <p className="text-sm font-medium text-deck-200">CLI</p>
+              <p className="text-xs text-deck-500">
+                Must be on your PATH. Session history, review capture and the Stop hook read Claude Code's transcripts:
+                they stay Claude-only. On opencode, a run's allowed tools become its permissions.
+              </p>
+            </div>
+            <select
+              value={agent.cli}
+              // model names differ per CLI: a Claude alias means nothing to opencode, and back
+              onChange={(e) =>
+                onSaveAgent({ cli: e.target.value as AgentCli, fastModel: '', strongModel: '', workModel: '' })
+              }
+              aria-label="Agent CLI"
+              className="h-7 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
+            >
+              {AGENT_CLIS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {MODEL_ROWS.map((r) => (
+            <ModelRow
+              key={r.tier}
+              label={r.label}
+              hint={r.hint}
+              value={MODEL_KEYS[r.tier](agent)}
+              fallback={`Default (${defaultModel(r.tier, agent.cli, models) ?? (claude ? "Claude Code's own" : "opencode's configured model")})`}
+              models={models}
+              onChange={(m) => onSaveAgent({ ...agent, [`${r.tier}Model`]: m })}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div>
           <h3 className="text-lg font-semibold text-deck-200">Beta</h3>
           <p className="mt-0.5 text-xs text-deck-500">Features still under development: they may change or break.</p>
         </div>
@@ -638,7 +756,7 @@ export const Settings = ({
           <ToggleRow
             bare
             label="Stream"
-            hint="A board where you dump work for Claude agents: they run it in their own worktrees, and stop for your review. Off: no Stream tab, nothing runs in the background, no 🌊 on PR cards — your cards are kept."
+            hint="A board where you dump work for agents: they run it in their own worktrees, and stop for your review. Off: no Stream tab, nothing runs in the background, no 🌊 on PR cards — your cards are kept."
             on={config.streamEnabled}
             onToggle={() => onSaveStreamEnabled(!config.streamEnabled)}
           />
@@ -692,7 +810,7 @@ export const Settings = ({
           <ToggleRow
             bare
             label="Animations"
-            hint="Motion effects: the wordmark sheen and card glow while a claude run is live."
+            hint="Motion effects: the wordmark sheen and card glow while an agent run is live."
             on={config.animations}
             onToggle={() => onSaveAnimations(!config.animations)}
           />
@@ -737,7 +855,7 @@ export const Settings = ({
 
       <ToggleRow
         label="Debug log"
-        hint="Record gh calls, claude runs, sync and database errors to a file — what to read when something silently does nothing."
+        hint="Record gh calls, agent runs, sync and database errors to a file — what to read when something silently does nothing."
         on={config.logging}
         onToggle={() => onSaveLogging(!config.logging)}
       >

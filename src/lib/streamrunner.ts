@@ -2,6 +2,7 @@ import { homeDir } from '@tauri-apps/api/path'
 import { exists } from '@tauri-apps/plugin-fs'
 import { Command } from '@tauri-apps/plugin-shell'
 import type { StreamItem, WatchedRepo } from '../types'
+import { agentBin, askAgent } from './agent'
 import { ACTION_TOOLS } from './claude'
 import { getWatcherRuns, setWatcherRun } from './config'
 import {
@@ -52,6 +53,7 @@ import {
   type Match,
   matchesOf,
   parseWatcherCards,
+  WATCHER_TIERS,
   type Watcher,
   type WatcherCheck,
   type WatchFacts,
@@ -209,7 +211,7 @@ const callbacks = (id: string, mode: 'work' | 'shape' = 'work') => {
     onResult: (_: string, text: string, isError: boolean) => {
       if (!current()) return
       if (isError) {
-        serial(id, () => streamRunEnded(id, 'failed', text || 'claude reported an error'))
+        serial(id, () => streamRunEnded(id, 'failed', text || `${agentBin()} reported an error`))
         return
       }
       if (mode === 'shape') {
@@ -244,7 +246,7 @@ const callbacks = (id: string, mode: 'work' | 'shape' = 'work') => {
         .at(-1)?.text
       serial(id, () =>
         status === 'error'
-          ? streamRunEnded(id, 'failed', last ?? 'claude exited with an error')
+          ? streamRunEnded(id, 'failed', last ?? `${agentBin()} exited with an error`)
           : streamRunEnded(id, 'interrupted', status === 'awaiting-input' ? 'cancelled' : 'ended without a result'),
       )
     },
@@ -590,21 +592,13 @@ const cardsOf = (w: Watcher, matches: Match[], template: FlowTemplate | undefine
 // a prompt watcher: a read-only agent checks what I asked, outside my repos, and answers with cards
 const promptCards = async (w: Watcher, known: { key: string; title: string }[], template: FlowTemplate | undefined) => {
   const tools = [SHAPE_TOOLS, ...w.tools.split(',').map((t) => t.trim())].filter(Boolean).join(',')
-  const out = await Command.create(
-    'claude',
-    [
-      '-p',
-      watcherPrompt(w, known),
-      ...(w.model === 'default' ? [] : ['--model', w.model]),
-      '--allowedTools',
-      tools,
-      '--disallowedTools',
-      SHAPE_DENY,
-      '--no-session-persistence', // a check, not a conversation: no transcript left behind
-    ],
-    { cwd: await homeDir() },
-  ).execute()
-  if (out.code !== 0) throw new Error(out.stderr.trim() || `claude exited ${out.code}`)
+  const out = await askAgent(watcherPrompt(w, known), {
+    tier: WATCHER_TIERS[w.model],
+    allowedTools: tools,
+    disallowedTools: SHAPE_DENY,
+    cwd: await homeDir(),
+  })
+  if (out.code !== 0) throw new Error(out.stderr.trim() || `${agentBin()} exited ${out.code}`)
   return parseWatcherCards(out.stdout, w.repo).map((c) => ({
     title: c.title,
     body: c.notes,

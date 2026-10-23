@@ -103,7 +103,7 @@ export const ActionEditor = ({ board, button: b, primary, commands, onChange, on
         </div>
       </Section>
 
-      <Section title="Prompt to Claude">
+      <Section title="Prompt to the agent">
         <CommandTextarea
           value={b.prompt}
           commands={commands}
@@ -231,7 +231,7 @@ export const ActionEditor = ({ board, button: b, primary, commands, onChange, on
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-sm text-deck-200">Save answer as report</p>
-              <p className="text-xs text-deck-500">Keep Claude's final answer on the card, as a report</p>
+              <p className="text-xs text-deck-500">Keep the agent's final answer on the card, as a report</p>
             </div>
             <Switch
               on={b.saveReport !== 'off'}

@@ -27,7 +27,7 @@ export const PriorityChip = ({ item, onSet }: Props) => {
       aria-label="Priority"
       title={
         p
-          ? `${mine ? 'Set by you' : `Haiku: ${item.priorityReason ?? 'no reason given'}`} — click to change`
+          ? `${mine ? 'Set by you' : `AI: ${item.priorityReason ?? 'no reason given'}`} — click to change`
           : 'Rating… — click to set it yourself'
       }
       className={`cursor-pointer appearance-none rounded px-1 py-0.5 focus:outline-none ${p ? COLOR[p] : 'animate-pulse bg-deck-800 text-deck-500'}`}
@@ -38,7 +38,7 @@ export const PriorityChip = ({ item, onSet }: Props) => {
           {l === p ? `${mine ? '👤' : '🤖'} ${l}` : l}
         </option>
       ))}
-      {p && <option value="">Let Haiku decide</option>}
+      {p && <option value="">Let AI decide</option>}
     </select>
   )
 }

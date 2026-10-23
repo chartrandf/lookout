@@ -58,6 +58,7 @@ const config = (repos = [REPO, OTHER]): Config => ({
   streamAutoRun: false,
   streamTemplates: [],
   streamWatchers: [],
+  agent: { cli: 'claude', fastModel: '', strongModel: '', workModel: '' },
 })
 
 const ghPr = (o: Partial<GhMyPr> = {}): GhMyPr => ({

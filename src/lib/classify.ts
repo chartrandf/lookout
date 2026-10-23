@@ -1,4 +1,4 @@
-import { Command } from '@tauri-apps/plugin-shell'
+import { agentBin, askAgent } from './agent'
 import { errText, logWarn } from './log'
 import type { CaptureKind } from './transcript'
 
@@ -32,17 +32,9 @@ export const classifySession = async (sessionId: string, body: string): Promise<
   const known = verdicts.get(sessionId)
   if (known !== undefined) return known
   try {
-    const out = await Command.create('claude', [
-      '-p',
-      `${PROMPT}${body.slice(0, MAX_INPUT)}\n</answer>`,
-      '--model',
-      'haiku',
-      '--tools',
-      '', // a classification needs no tools
-      '--no-session-persistence', // or the classifier's own transcript would show up as a session
-    ]).execute()
+    const out = await askAgent(`${PROMPT}${body.slice(0, MAX_INPUT)}\n</answer>`)
     if (out.code !== 0) {
-      logWarn('classify', `${sessionId}: claude exited ${out.code}: ${out.stderr.trim()}`)
+      logWarn('classify', `${sessionId}: ${agentBin()} exited ${out.code}: ${out.stderr.trim()}`)
       return null
     }
     const verdict = parseVerdict(out.stdout)

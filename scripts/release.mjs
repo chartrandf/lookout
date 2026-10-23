@@ -1,13 +1,17 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import {
   bumpVersion,
   commitLines,
+  opencodeAnswer,
   parseSummary,
   prependSection,
   releaseNotes,
   renderSection,
+  summaryCommand,
   summaryPrompt,
 } from './changelog.mjs'
 
@@ -39,12 +43,23 @@ if (git('tag', '-l', tag)) fail(`${tag} already exists`)
 
 const prev = git('describe', '--tags', '--abbrev=0', '--match', 'v*')
 const subjects = git('log', `${prev}..HEAD`, '--no-merges', '--format=%s').split('\n').filter(Boolean)
-// Claude groups related commits into a few lines; without it (or on a malformed answer), one line per commit
+// The agent the app is set to (Settings → Agent); claude when the app never saved one
+const appAgent = () => {
+  try {
+    const file = join(homedir(), 'Library', 'Application Support', 'com.francischartrand.lookout', 'config.json')
+    return JSON.parse(readFileSync(file, 'utf8')).agent ?? null
+  } catch {
+    return null
+  }
+}
+// The agent groups related commits into a few lines; without it (or on a malformed answer), one line per commit
 const summarize = () => {
   if (!subjects.length) return []
   try {
-    console.log('summarizing the changes with Claude…')
-    return parseSummary(run('claude', ['-p', '--model', 'sonnet'], { input: summaryPrompt(subjects) })) ?? commitLines(subjects)
+    const { cmd, args, input } = summaryCommand(appAgent(), summaryPrompt(subjects))
+    console.log(`summarizing the changes with ${cmd}…`)
+    const out = run(cmd, args, { input })
+    return parseSummary(cmd === 'opencode' ? (opencodeAnswer(out) ?? '') : out) ?? commitLines(subjects)
   } catch {
     return commitLines(subjects)
   }

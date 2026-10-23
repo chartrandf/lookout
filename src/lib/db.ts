@@ -601,7 +601,7 @@ export const setStreamProject = async (item: StreamItem, repo: string, actor: 'm
       ref.ref,
       item.id,
     ])
-  await logStreamEvent(d, item.id, 'project', actor === 'lookout' ? `${repo} (guessed by Haiku)` : repo, actor)
+  await logStreamEvent(d, item.id, 'project', actor === 'lookout' ? `${repo} (guessed by AI)` : repo, actor)
 }
 
 // Haiku couldn't tell the project: the item waits in Needs you, remembering where it was headed
@@ -613,7 +613,7 @@ export const askStreamProject = async (item: StreamItem) => {
     new Date().toISOString(),
     item.id,
   ])
-  await logStreamEvent(d, item.id, 'question', 'Which project? Haiku could not tell from the text', 'lookout')
+  await logStreamEvent(d, item.id, 'question', 'Which project? AI could not tell from the text', 'lookout')
 }
 
 // ── Stream runs: an agent working an item. Every write logs who did it. ──
