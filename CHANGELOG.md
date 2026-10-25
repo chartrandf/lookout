@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.0 — 2026-10-25
+
+- [NEW] Opencode CLI as agent alternative
+- [FIX] Merge button missing, auto-merge state not detected
+
 ## v0.4.23 — 2026-10-22
 
 - [NEW] Terminal session view under history
