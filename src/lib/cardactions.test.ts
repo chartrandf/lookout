@@ -33,4 +33,9 @@ describe('cardActions', () => {
     expect(cardActions(base)[0]).toEqual(snoozeAction(false))
     expect(cardActions({ ...base, snoozed: true })[0]).toEqual(snoozeAction(true))
   })
+
+  it('explains every action in a tooltip', () => {
+    const all = cardActions({ snoozed: false, hasSession: true, isPr: false, running: true })
+    for (const a of all) expect(a.title).toBeTruthy()
+  })
 })

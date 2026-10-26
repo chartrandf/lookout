@@ -29,6 +29,7 @@ import { ChecksBox } from './ChecksBox'
 import { CloseButton } from './CloseButton'
 import { CommandTextarea } from './CommandTextarea'
 import { type Confirm, ConfirmDialog } from './ConfirmDialog'
+import { DiffIcon, DiffView } from './DiffView'
 import { FollowupBadge } from './FollowupBadge'
 import { Icon, IconBox } from './Icon'
 import { Markdown } from './Markdown'
@@ -556,6 +557,7 @@ export const SessionPanel = ({
   const [feed, setFeed] = useState<FeedEvent[] | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [report, setReport] = useState<{ title: string; content: string } | null>(null)
+  const [diffOpen, setDiffOpen] = useState(false) // the diff is fetched only while this is open
   // a past session read back in Lookout (⌘+click on its bubble), instead of resuming it in Ghostty
   // `from`: where the live run's lines go past what the file held when read (the run was live then)
   // a past session picked under the input: the terminal shows its transcript (null lines = loading)
@@ -579,6 +581,8 @@ export const SessionPanel = ({
   reportRef.current = report
   const transcriptRef = useRef(false)
   transcriptRef.current = !!transcript
+  const diffOpenRef = useRef(false)
+  diffOpenRef.current = diffOpen
   const confirmOpenRef = useRef(false)
   confirmOpenRef.current = !!confirm
   const methodMenuRef = useRef(false)
@@ -610,6 +614,7 @@ export const SessionPanel = ({
     setFeed(null)
     setReport(null)
     setTranscript(null)
+    setDiffOpen(false)
     scrollRef.current?.scrollTo({ top: 0 }) // column-reverse: top 0 is the bottom, newest events
     loadFeed()
   }, [task.id])
@@ -801,6 +806,10 @@ export const SessionPanel = ({
       setTranscript(null)
       return true
     }
+    if (diffOpenRef.current) {
+      setDiffOpen(false)
+      return true
+    }
     if (!reportRef.current) return false
     setReport(null)
     return true
@@ -989,7 +998,7 @@ export const SessionPanel = ({
 
   return (
     <SidePanel onClose={onClose} onEscape={onEscape}>
-      {({ close }) => (
+      {({ close, widen }) => (
         <>
           <div className="border-b border-deck-800 px-4 py-3">
             {/* GitHub's hovercard line: repo#number, the copy icon slides in on row hover */}
@@ -1007,17 +1016,19 @@ export const SessionPanel = ({
               <CopyButton label="Copy PR URL" copied={copiedUrl} onCopy={copyUrl} group="url" />
               <div className="ml-auto flex items-center gap-1.5">
                 {!isPr && (
-                  <select
-                    value={task.stage}
-                    onChange={(e) => onStageChange(e.target.value as Stage)}
-                    className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
-                  >
-                    {STAGES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
+                  <Tip label="Move the card to another column">
+                    <select
+                      value={task.stage}
+                      onChange={(e) => onStageChange(e.target.value as Stage)}
+                      className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
+                    >
+                      {STAGES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Tip>
                 )}
                 {isPr ? (
                   // my own PR's ⋯ was only Snooze + Open in browser (the header link already opens it;
@@ -1055,7 +1066,12 @@ export const SessionPanel = ({
                     {moreOpen && (
                       <div className="absolute right-0 top-full z-40 mt-1 flex w-60 flex-col rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl">
                         <CardMenuList
-                          actions={cardActions({ snoozed: task.snoozed, hasSession: !!sessionId, isPr, running })}
+                          actions={cardActions({
+                            snoozed: task.snoozed,
+                            hasSession: !!sessionId,
+                            isPr,
+                            running,
+                          })}
                           onSelect={(id) => {
                             setMoreOpen(false)
                             if (id === 'snooze') {
@@ -1074,6 +1090,20 @@ export const SessionPanel = ({
                     )}
                   </div>
                 )}
+                <Tip label="View diff: the PR's file changes">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDiffOpen(true)
+                      widen(0.5) // a diff needs room: half the window, unless already wider
+                    }}
+                    aria-label="View diff"
+                    aria-pressed={diffOpen}
+                    className="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded border border-deck-600 text-deck-300 hover:bg-deck-800 hover:text-deck-100"
+                  >
+                    <DiffIcon />
+                  </button>
+                </Tip>
                 <CloseButton onClick={close} />
               </div>
             </div>
@@ -1496,6 +1526,7 @@ export const SessionPanel = ({
               </div>
             </div>
           )}
+          {diffOpen && <DiffView repo={task.repo} prNumber={task.prNumber} onBack={() => setDiffOpen(false)} />}
           {confirm && <ConfirmDialog confirm={confirm} onClose={() => setConfirm(null)} />}
         </>
       )}
