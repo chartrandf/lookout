@@ -25,10 +25,13 @@ import {
   fetchAuthorKinds,
   fetchLogin,
   fetchName,
+  fetchOpenPrPulse,
   fetchPrExchange,
   fetchPrState,
+  type GhPr,
   listCommentedByMe,
   listOpenPrs,
+  type PrExchange,
 } from './gh'
 import { logError } from './log'
 import { notify } from './notify'
@@ -75,6 +78,29 @@ const othersReview = (reviews: Reviews, me: string, logins: Map<string, boolean>
 const ACTIVE_STAGES = new Set<string>(BOARD_STAGES.filter((s) => s !== 'done'))
 
 const CAPTURE_DAYS = 30 // a month of history, then the row goes
+
+// What the last pass read of a repo, kept for the app's lifetime: when the repo's pulse answers 304,
+// the PR listing and my comments are reused instead of asked again. The first pass always asks.
+type RepoSeen = { etag: string | null; prs: GhPr[]; commentedByMe: Set<number>; updatedAt: Map<number, string> }
+const repoSeen = new Map<string, RepoSeen>()
+
+// A PR's last exchange, with the updated_at it was read at
+export type ExchangeSeen = { updatedAt: string; x: PrExchange; at: number }
+const exchangeSeen = new Map<string, ExchangeSeen>()
+
+// CI results and a base branch moving under the PR (conflicts) don't bump updated_at: past this age
+// the exchange is read again anyway
+const EXCHANGE_MAX_AGE_MS = 30 * 60_000
+
+// The PR hasn't moved since its last exchange, and its CI had settled then. Pending or no checks yet
+// (null) are polled every pass, since the result landing is exactly what doesn't bump updated_at.
+export const canReuseExchange = (seen: ExchangeSeen | undefined, updatedAt: string | undefined, now: number) =>
+  !!seen &&
+  !!updatedAt &&
+  seen.updatedAt === updatedAt &&
+  seen.x.ciState !== 'pending' &&
+  seen.x.ciState !== null &&
+  now - seen.at < EXCHANGE_MAX_AGE_MS
 
 type CaptureTarget = { sessionId: string; kind: CaptureKind; taskId: string; branch: string }
 
@@ -186,10 +212,25 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
   const openIds = new Set<string>()
   const polledRepos = new Set<string>()
   for (const { repo, path } of config.repos) {
-    let prs: Awaited<ReturnType<typeof listOpenPrs>>
+    let prs: GhPr[]
     let commentedByMe: Set<number>
     try {
-      ;[prs, commentedByMe] = await Promise.all([listOpenPrs(repo), listCommentedByMe(repo, me)])
+      const seen = repoSeen.get(repo)
+      // a failed pulse (undefined) only costs the shortcut: the repo is read in full
+      const pulse = await fetchOpenPrPulse(repo, seen?.etag ?? null).catch((e) => {
+        logError('sync', e, `pulse ${repo}`)
+        return undefined
+      })
+      if (seen && pulse === null) ({ prs, commentedByMe } = seen)
+      else {
+        ;[prs, commentedByMe] = await Promise.all([listOpenPrs(repo), listCommentedByMe(repo, me)])
+        repoSeen.set(repo, {
+          etag: pulse?.etag ?? null,
+          prs,
+          commentedByMe,
+          updatedAt: pulse?.updatedAt ?? new Map(),
+        })
+      }
     } catch (e) {
       console.error(`sync failed for ${repo}:`, e)
       logError('sync', e, `repo ${repo}`)
@@ -285,10 +326,17 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
     // and re-derive this PR's alerts
     if (ACTIVE_STAGES.has(t.stage) && polledRepos.has(t.repo) && openIds.has(t.id)) {
       try {
-        const x = await fetchPrExchange(t.repo, t.prNumber, me)
-        const baseline = t.activityCount === null // first fetch: set silently
-        const isNew = !baseline && x.count > (t.activityCount ?? 0)
-        await setActivity(t.id, x.count, x.ciState, isNew, x.ciChecks, x.conflicts)
+        const updatedAt = repoSeen.get(t.repo)?.updatedAt.get(t.prNumber)
+        const seen = exchangeSeen.get(t.id)
+        // unchanged PR: its badges are already stored, only the stage and alerts are re-derived
+        const reuse = canReuseExchange(seen, updatedAt, Date.now())
+        const x = reuse && seen ? seen.x : await fetchPrExchange(t.repo, t.prNumber, me)
+        if (!reuse) {
+          exchangeSeen.set(t.id, { updatedAt: updatedAt ?? '', x, at: Date.now() })
+          const baseline = t.activityCount === null // first fetch: set silently
+          const isNew = !baseline && x.count > (t.activityCount ?? 0)
+          await setActivity(t.id, x.count, x.ciState, isNew, x.ciChecks, x.conflicts)
+        }
         if (x.ciState === 'fail' && t.snoozed) await setSnoozed(t.id, false) // a red build wakes a hidden card
         const stage = deriveStage(t.stage, {
           hasSession: t.sessionIds.length > 0 || t.reviewFiles.length > 0,
