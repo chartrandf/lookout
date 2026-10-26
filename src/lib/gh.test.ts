@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@tauri-apps/plugin-shell', () => ({ Command: { create: vi.fn() } }))
 
-import { reviewCommentCounts, toTimelineEvent } from './gh'
+import { parseConditional, reviewCommentCounts, toTimelineEvent } from './gh'
 
 describe('toTimelineEvent', () => {
   it('keeps the avatar GitHub sent, which is the only one that works for a bot', () => {
@@ -82,5 +82,22 @@ describe('review inline comments', () => {
   it('leaves a review with no inline comment without a count', () => {
     const e = toTimelineEvent({ event: 'reviewed', id: 12, state: 'approved', submitted_at: '2026-01-03T10:00:00Z' })
     expect(e?.comments).toBeUndefined()
+  })
+})
+
+describe('parseConditional', () => {
+  it('reads the status, the ETag and the body of a 200', () => {
+    const r = parseConditional('HTTP/2.0 200 OK\r\nEtag: W/"abc"\r\nX-Other: 1\r\n\r\n[{"number":1}]\n')
+    expect(r).toEqual({ status: 200, etag: 'W/"abc"', body: '[{"number":1}]' })
+  })
+
+  it('reads a 304, which carries no body', () => {
+    const r = parseConditional('HTTP/2.0 304 Not Modified\nEtag: "abc"\n')
+    expect(r.status).toBe(304)
+    expect(r.body).toBe('')
+  })
+
+  it('reports no status on output that is not an HTTP answer', () => {
+    expect(parseConditional('').status).toBe(0)
   })
 })

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReviewTask } from '../types'
 
 vi.mock('./config', () => ({
@@ -28,6 +28,7 @@ vi.mock('./gh', () => ({
   fetchAuthorKinds: vi.fn(async () => new Map<string, boolean>()),
   fetchLogin: vi.fn(),
   fetchName: vi.fn(),
+  fetchOpenPrPulse: vi.fn(async () => undefined), // no ETag: every pass reads the repo in full
   fetchPrExchange: vi.fn(async () => ({ count: 0, ciState: null, reviews: [], comments: [], commits: [] })),
   fetchPrState: vi.fn(),
   listCommentedByMe: vi.fn(),
@@ -56,16 +57,25 @@ import {
   ghLogins,
   pruneCapturedReviews,
   saveGhLogins,
+  setActivity,
   setApproved,
   setPrState,
   setStage,
   upsertCapturedReview,
   upsertPr,
 } from './db'
-import { fetchAuthorKinds, fetchPrExchange, fetchPrState, listCommentedByMe, listOpenPrs } from './gh'
+import {
+  fetchAuthorKinds,
+  fetchOpenPrPulse,
+  fetchPrExchange,
+  fetchPrState,
+  listCommentedByMe,
+  listOpenPrs,
+  type PrExchange,
+} from './gh'
 import { scanReviewFiles } from './reviews'
 import { scanRepoReviewSessions, scanRepoSessions } from './sessions'
-import { captureRun, syncAll } from './sync'
+import { canReuseExchange, captureRun, syncAll } from './sync'
 
 const REPO = 'owner/repo'
 
@@ -643,5 +653,145 @@ describe('captureRun — a button run whose turn just finished', () => {
     await captureRun({ ...run, kind: null })
     expect(upsertCapturedReview).not.toHaveBeenCalled()
     expect(deleteCapturedReview).toHaveBeenCalledWith('s9')
+  })
+})
+
+describe('canReuseExchange', () => {
+  const x = (ciState: PrExchange['ciState']) => ({ ciState }) as PrExchange
+  const NOW = Date.parse('2026-10-01T12:00:00Z')
+
+  it('reuses a settled exchange the PR has not moved since', () => {
+    expect(canReuseExchange({ updatedAt: 't1', x: x('pass'), at: NOW - 60_000 }, 't1', NOW)).toBe(true)
+  })
+
+  it('reads it again once the PR moved', () => {
+    expect(canReuseExchange({ updatedAt: 't1', x: x('pass'), at: NOW }, 't2', NOW)).toBe(false)
+  })
+
+  it('reads it again while CI runs or has not started, since its result does not bump the PR', () => {
+    expect(canReuseExchange({ updatedAt: 't1', x: x('pending'), at: NOW }, 't1', NOW)).toBe(false)
+    expect(canReuseExchange({ updatedAt: 't1', x: x(null), at: NOW }, 't1', NOW)).toBe(false)
+  })
+
+  it('reads it again past half an hour, for a base branch that moved under the PR', () => {
+    expect(canReuseExchange({ updatedAt: 't1', x: x('fail'), at: NOW - 31 * 60_000 }, 't1', NOW)).toBe(false)
+  })
+
+  it('reads it when the PR is unknown to the pulse', () => {
+    expect(canReuseExchange({ updatedAt: '', x: x('pass'), at: NOW }, undefined, NOW)).toBe(false)
+    expect(canReuseExchange(undefined, 't1', NOW)).toBe(false)
+  })
+})
+
+describe('syncAll — a repo that did not change', () => {
+  let n = 0
+  let repo = ''
+  const pr = () => ({
+    number: 2,
+    title: 'Their PR',
+    url: `https://github.com/${repo}/pull/2`,
+    headRefName: 'their-branch',
+    author: { login: 'someone' },
+    createdAt: '2026-09-15T13:54:23Z',
+    isDraft: false,
+    reviewRequests: [],
+    latestReviews: [],
+  })
+  const exchange = (ciState: PrExchange['ciState']) =>
+    ({ count: 0, ciState, ciChecks: null, conflicts: false, reviews: [], comments: [], commits: [] }) as PrExchange
+  const pulse = (etag: string, updatedAt: string) => ({ etag, updatedAt: new Map([[2, updatedAt]]) })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    repo = `owner/pulse${++n}` // the pass caches per repo for the app's lifetime: a fresh one per test
+    vi.mocked(getConfig).mockResolvedValue({
+      githubUser: 'me',
+      repos: [{ repo, path: '/clone' }],
+      githubName: 'Me Name',
+      reviewButtons: [],
+      prButtons: [],
+      reviewMergeHook: { enabled: false, prompt: '' },
+      prMergeHook: { enabled: false, prompt: '' },
+      animations: true,
+      logging: false,
+      captureReviews: false,
+      openInBrowser: false,
+      notifications: true,
+      mergeMethod: 'merge',
+      streamEnabled: false,
+      streamAutoRun: false,
+      streamTemplates: [],
+      streamWatchers: [],
+      agent: { cli: 'claude', fastModel: '', strongModel: '', workModel: '' },
+    })
+    vi.mocked(allTasks).mockResolvedValue([
+      task({ id: `${repo}#2`, repo, prNumber: 2, branch: 'their-branch', stage: 'reviewing' }),
+    ])
+    vi.mocked(listOpenPrs).mockResolvedValue([pr()])
+    vi.mocked(listCommentedByMe).mockResolvedValue(new Set())
+    vi.mocked(scanRepoSessions).mockResolvedValue(new Map())
+    vi.mocked(scanReviewFiles).mockResolvedValue(new Map())
+  })
+
+  afterEach(() => {
+    // back to the factory's implementations, for whatever describe comes next
+    vi.mocked(fetchOpenPrPulse).mockReset()
+    vi.mocked(fetchPrExchange).mockReset()
+  })
+
+  it('reuses the PR listing on a 304 and still boards its PRs', async () => {
+    vi.mocked(fetchOpenPrPulse).mockResolvedValueOnce(pulse('e1', 't1')).mockResolvedValueOnce(null)
+    vi.mocked(fetchPrExchange).mockResolvedValue(exchange('pass'))
+
+    await syncAll()
+    await syncAll()
+
+    expect(fetchOpenPrPulse).toHaveBeenLastCalledWith(repo, 'e1')
+    expect(listOpenPrs).toHaveBeenCalledTimes(1)
+    expect(listCommentedByMe).toHaveBeenCalledTimes(1)
+    expect(upsertPr).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not read the exchange of a PR that has not moved', async () => {
+    vi.mocked(fetchOpenPrPulse).mockResolvedValueOnce(pulse('e1', 't1')).mockResolvedValueOnce(null)
+    vi.mocked(fetchPrExchange).mockResolvedValue(exchange('pass'))
+
+    await syncAll()
+    await syncAll()
+
+    expect(fetchPrExchange).toHaveBeenCalledTimes(1)
+    expect(setActivity).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads it again once the PR moved', async () => {
+    vi.mocked(fetchOpenPrPulse).mockResolvedValueOnce(pulse('e1', 't1')).mockResolvedValueOnce(pulse('e2', 't2'))
+    vi.mocked(fetchPrExchange).mockResolvedValue(exchange('pass'))
+
+    await syncAll()
+    await syncAll()
+
+    expect(listOpenPrs).toHaveBeenCalledTimes(2)
+    expect(fetchPrExchange).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps reading a PR whose CI is still running', async () => {
+    vi.mocked(fetchOpenPrPulse).mockResolvedValueOnce(pulse('e1', 't1')).mockResolvedValueOnce(null)
+    vi.mocked(fetchPrExchange).mockResolvedValue(exchange('pending'))
+
+    await syncAll()
+    await syncAll()
+
+    expect(fetchPrExchange).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads the repo in full when the pulse fails', async () => {
+    vi.mocked(fetchOpenPrPulse).mockResolvedValueOnce(pulse('e1', 't1')).mockRejectedValueOnce(new Error('gh: 502'))
+    vi.mocked(fetchPrExchange).mockResolvedValue(exchange('pass'))
+
+    await syncAll()
+    await syncAll()
+
+    expect(listOpenPrs).toHaveBeenCalledTimes(2)
+    expect(upsertPr).toHaveBeenCalledTimes(2)
   })
 })

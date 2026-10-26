@@ -29,6 +29,47 @@ const gh = async (args: string[], cwd?: string): Promise<string> => {
   return out.stdout
 }
 
+// `gh api -i` output split into status/ETag/body. A 304 makes gh exit 1, so the caller reads the
+// status line instead of the exit code.
+export const parseConditional = (stdout: string): { status: number; etag: string | null; body: string } => {
+  const split = stdout.search(/\r?\n\r?\n/)
+  const head = split < 0 ? stdout : stdout.slice(0, split)
+  const body = split < 0 ? '' : stdout.slice(split).trim()
+  const status = Number(/^HTTP\/[\d.]+ (\d{3})/.exec(head)?.[1] ?? 0)
+  // GitHub answers a weak W/"…" with a strong "…" on the 304: either matches, so keep what it sent
+  const etag = /^etag: *(.+?)\r?$/im.exec(head)?.[1] ?? null
+  return { status, etag, body }
+}
+
+// A REST GET sent with If-None-Match. null = 304, nothing changed since `etag` (a 304 costs no rate limit).
+const ghConditional = async (
+  path: string,
+  etag: string | null,
+): Promise<{ etag: string | null; body: string } | null> => {
+  const args = ['api', '-i', ...(etag ? ['-H', `If-None-Match: ${etag}`] : []), path]
+  const label = `gh ${args.join(' ')}`
+  const out = await Command.create('gh', args)
+    .execute()
+    .catch((e) => fail(`${label} could not start: ${errText(e)}`))
+  const res = parseConditional(out.stdout)
+  if (res.status === 304) return null
+  if (out.code !== 0 || res.status !== 200) fail(`${label} failed: ${out.stderr.trim()}`)
+  return { etag: res.etag, body: res.body }
+}
+
+// Open PRs, most recently updated first: their number -> updated_at, behind the ETag of the last answer.
+// A push, review or comment bumps a PR's updated_at, and a close drops it from the list, so a 304
+// (null) means none of that happened in the repo since. CI results don't bump it.
+export const fetchOpenPrPulse = async (
+  repo: string,
+  etag: string | null,
+): Promise<{ etag: string | null; updatedAt: Map<number, string> } | null> => {
+  const res = await ghConditional(`repos/${repo}/pulls?state=open&sort=updated&direction=desc&per_page=100`, etag)
+  if (!res) return null
+  const prs = JSON.parse(res.body) as { number: number; updated_at: string }[]
+  return { etag: res.etag, updatedAt: new Map(prs.map((p) => [p.number, p.updated_at])) }
+}
+
 // owner/repo derived from the clone's git origin remote
 export const repoFromPath = async (path: string): Promise<string> =>
   (await gh(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], path)).trim()
