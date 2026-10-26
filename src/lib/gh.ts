@@ -320,6 +320,10 @@ export const fetchPrExchange = async (repo: string, prNumber: number, me: string
   }
 }
 
+// The PR's whole unified diff, read only when the panel's Diff view is opened
+export const fetchPrDiff = (repo: string, prNumber: number): Promise<string> =>
+  gh(['pr', 'diff', String(prNumber), '--repo', repo, '--color', 'never'])
+
 // Every check of the PR's head commit, for the card panel's checks box
 export const fetchChecks = async (repo: string, prNumber: number): Promise<CheckItem[]> =>
   checkList(

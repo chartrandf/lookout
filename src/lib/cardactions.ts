@@ -19,9 +19,25 @@ export const snoozeAction = (snoozed: boolean): CardAction =>
 
 export const cardActions = (c: CardActionContext): CardAction[] => [
   snoozeAction(c.snoozed),
-  ...(c.hasSession ? [{ id: 'resume', label: 'Resume session in Ghostty' } as const] : []),
-  { id: 'open-browser', label: 'Open in browser' },
+  ...(c.hasSession
+    ? [
+        {
+          id: 'resume',
+          label: 'Resume session in Ghostty',
+          title: 'Reopen the last Claude session in a terminal',
+        } as const,
+      ]
+    : []),
+  { id: 'open-browser', label: 'Open in browser', title: 'Open the PR on GitHub' },
   // my own PR stays on its board until it merges; only a review card can be dropped
-  ...(c.isPr ? [] : [{ id: 'remove', label: 'Remove from board' } as const]),
-  ...(c.running ? [{ id: 'kill', label: 'Kill run', danger: true } as const] : []),
+  ...(c.isPr
+    ? []
+    : [
+        {
+          id: 'remove',
+          label: 'Remove from board',
+          title: 'Back to Discovery, until I say something new on the PR',
+        } as const,
+      ]),
+  ...(c.running ? [{ id: 'kill', label: 'Kill run', title: 'Stop the run in flight', danger: true } as const] : []),
 ]

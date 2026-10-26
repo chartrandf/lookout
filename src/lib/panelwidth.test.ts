@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isTextField, stepPanelWidth } from './panelwidth'
+import { atLeastRatio, isTextField, stepPanelWidth } from './panelwidth'
 
 describe('stepPanelWidth', () => {
   it('grows by 15% of the viewport', () => {
@@ -39,5 +39,15 @@ describe('isTextField', () => {
   it('ignores other elements and null', () => {
     expect(isTextField(el('BUTTON'))).toBe(false)
     expect(isTextField(null)).toBe(false)
+  })
+})
+
+describe('atLeastRatio', () => {
+  it('widens a narrower panel to the ratio', () => {
+    expect(atLeastRatio(440, 0.5, 1600)).toBe(800)
+  })
+
+  it('leaves a panel already wider as it is', () => {
+    expect(atLeastRatio(1000, 0.5, 1600)).toBe(1000)
   })
 })

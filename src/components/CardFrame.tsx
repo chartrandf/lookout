@@ -87,14 +87,16 @@ export const CardFrame = ({
         <span className="truncate font-medium text-deck-300">{author}</span>
         {!wide && (
           <span className="ml-auto shrink-0">
-            {repo.split('/')[1]}#{prNumber}
+            {repo.split('/')[1]}
+            <span className="font-bold text-deck-300">#{prNumber}</span>
           </span>
         )}
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-deck-400">{children}</div>
       {wide && (
         <p className="mt-1.5 text-right text-xs text-deck-400">
-          {repo.split('/')[1]}#{prNumber}
+          {repo.split('/')[1]}
+          <span className="font-bold text-deck-300">#{prNumber}</span>
         </p>
       )}
     </div>

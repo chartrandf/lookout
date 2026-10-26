@@ -6,6 +6,9 @@ const MAX_RATIO = 0.9
 export const stepPanelWidth = (width: number, dir: 1 | -1, viewport: number) =>
   Math.min(Math.max(width + dir * viewport * STEP, MIN_PX), viewport * MAX_RATIO)
 
+// Widen to `ratio` of the viewport when narrower; a panel already wider stays as the user dragged it
+export const atLeastRatio = (width: number, ratio: number, viewport: number) => Math.max(width, viewport * ratio)
+
 // true when typing there, so shortcuts should leave the key alone (e.g. Cmd+← moves the caret). An empty
 // field has no caret to move, so the shortcut still works from the autofocused chat input.
 export const isTextField = (el: Element | null) => {

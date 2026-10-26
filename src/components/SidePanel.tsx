@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { isTextField, stepPanelWidth } from '../lib/panelwidth'
+import { atLeastRatio, isTextField, stepPanelWidth } from '../lib/panelwidth'
 import { Tip } from './Tip'
 
-type SidePanelApi = { close: () => void } // animated close, shared by the ✕, backdrop, and Esc
+type SidePanelApi = {
+  close: () => void // animated close, shared by the ✕, backdrop, and Esc
+  widen: (ratio: number) => void // at least this share of the window (an inner view that needs room)
+}
 
 type Props = {
   onClose: () => void
@@ -14,7 +17,7 @@ type Props = {
 }
 
 const DEFAULT_MIN = 440
-const defaultWidth = () => Math.min(Math.max(window.innerWidth * 0.45, 440), 860)
+const defaultWidth = () => Math.max(window.innerWidth * 0.5, 440) // half the window
 
 // Right-side slide-in drawer: backdrop blur, slide transition, Esc-to-close and drag-to-resize width.
 // The chrome shared by every panel; callers render their own header/body via the children render-prop.
@@ -103,7 +106,7 @@ export const SidePanel = ({ onClose, children, initialWidth, minWidth = DEFAULT_
             className="absolute inset-y-0 left-0 z-40 w-1.5 -translate-x-1/2 cursor-col-resize bg-transparent hover:bg-grass-500/40"
           />
         </Tip>
-        {children({ close })}
+        {children({ close, widen: (ratio) => setWidth((w) => atLeastRatio(w, ratio, window.innerWidth)) })}
       </div>
     </>
   )

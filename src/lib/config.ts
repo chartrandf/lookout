@@ -98,6 +98,17 @@ export const getConfig = async (): Promise<Config> => {
   }
 }
 
+// The diff view's layout, as last picked there. Kept out of Config: remembered, not a setting.
+export type DiffLayout = 'unified' | 'split'
+
+export const getDiffLayout = async (): Promise<DiffLayout> =>
+  (await (await getStore()).get<DiffLayout>('diffLayout')) === 'split' ? 'split' : 'unified'
+
+export const setDiffLayout = async (layout: DiffLayout) => {
+  const s = await getStore()
+  await s.set('diffLayout', layout)
+}
+
 // Stream notification digest bookkeeping (streamdigest.ts): when I was last on the board, and when a
 // digest last went out. Kept out of Config — state, not a setting.
 export const getStreamMarks = async (): Promise<{ seenAt: string | null; notifiedAt: string | null }> => {
