@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.2 — 2026-10-28
+
+- [NEW] Lazy PR diff view, header actions, wider panel
+- [ENHANCED] Skip unchanged repos and PRs via ETag pulse
+
 ## v0.5.0 — 2026-10-25
 
 - [NEW] Opencode CLI as agent alternative
