@@ -7,7 +7,7 @@ vi.mock('./db', () => ({
 }))
 vi.mock('./gh', () => ({ fetchPrTimeline: vi.fn() }))
 vi.mock('./log', () => ({ logError: vi.fn(), logInfo: vi.fn() }))
-vi.mock('./sessions', () => ({ sessionsForBranch: vi.fn() }))
+vi.mock('./sessions', () => ({ sessionsForBranch: vi.fn(), opencodeSessions: vi.fn(async () => []) }))
 vi.mock('./alerts', () => ({ reviewFileTs: vi.fn() }))
 vi.mock('./prboard', () => ({ isBot: vi.fn(), reviewFlavor: vi.fn() }))
 
@@ -163,6 +163,69 @@ describe('buildFeed', () => {
     expect(feed).toMatchObject([
       { icon: 'comment-discussion', text: 'chat: still needed?', sessionId: 'c1', mine: true },
     ])
+  })
+
+  it('shows a recorded opencode session the transcript scan cannot read', async () => {
+    const { sessionsForBranch, opencodeSessions } = await import('./sessions')
+    const { fetchPrTimeline } = await import('./gh')
+    const { capturedReviewsForTask } = await import('./db')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([])
+    vi.mocked(capturedReviewsForTask).mockResolvedValue([])
+    vi.mocked(sessionsForBranch).mockResolvedValue([])
+    vi.mocked(opencodeSessions).mockImplementation(async (_, ids) =>
+      ids.includes('ses_1')
+        ? [{ sessionId: 'ses_1', ts: '2026-01-01T10:00:00.000Z', title: 'PR #4 review comment status' }]
+        : [],
+    )
+    const { buildFeed } = await import('./feed')
+    const task = {
+      id: 'a/b#1',
+      repo: 'a/b',
+      prNumber: 1,
+      branch: 'b',
+      repoPath: '/r',
+      reviewFiles: [],
+      sessionIds: ['ses_1'],
+    }
+    const { feed } = await buildFeed(task as never, 'me')
+    expect(feed).toMatchObject([
+      { icon: 'dependabot', text: 'started PR #4 review comment status', sessionId: 'ses_1', mine: true },
+    ])
+    expect(opencodeSessions).toHaveBeenCalledWith('/r', ['ses_1'])
+  })
+
+  it('leaves out a recorded session the transcript scan already found', async () => {
+    const { sessionsForBranch, opencodeSessions } = await import('./sessions')
+    const { fetchPrTimeline } = await import('./gh')
+    const { capturedReviewsForTask } = await import('./db')
+    vi.mocked(fetchPrTimeline).mockResolvedValue([])
+    vi.mocked(capturedReviewsForTask).mockResolvedValue([])
+    vi.mocked(sessionsForBranch).mockResolvedValue([
+      {
+        sessionId: 'ses_1',
+        command: 'do-review',
+        branch: 'b',
+        prNumber: 1,
+        ts: '2026-01-01T10:00:00Z',
+        cwd: '/r',
+        path: '/p',
+      },
+    ])
+    vi.mocked(opencodeSessions).mockResolvedValue([])
+    const { buildFeed } = await import('./feed')
+    const task = {
+      id: 'a/b#1',
+      repo: 'a/b',
+      prNumber: 1,
+      branch: 'b',
+      repoPath: '/r',
+      reviewFiles: [],
+      sessionIds: ['ses_1'],
+    }
+    const { feed } = await buildFeed(task as never, 'me')
+    expect(feed.filter((e) => e.sessionId === 'ses_1')).toHaveLength(1)
+    expect(feed[0]).toMatchObject({ text: 'started /do-review session' })
+    expect(opencodeSessions).toHaveBeenCalledWith('/r', [])
   })
 })
 

@@ -121,10 +121,42 @@ describe('opencodeParser', () => {
     expect(events).toEqual([
       { type: 'init', sessionId: 'ses_1' },
       { type: 'text', text: 'Looking' },
-      { type: 'tool', name: 'bash', detail: 'gh pr view 3' },
+      { type: 'tool', name: 'Bash', detail: 'gh pr view 3' },
       { type: 'text', text: 'Done.' },
       { type: 'result', text: 'Done.', isError: false },
     ])
+  })
+
+  it('names the file or command a tool part talks about, like Claude does', () => {
+    const events: StreamEvent[] = []
+    const parse = opencodeParser((e) => events.push(e))
+    const tool = (id: string, name: string, input: object) =>
+      line({ type: 'tool_use', part: { partID: id, tool: name, state: { status: 'completed', input, title: name } } })
+    parse(tool('p1', 'read', { path: '/r/package.json', limit: 20 }))
+    parse(tool('p2', 'shell', { command: 'gh pr view 4' }))
+    parse(tool('p3', 'glob', { pattern: '**/*.ts' }))
+    parse(tool('p4', 'edit', { path: '/r/src/a.ts', oldString: 'a', newString: 'b' }))
+    expect(events).toEqual([
+      { type: 'init', sessionId: 'ses_1' },
+      { type: 'tool', name: 'Read', detail: '/r/package.json' },
+      { type: 'tool', name: 'Bash', detail: 'gh pr view 4' },
+      { type: 'tool', name: 'Glob', detail: '**/*.ts' },
+      { type: 'tool', name: 'Edit', detail: '/r/src/a.ts' },
+    ])
+  })
+
+  it('shows a tool part once, however many state updates it sends', () => {
+    const events: StreamEvent[] = []
+    const parse = opencodeParser((e) => events.push(e))
+    const update = (status: string) =>
+      line({
+        type: 'tool_use',
+        part: { partID: 'p1', tool: 'shell', state: { status, input: { command: 'pnpm test' }, title: 'shell' } },
+      })
+    parse(update('pending'))
+    parse(update('running'))
+    parse(update('completed'))
+    expect(events.filter((e) => e.type === 'tool')).toEqual([{ type: 'tool', name: 'Bash', detail: 'pnpm test' }])
   })
 
   it('reports an API error as an error result', () => {

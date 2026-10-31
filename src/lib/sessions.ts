@@ -1,7 +1,10 @@
 import { homeDir, join } from '@tauri-apps/api/path'
-import { exists, open, readDir } from '@tauri-apps/plugin-fs'
+import { exists, open, readDir, readTextFile } from '@tauri-apps/plugin-fs'
+import { Command } from '@tauri-apps/plugin-shell'
 import { parseChatPrompt } from './chat'
-import { type CaptureKind, COMMAND_RE, captureKindOf } from './transcript'
+import { opencodeTranscriptLines } from './opencode'
+import type { RunLine } from './runs'
+import { type CaptureKind, COMMAND_RE, captureKindOf, transcriptLines } from './transcript'
 import { listWorktrees } from './worktrees'
 
 export type ReviewSession = {
@@ -27,6 +30,48 @@ const sessionDir = async (checkout: string) => join(await homeDir(), '.claude', 
 // The transcript Claude Code writes for a session started in `checkout`
 export const transcriptPath = async (checkout: string, sessionId: string) =>
   join(await sessionDir(checkout), `${sessionId}.jsonl`)
+
+// opencode's session ids start with `ses_`; Claude's are UUIDs. Reading a session with the CLI that
+// wrote it means a history bubble still replays after switching the agent in Settings.
+const isOpencodeSession = (sessionId: string) => sessionId.startsWith('ses_')
+
+// The lines a stored session shows in the terminal: Claude writes a JSONL transcript on disk, while
+// opencode keeps its sessions in its own store and prints one as JSON on demand. opencode finds the
+// session by id alone, so the checkout is only needed for the Claude path.
+export const sessionLines = async (checkout: string, sessionId: string): Promise<RunLine[]> => {
+  if (isOpencodeSession(sessionId)) {
+    const out = await Command.create('opencode', ['session', 'export', sessionId]).execute()
+    if (out.code !== 0) throw new Error(out.stderr?.trim() || `opencode session export exited ${out.code}`)
+    return opencodeTranscriptLines(JSON.parse(out.stdout))
+  }
+  return transcriptLines((await readTextFile(await transcriptPath(checkout, sessionId))).split('\n'))
+}
+
+export type ListedSession = { sessionId: string; ts: string; title: string }
+
+// The recorded opencode sessions its own CLI still knows about, with the start time and title the
+// card's history shows. `session list` is per project, so the clone's path finds the sessions of its
+// worktrees too; Claude ids (UUIDs) are skipped, and a card that ran none costs no process.
+export const opencodeSessions = async (repoPath: string, sessionIds: string[]): Promise<ListedSession[]> => {
+  const wanted = new Set(sessionIds.filter(isOpencodeSession))
+  if (wanted.size === 0) return []
+  const out = await Command.create('opencode', ['session', 'list', '--format', 'json', '--max-count', '1000'], {
+    cwd: repoPath,
+  }).execute()
+  if (out.code !== 0) throw new Error(out.stderr?.trim() || `opencode session list exited ${out.code}`)
+  const rows = JSON.parse(out.stdout) as unknown
+  if (!Array.isArray(rows)) return []
+  return (rows as { id?: unknown; created?: unknown; title?: unknown }[])
+    .filter((r) => typeof r.id === 'string' && wanted.has(r.id) && typeof r.created === 'number')
+    .map((r) => ({
+      sessionId: r.id as string,
+      ts: new Date(r.created as number).toISOString(),
+      // opencode's placeholder title ("New session - <date>") names nothing: the history says
+      // "started an opencode session" instead
+      title: typeof r.title === 'string' && !/^new session\b/i.test(r.title.trim()) ? r.title.trim() : '',
+    }))
+    .sort((a, b) => a.ts.localeCompare(b.ts))
+}
 
 const TS_RE = /"timestamp":"([^"]+)"/
 

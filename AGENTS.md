@@ -74,3 +74,7 @@ The script (`scripts/release.mjs`) will:
 - TypeScript/React, Tailwind CSS
 - Follow existing patterns in codebase
 - Biome is configured (`@biomejs/biome` in devDependencies)
+
+## Tests
+- Never put real data in tests, fixtures or snapshots: no real session ids, tokens, API keys, passwords, emails, private file paths or repository contents. Copy the *shape* of a real payload, then replace its values with made-up ones.
+- Check new tests for this before committing or opening a PR.

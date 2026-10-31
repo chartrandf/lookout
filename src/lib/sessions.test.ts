@@ -17,6 +17,11 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
     [...files.keys()]
       .filter((f) => f.startsWith(`${dir}/`))
       .map((f) => ({ name: f.slice(dir.length + 1), isFile: true, isDirectory: false })),
+  readTextFile: async (p: string) => {
+    const lines = files.get(p)
+    if (!lines) throw new Error(`ENOENT ${p}`)
+    return lines.map((l) => `${l}\n`).join('')
+  },
   open: async (p: string) => {
     const lines = files.get(p)
     if (!lines) throw new Error(`ENOENT ${p}`)
@@ -41,6 +46,10 @@ vi.mock('@tauri-apps/plugin-fs', () => ({
 const worktrees = vi.hoisted(() => ({ listWorktrees: vi.fn() }))
 vi.mock('./worktrees', () => worktrees)
 
+// sessions.ts reads opencode sessions through the CLI; only the opencode test below calls it
+const shell = vi.hoisted(() => ({ create: vi.fn() }))
+vi.mock('@tauri-apps/plugin-shell', () => ({ Command: { create: shell.create } }))
+
 const REPO = '/Projects/repo'
 const PERF = '/Projects/repo-perf'
 const dirFor = (checkout: string) => `/home/.claude/projects/${checkout.replace(/[^a-zA-Z0-9]/g, '-')}`
@@ -55,6 +64,7 @@ const load = async () => {
 beforeEach(() => {
   files.clear()
   openHandles.clear()
+  shell.create.mockReset()
   worktrees.listWorktrees.mockReset()
   worktrees.listWorktrees.mockResolvedValue([
     { path: REPO, branch: 'main-work' },
@@ -209,6 +219,112 @@ describe('a chat started from a card', () => {
     expect(await isChatSession(REPO, 'chat')).toBe(true)
     expect(await isChatSession(REPO, 's1')).toBe(false)
     expect(await isChatSession(REPO, 'gone')).toBe(false)
+  })
+})
+
+describe('sessionLines', () => {
+  it('replays a Claude session from its JSONL transcript on disk', async () => {
+    files.set(`${dirFor(REPO)}/s1.jsonl`, [
+      JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: '<command-name>/do-review</command-name> <command-args>main-work</command-args>',
+        },
+      }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'text', text: 'the review' }] },
+      }),
+    ])
+    const { sessionLines } = await load()
+    expect(await sessionLines(REPO, 's1')).toEqual([
+      { kind: 'user', text: '/do-review main-work' },
+      { kind: 'text', text: 'the review' },
+    ])
+  })
+
+  it('replays an opencode session through `opencode session export`', async () => {
+    const { sessionLines } = await load()
+    shell.create.mockImplementation((_: string, args: string[]) => ({
+      execute: async () =>
+        args[0] === 'session'
+          ? {
+              code: 0,
+              stdout: JSON.stringify({
+                messages: [
+                  { type: 'user', text: '"hi"' },
+                  {
+                    type: 'assistant',
+                    content: [{ type: 'tool', name: 'read', state: { input: { path: '/r/a.ts' } } }],
+                  },
+                ],
+              }),
+              stderr: '',
+            }
+          : { code: 1, stdout: '', stderr: '' },
+    }))
+    // the id's `ses_` prefix picks the CLI that wrote it, even with Claude selected in Settings;
+    // opencode also finds the session by id alone, so the checkout it ran in is not needed
+    expect(await sessionLines('/anywhere', 'ses_1')).toEqual([
+      { kind: 'user', text: 'hi' },
+      { kind: 'tool', text: 'Read /r/a.ts' },
+    ])
+    expect(shell.create).toHaveBeenCalledWith('opencode', ['session', 'export', 'ses_1'])
+  })
+
+  it('fails loudly when opencode cannot export the session', async () => {
+    const { sessionLines } = await load()
+    shell.create.mockImplementation((_: string, args: string[]) => ({
+      execute: async () =>
+        args[0] === 'session'
+          ? { code: 1, stdout: '', stderr: 'session not found' }
+          : { code: 1, stdout: '', stderr: '' },
+    }))
+    await expect(sessionLines(REPO, 'ses_gone')).rejects.toThrow('session not found')
+  })
+})
+
+describe('opencodeSessions', () => {
+  const listed = (rows: object) =>
+    shell.create.mockImplementation(() => ({
+      execute: async () => ({ code: 0, stdout: JSON.stringify(rows), stderr: '' }),
+    }))
+
+  it('names and dates the recorded sessions its CLI still knows', async () => {
+    listed([
+      { id: 'ses_1', created: Date.UTC(2026, 0, 1, 10), title: 'PR #4 review comment status' },
+      { id: 'ses_2', created: Date.UTC(2026, 0, 2, 10), title: '  second  ' },
+      { id: 'ses_3', created: Date.UTC(2026, 0, 3, 10), title: 'New session - 2026-10-28T00:47:55.373Z' },
+      { id: 'not-recorded', created: Date.UTC(2026, 0, 3, 10), title: 'elsewhere' },
+    ])
+    const { opencodeSessions } = await load()
+    // Claude ids are UUIDs: no opencode session among them, so the CLI is not asked about them
+    expect(await opencodeSessions(REPO, ['ses_2', '0b7d7c0e-1f2a-4b3c-8d9e-0f1a2b3c4d5e', 'ses_1', 'ses_3'])).toEqual([
+      { sessionId: 'ses_1', ts: '2026-01-01T10:00:00.000Z', title: 'PR #4 review comment status' },
+      { sessionId: 'ses_2', ts: '2026-01-02T10:00:00.000Z', title: 'second' },
+      // a placeholder title names nothing: the history falls back to "an opencode session"
+      { sessionId: 'ses_3', ts: '2026-01-03T10:00:00.000Z', title: '' },
+    ])
+    expect(shell.create).toHaveBeenCalledWith(
+      'opencode',
+      ['session', 'list', '--format', 'json', '--max-count', '1000'],
+      { cwd: REPO },
+    )
+  })
+
+  it('asks nothing when the card recorded no opencode session', async () => {
+    const { opencodeSessions } = await load()
+    expect(await opencodeSessions(REPO, ['0b7d7c0e-1f2a-4b3c-8d9e-0f1a2b3c4d5e'])).toEqual([])
+    expect(shell.create).not.toHaveBeenCalled()
+  })
+
+  it('fails loudly when the CLI cannot list them', async () => {
+    shell.create.mockImplementation(() => ({
+      execute: async () => ({ code: 1, stdout: '', stderr: 'no server' }),
+    }))
+    const { opencodeSessions } = await load()
+    await expect(opencodeSessions(REPO, ['ses_1'])).rejects.toThrow('no server')
   })
 })
 

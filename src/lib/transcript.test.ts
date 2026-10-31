@@ -6,6 +6,7 @@ import {
   promptCaptureKind,
   reviewFromLines,
   runCaptureKind,
+  toolDetail,
   transcriptLines,
 } from './transcript'
 
@@ -172,6 +173,19 @@ describe('runCaptureKind', () => {
 
   it('leaves a reply with no button to Haiku', () => {
     expect(runCaptureKind(undefined)).toBeNull()
+  })
+})
+
+describe('toolDetail', () => {
+  it("reads Claude's keys and opencode's", () => {
+    expect(toolDetail({ command: 'pnpm test' })).toBe('pnpm test')
+    expect(toolDetail({ file_path: 'src/a.ts' })).toBe('src/a.ts')
+    expect(toolDetail({ path: '/r/package.json', limit: 20 })).toBe('/r/package.json')
+    expect(toolDetail({ filePath: 'src/a.ts' })).toBe('src/a.ts')
+    expect(toolDetail({ pattern: '**/*.ts' })).toBe('**/*.ts')
+    expect(toolDetail({ pattern: 'foo', path: 'src' })).toBe('foo') // grep's search, not its directory
+    expect(toolDetail({ url: 'https://x.dev' })).toBe('https://x.dev')
+    expect(toolDetail({})).toBe('')
   })
 })
 

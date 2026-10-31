@@ -6,7 +6,7 @@ import { fetchPrTimeline, type GhTimelineEvent } from './gh'
 import type { IconName } from './icons'
 import { logError, logInfo } from './log'
 import { isBot, reviewFlavor } from './prboard'
-import { sessionsForBranch } from './sessions'
+import { opencodeSessions, sessionsForBranch } from './sessions'
 
 export type FeedEvent = {
   ts: string
@@ -310,6 +310,24 @@ export const buildFeed = async (
           avatar: { login: me },
           sessionId: s.sessionId,
         })
+    // A run of a CLI whose store Lookout can't scan (opencode) still leaves its id on the card
+    // (`session_ids`), and that CLI can name and date it. Without this the card's history loses the
+    // session as soon as the panel closes: only Claude's on-disk transcripts were ever read.
+    const known = new Set(sessions.map((s) => s.sessionId))
+    const recorded = (task.sessionIds ?? []).filter((id) => !known.has(id))
+    for (const s of await opencodeSessions(task.repoPath, recorded).catch((e) => {
+      logError('feed', e, `opencode sessions for ${task.branch} in ${task.repoPath}`)
+      return []
+    }))
+      events.push({
+        ts: s.ts,
+        icon: 'dependabot',
+        actor: 'you',
+        text: `started ${s.title || 'an opencode session'}`,
+        mine: true,
+        avatar: { login: me },
+        sessionId: s.sessionId,
+      })
   }
 
   events.push(...(await reportEvents(task, me)))

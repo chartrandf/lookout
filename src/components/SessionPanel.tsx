@@ -17,10 +17,9 @@ import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
-import { sessionCwd, transcriptPath } from '../lib/sessions'
+import { sessionCwd, sessionLines } from '../lib/sessions'
 import { STAGES } from '../lib/stages'
 import { messageTime } from '../lib/time'
-import { transcriptLines } from '../lib/transcript'
 import type { ActionButton, MergeMethod, MergePreference, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
 import { BackButton } from './BackButton'
@@ -937,7 +936,7 @@ export const SessionPanel = ({
     transcriptFollowRef.current = true
     let lines: RunLine[]
     try {
-      lines = transcriptLines((await readTextFile(await transcriptPath(await checkoutFor(id), id))).split('\n'))
+      lines = await sessionLines(await checkoutFor(id), id)
     } catch {
       lines = [{ kind: 'error', text: "could not read this session's transcript" }]
     }
@@ -956,9 +955,7 @@ export const SessionPanel = ({
     setTermOpen(true)
     followRef.current = true
     checkoutFor(id)
-      .then((cwd) => transcriptPath(cwd, id))
-      .then(readTextFile)
-      .then((text) => transcriptLines(text.split('\n')))
+      .then((cwd) => sessionLines(cwd, id))
       .catch(() => []) // nothing stored: the terminal says so
       .then((lines) => live && setPicked({ id, lines }))
     return () => {

@@ -1,5 +1,6 @@
 import { type Child, Command } from '@tauri-apps/plugin-shell'
 import { REVIEW_TOOLS, type StreamEvent, spawnClaude } from './claude'
+import { opencodeToolName } from './opencode'
 import { toolDetail } from './transcript'
 
 // Which coding-agent CLI Lookout drives (Settings → Agent). Claude Code by default; opencode as the
@@ -165,6 +166,7 @@ export const opencodePermission = (allowed: string, denied = ''): Permission => 
 export const opencodeParser = (onEvent: (e: StreamEvent) => void) => {
   let session: string | null = null
   let answer = '' // the text since the last step started: the final step's is the run's result
+  const tools = new Set<string>() // a tool part is re-sent as it moves pending → running → completed
   return (line: string) => {
     if (!line.trim()) return
     // biome-ignore lint/suspicious/noExplicitAny: untyped opencode event
@@ -183,9 +185,23 @@ export const opencodeParser = (onEvent: (e: StreamEvent) => void) => {
     else if (msg.type === 'text' && part.text) {
       answer = answer ? `${answer}\n\n${part.text}` : part.text
       onEvent({ type: 'text', text: part.text })
-    } else if (msg.type === 'tool_use')
-      onEvent({ type: 'tool', name: part.tool ?? '', detail: part.state?.title ?? toolDetail(part.state?.input ?? {}) })
-    else if (msg.type === 'step_finish' && part.reason !== 'tool-calls')
+    } else if (msg.type === 'tool_use') {
+      const state = part.state ?? {}
+      if (state.status === 'pending') return // no input parsed yet: wait for the first real update
+      const id = part.partID ?? part.id
+      if (typeof id === 'string') {
+        if (tools.has(id)) return
+        tools.add(id)
+      }
+      const tool = String(part.tool ?? '')
+      // opencode's `title` is the tool's own name ("read", "shell"); the input says what it is about
+      const title = typeof state.title === 'string' ? state.title : ''
+      onEvent({
+        type: 'tool',
+        name: opencodeToolName(tool),
+        detail: toolDetail((state.input ?? {}) as Record<string, unknown>) || (title === tool ? '' : title),
+      })
+    } else if (msg.type === 'step_finish' && part.reason !== 'tool-calls')
       onEvent({ type: 'result', text: answer, isError: false })
     else if (msg.type === 'error')
       onEvent({ type: 'result', text: msg.error?.data?.message ?? msg.error?.name ?? 'opencode failed', isError: true })

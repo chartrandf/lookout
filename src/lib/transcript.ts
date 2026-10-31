@@ -147,9 +147,19 @@ export const reviewFromLines = (lines: string[]): CaptureResult => {
   return { kind: 'captured', body, ts: turn.ts }
 }
 
-// What a tool call reads as on one terminal line: the command, file or search it was about
+// What a tool call reads as on one terminal line: the command, file or search it was about. Claude
+// spells the file `file_path` and opencode `path`/`filePath`, so both are read here.
 export const toolDetail = (input: Record<string, unknown>): string =>
-  String(input.command ?? input.file_path ?? input.description ?? input.pattern ?? '')
+  String(
+    input.command ??
+      input.file_path ??
+      input.filePath ??
+      input.pattern ?? // grep may also carry a path: the search reads better than the directory
+      input.path ??
+      input.description ??
+      input.url ??
+      '',
+  )
 
 // A human turn as typed: a slash command shows as `/name args`, the CLI's own wrappers (command
 // output, the skill text it injects) as nothing
