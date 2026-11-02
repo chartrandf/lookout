@@ -15,6 +15,7 @@ import type { IconName } from '../lib/icons'
 import { defaultAuto, MERGE_METHODS, type MergeOptions, pickMethod } from '../lib/merge'
 import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
+import { drainQueue, type Queued } from '../lib/queue'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd, sessionLines } from '../lib/sessions'
@@ -70,6 +71,8 @@ type ReplyBoxProps = {
   running: boolean
   placeholder: string
   tools?: ReactNode // options for the message to send, on the box's bottom row
+  queued: Queued[] // sent one by one once the running turn ends
+  onUnqueue: (index: number) => void
   commands: string[] // skills + slash commands suggested on `/`
   autoFocus?: boolean // take the caret on mount
 }
@@ -91,7 +94,8 @@ const ArrowUpIcon = () => (
 )
 
 // Chat composer: the auto-growing field on top, a bottom row with the message's options on the left
-// and send on the right. Enter sends, Shift+Enter adds a line, stop aborts a running turn
+// and send on the right. Enter sends, Shift+Enter adds a line, stop aborts a running turn. While a
+// turn runs, Enter queues the message instead, listed above the field until it goes out
 const ReplyBox = ({
   value,
   onChange,
@@ -101,6 +105,8 @@ const ReplyBox = ({
   running,
   placeholder,
   tools,
+  queued,
+  onUnqueue,
   commands,
   autoFocus,
 }: ReplyBoxProps) => {
@@ -118,6 +124,27 @@ const ReplyBox = ({
   }, [value])
   return (
     <div className="flex flex-col rounded-2xl border border-deck-700 bg-deck-800 focus-within:border-deck-500">
+      {queued.length > 0 && (
+        <ul className="flex flex-col gap-1 border-b border-deck-700 px-3 py-2">
+          {queued.map((q, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the same text can be queued twice
+            <li key={i} className="flex items-center gap-2 text-xs text-deck-400">
+              <span className="shrink-0 text-deck-500">queued</span>
+              <span className="min-w-0 flex-1 truncate">{q.text}</span>
+              <Tip label="Remove from the queue">
+                <button
+                  type="button"
+                  onClick={() => onUnqueue(i)}
+                  aria-label="Remove from the queue"
+                  className="shrink-0 cursor-pointer text-deck-500 hover:text-deck-200"
+                >
+                  ✕
+                </button>
+              </Tip>
+            </li>
+          ))}
+        </ul>
+      )}
       <CommandTextarea
         inputRef={ref}
         rows={1}
@@ -133,13 +160,13 @@ const ReplyBox = ({
           }
         }}
         disabled={!canReply}
-        placeholder={running ? `${agentBin()} is working… stop to send something else` : placeholder}
+        placeholder={running ? `${agentBin()} is working… Enter queues a message for when it's done` : placeholder}
         className="max-h-40 w-full resize-none overflow-y-auto bg-transparent px-3 pt-3 pb-1 text-sm outline-none placeholder:text-deck-500 disabled:opacity-50"
       />
       <div className="flex items-center gap-2 px-2 pb-2">
         <div className="flex min-w-0 flex-1 items-center">{tools}</div>
-        {running ? (
-          <Tip label="Stop this turn — the session stays resumable, then send a new message">
+        {running && (
+          <Tip label="Stop this turn — the session stays resumable, queued messages go back to the input">
             <button
               type="button"
               onClick={onCancel}
@@ -148,8 +175,9 @@ const ReplyBox = ({
               <span className="h-2.5 w-2.5 rounded-[2px] bg-current" />
             </button>
           </Tip>
-        ) : (
-          <Tip label="Send (Enter)">
+        )}
+        {(!running || !!value.trim()) && (
+          <Tip label={running ? 'Queue — sent when this turn ends (Enter)' : 'Send (Enter)'}>
             <button
               type="button"
               onClick={onSend}
@@ -540,6 +568,7 @@ export const SessionPanel = ({
 }: Props) => {
   const isPr = variant === 'pr'
   const [input, setInput] = useState('')
+  const [queued, setQueued] = useState<Queued[]>([])
   const [copiedBranch, setCopiedBranch] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [approving, setApproving] = useState(false)
@@ -785,10 +814,45 @@ export const SessionPanel = ({
 
   const send = (to: string | null) => {
     if (!input.trim()) return
-    onReply(input.trim(), to)
+    if (running) setQueued((q) => [...q, { text: input.trim(), to }])
+    else onReply(input.trim(), to)
     setInput('')
     if (to === null) setPick(undefined) // the new chat becomes the latest session: follow it
   }
+
+  // unsent messages go back on top of what's being typed
+  const restoreQueued = (texts: string[]) => {
+    if (texts.length) setInput((cur) => [...texts, cur.trim()].filter(Boolean).join('\n\n'))
+  }
+
+  // stopping a turn means changing course: what was queued behind it comes back to edit, not out
+  const cancel = () => {
+    restoreQueued(queued.map((q) => q.text))
+    setQueued([])
+    onCancel()
+  }
+
+  // the turn ended: the oldest queued message goes out and starts the next one. The queue belongs to
+  // the card it was typed on: another card gets it back in the input, never sent to its own session
+  // Over = its process exited too: the answer comes a moment before the exit, and resuming a session
+  // its agent is still closing could race it
+  const turnOver = !!run && run.status !== 'running' && !run.child
+  const queueTaskRef = useRef(task.id)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: drain on the turn's end or a card switch only
+  useEffect(() => {
+    if (queueTaskRef.current !== task.id) {
+      queueTaskRef.current = task.id
+      restoreQueued(queued.map((q) => q.text))
+      setQueued([])
+      return
+    }
+    if (!turnOver || !run) return
+    const { next, rest, restore } = drainQueue(queued, run.status === 'error' || !!run.failed, run.sessionId)
+    if (!next && !restore.length) return
+    setQueued(rest)
+    restoreQueued(restore)
+    if (next) onReply(next.text, next.to)
+  }, [turnOver, task.id])
 
   // Esc first closes the report overlay if it's open; otherwise the shell closes the panel
   const onEscape = useCallback(() => {
@@ -818,7 +882,7 @@ export const SessionPanel = ({
   // generic chat, always there: the input talks to the latest session (live run -> reply into it;
   // none -> resume the last one), and with no session yet it starts a new one on the PR's branch.
   // Only a repo without a local clone can't chat: claude needs a checkout to run in.
-  const canReply = !running && (!!run?.sessionId || !!task.repoPath)
+  const canReply = !!run?.sessionId || !!task.repoPath
   const options = sessionOptions(feed, run)
   const chatTo = pick === undefined ? (sessionId ?? null) : pick
   const chatPlaceholder = !task.repoPath
@@ -1429,7 +1493,9 @@ export const SessionPanel = ({
               value={input}
               onChange={setInput}
               onSend={() => send(chatTo)}
-              onCancel={onCancel}
+              onCancel={cancel}
+              queued={queued}
+              onUnqueue={(i) => setQueued((q) => q.filter((_, j) => j !== i))}
               canReply={canReply}
               running={running}
               placeholder={chatPlaceholder}
@@ -1466,7 +1532,9 @@ export const SessionPanel = ({
                     value={input}
                     onChange={setInput}
                     onSend={() => send(sessionId ?? null)}
-                    onCancel={onCancel}
+                    onCancel={cancel}
+                    queued={queued}
+                    onUnqueue={(i) => setQueued((q) => q.filter((_, j) => j !== i))}
                     canReply={canReply}
                     running={running}
                     placeholder='send comments from here — e.g. "1,3" or "all"'
@@ -1513,8 +1581,10 @@ export const SessionPanel = ({
                   value={input}
                   onChange={setInput}
                   onSend={() => send(transcript.id)}
-                  onCancel={onCancel}
-                  canReply={!running && !!task.repoPath}
+                  onCancel={cancel}
+                  queued={queued}
+                  onUnqueue={(i) => setQueued((q) => q.filter((_, j) => j !== i))}
+                  canReply={!!task.repoPath}
                   running={running}
                   placeholder="Message this session…"
                   commands={commands}

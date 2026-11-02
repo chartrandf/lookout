@@ -18,6 +18,7 @@ export type Run = {
   lines: RunLine[]
   status: 'running' | 'awaiting-input' | 'error' | 'closed'
   child: Child | null
+  failed?: boolean // the last turn's answer was an error (max turns, auth, API failure), even if it exited 0
   allowedTools: string // tool allowlist for this run's command (reused on reply/resume)
   disallowedTools?: string // denied even when my own settings allow them (Stream: no push, no merge)
   // Bumped on every dispatch. A reply starts a new process on the same Run while the previous one
@@ -56,6 +57,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
   run.gen += 1
   const gen = run.gen
   run.status = 'running'
+  run.failed = false
   notify()
   logInfo('run', `${run.taskId}: ${run.command} in ${run.repoPath}${resumeSessionId ? ' (resume)' : ''}`)
   try {
@@ -74,6 +76,7 @@ const dispatch = async (run: Run, prompt: string, callbacks: Callbacks, resumeSe
           logWarn('run', `${run.taskId}: ${e.text}`)
         } else if (e.type === 'result') {
           run.status = 'awaiting-input'
+          run.failed = e.isError
           // the final summary usually duplicates the last text block — only push when it doesn't
           if (e.text && run.lines.at(-1)?.text !== e.text) run.lines.push({ kind: 'text', text: e.text })
           callbacks.onResult?.(run.taskId, e.text, e.isError)
