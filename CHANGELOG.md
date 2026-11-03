@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.3 — 2026-11-03
+
+- [NEW] Queue messages typed while the agent is running
+- [NEW] Replay OpenCode sessions and keep them in card history
+
 ## v0.5.2 — 2026-10-28
 
 - [NEW] Lazy PR diff view, header actions, wider panel
