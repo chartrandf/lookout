@@ -737,7 +737,7 @@ export const Stream = ({
                 e.preventDefault()
                 drop(colItems, col.value, null)
               }}
-              className={`flex min-h-0 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+              className={`column-fade flex min-h-0 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
                 dropTarget === col.value && canDrop
                   ? 'bg-grass-600/30 ring-1 ring-grass-500'
                   : canDrop
@@ -754,7 +754,7 @@ export const Stream = ({
                 {col.label} <span className="font-normal text-deck-400">({colItems.length})</span>
               </h3>
               {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's clip edge */}
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px pb-12">
                 {colItems.map((x) => (
                   // wrapper (line + card) is the drop target: hovering the line itself stays stable
                   // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd

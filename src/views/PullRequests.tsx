@@ -232,7 +232,7 @@ export const PullRequests = ({
                 e.preventDefault()
                 drop(items, col.value, null)
               }}
-              className={`flex min-h-0 flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
+              className={`column-fade flex min-h-0 flex-1 flex-col gap-2 rounded-lg p-2 transition-colors duration-150 ${
                 dropTarget === col.value && dragging
                   ? 'bg-grass-600/30 ring-1 ring-grass-500'
                   : dragging
@@ -247,7 +247,7 @@ export const PullRequests = ({
               </Tip>
               {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
                   (fractional-width) clip edge — give them 1px of breathing room */}
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px pb-12">
                 {items.map((pr) => (
                   // wrapper (line + card) is the drop target: hovering the line itself stays stable
                   // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd

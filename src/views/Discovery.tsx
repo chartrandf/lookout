@@ -340,7 +340,7 @@ export const Discovery = ({
               >
                 <DropLine before={repo} />
                 <div
-                  className={`flex min-h-0 flex-col gap-2 rounded-lg transition-colors duration-150 ${
+                  className={`column-fade flex min-h-0 flex-col gap-2 rounded-lg transition-colors duration-150 ${
                     focused
                       ? 'min-w-0 flex-1'
                       : collapsed
@@ -393,7 +393,7 @@ export const Discovery = ({
                   {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
                       (fractional-width) clip edge — give them 1px of breathing room */}
                   {!collapsed && (
-                    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+                    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px pb-12">
                       {items.length === 0 && (
                         <p className="rounded-lg border border-dashed border-deck-700 p-3 text-center text-xs text-deck-500">
                           Nothing new
@@ -420,14 +420,14 @@ export const Discovery = ({
           <DropLine before={null} />
 
           {showIgnored && inScope.length > 0 && (
-            <div className="flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg bg-deck-800/40 p-2">
+            <div className="column-fade flex min-h-0 w-72 shrink-0 flex-col gap-2 rounded-lg bg-deck-800/40 p-2">
               <h3 className="mb-1 flex shrink-0 items-center gap-2 px-1 pb-1 text-sm font-semibold text-deck-400">
                 Ignored
                 <span className="rounded-full bg-deck-800 px-1.5 py-0.5 text-xs font-normal text-deck-500">
                   {inScope.length}
                 </span>
               </h3>
-              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px">
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px pb-12">
                 {inScope.map((t) => (
                   <div
                     key={t.id}

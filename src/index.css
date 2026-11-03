@@ -255,3 +255,10 @@
     transform: translateY(4px) scale(0.96);
   }
 }
+
+/* Board columns end in a fade to the app background instead of a hard bottom edge: the mask fades
+   the column's tint and its cards alike. The scrollers carry pb-12 so the last card can scroll
+   clear of it. */
+.column-fade {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 3rem), transparent);
+}
