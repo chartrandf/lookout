@@ -19,11 +19,25 @@
     "fs:allow-fstat",
     "fs:allow-seek",
     {
+      "identifier": "fs:allow-write-file",
+      "allow": [{ "path": "$APPCACHE/chat-images/**" }]
+    },
+    {
+      "identifier": "fs:allow-remove",
+      "allow": [{ "path": "$APPCACHE/chat-images/**" }]
+    },
+    {
+      "identifier": "fs:allow-mkdir",
+      "allow": [{ "path": "$APPCACHE" }, { "path": "$APPCACHE/chat-images" }]
+    },
+    {
       "identifier": "fs:scope",
       "allow": [
         { "path": "$HOME/.claude/**" },
         { "path": "$HOME/Projects/**" },
-        { "path": "$HOME/Projects/**/.claude/**" }
+        { "path": "$HOME/Projects/**/.claude/**" },
+        { "path": "$APPCACHE/chat-images" },
+        { "path": "$APPCACHE/chat-images/**" }
       ]
     },
     {

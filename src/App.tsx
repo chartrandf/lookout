@@ -61,6 +61,7 @@ import {
   upsertMyPr,
 } from './lib/db'
 import { setStreamFeed, type TimelineSummary } from './lib/feed'
+import { pruneDroppedImages } from './lib/filerefs'
 import { parseFollowupSummary } from './lib/followup'
 import { resumeInGhostty } from './lib/ghostty'
 import { errText, logError, logWarn, setLogEnabled } from './lib/log'
@@ -258,6 +259,11 @@ const App = () => {
     },
     [syncTasks, syncPulls],
   )
+
+  // images dropped in a chat are kept 14 days (see filerefs.ts)
+  useEffect(() => {
+    pruneDroppedImages().catch((e) => logError('chat', e, 'prune dropped images'))
+  }, [])
 
   useEffect(() => {
     initTray()

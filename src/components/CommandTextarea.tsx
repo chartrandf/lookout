@@ -1,5 +1,6 @@
 import { type KeyboardEvent, type RefObject, useRef, useState } from 'react'
-import { droppedPaths, fileRefs } from '../lib/filerefs'
+import { droppedPaths, fileRefs, saveDroppedImages } from '../lib/filerefs'
+import { errText, logWarn } from '../lib/log'
 
 type Props = {
   value: string
@@ -99,12 +100,22 @@ export const CommandTextarea = ({
           refresh(e.target)
         }}
         onClick={(e) => refresh(e.currentTarget)}
-        // a dropped file goes in as `@path` at the caret, not the bare path the webview would paste
-        onDrop={(e) => {
+        // a dropped file goes in as `@path` at the caret, not the bare path the webview would paste;
+        // a path-less image (screenshot thumbnail) is saved first, then referenced the same way
+        onDrop={async (e) => {
           const paths = droppedPaths(e.dataTransfer.getData('text/uri-list'), e.dataTransfer.getData('text/plain'))
-          if (paths.length === 0) return
+          const files = paths.length === 0 ? [...e.dataTransfer.files] : []
+          if (paths.length === 0 && !files.some((f) => f.type.startsWith('image/'))) return
           e.preventDefault()
           const el = e.currentTarget
+          if (files.length > 0) {
+            try {
+              paths.push(...(await saveDroppedImages(files)))
+            } catch (err) {
+              logWarn('chat', `dropped image not saved: ${errText(err)}`)
+              return
+            }
+          }
           const at = el.selectionStart ?? value.length
           const inserted = fileRefs(paths, value.slice(0, at))
           onChange(value.slice(0, at) + inserted + value.slice(el.selectionEnd ?? at))
