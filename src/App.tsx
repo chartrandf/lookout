@@ -1,4 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
+import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GlobalSearch } from './components/GlobalSearch'
@@ -454,6 +455,7 @@ const App = () => {
         if (id === 'snooze') await snoozeCard(t.id, board, !t.snoozed)
         else if (id === 'resume' && sessionId && t.repoPath) await resumeInGhostty(await checkout(sessionId), sessionId)
         else if (id === 'open-browser') await openUrl(t.prUrl)
+        else if (id === 'copy-url') await writeText(t.prUrl)
         else if (id === 'remove') {
           if (panelTaskId === t.id) setPanelTaskId(null)
           await moveStage(t.id, 'discovered')

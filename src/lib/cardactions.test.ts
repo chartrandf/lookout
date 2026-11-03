@@ -5,12 +5,12 @@ const ids = (c: Parameters<typeof cardActions>[0]) => cardActions(c).map((a) => 
 const base = { snoozed: false, hasSession: false, isPr: false, running: false }
 
 describe('cardActions', () => {
-  it('offers snooze, open and remove on a review card with no session', () => {
-    expect(ids(base)).toEqual(['snooze', 'open-browser', 'remove'])
+  it('offers snooze, open, copy and remove on a review card with no session', () => {
+    expect(ids(base)).toEqual(['snooze', 'open-browser', 'copy-url', 'remove'])
   })
 
   it('adds resume once the card has a session', () => {
-    expect(ids({ ...base, hasSession: true })).toEqual(['snooze', 'resume', 'open-browser', 'remove'])
+    expect(ids({ ...base, hasSession: true })).toEqual(['snooze', 'resume', 'open-browser', 'copy-url', 'remove'])
   })
 
   it('never removes a card from the Pull Requests board: it is mine, not a review', () => {

@@ -1141,6 +1141,7 @@ export const SessionPanel = ({
                               if (!task.snoozed) close()
                             } else if (id === 'resume' && sessionId) resumeSession(sessionId)
                             else if (id === 'open-browser') openUrl(task.prUrl)
+                            else if (id === 'copy-url') copyUrl()
                             else if (id === 'remove') {
                               onStageChange('discovered')
                               close()

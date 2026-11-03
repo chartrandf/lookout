@@ -1,6 +1,6 @@
 // The quick actions a card offers. One list, shown by the panel's ⋯ menu, a card's hover ⋯ and a
 // right-click on the card, so all three always agree on what can be done from where.
-export type CardActionId = 'snooze' | 'resume' | 'open-browser' | 'remove' | 'kill'
+export type CardActionId = 'snooze' | 'resume' | 'open-browser' | 'copy-url' | 'remove' | 'kill'
 
 export type CardAction = { id: CardActionId; label: string; title?: string; danger?: boolean }
 
@@ -29,6 +29,7 @@ export const cardActions = (c: CardActionContext): CardAction[] => [
       ]
     : []),
   { id: 'open-browser', label: 'Open in browser', title: 'Open the PR on GitHub' },
+  { id: 'copy-url', label: 'Copy PR URL', title: "Copy the PR's GitHub link" },
   // my own PR stays on its board until it merges; only a review card can be dropped
   ...(c.isPr
     ? []
