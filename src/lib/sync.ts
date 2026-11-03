@@ -316,7 +316,8 @@ export const syncAll = async (): Promise<ReviewTask[]> => {
       if (state !== 'open') {
         await setPrState(t.id, state)
         if (approved !== t.approved) await setApproved(t.id, approved)
-        if (t.stage !== 'done') await setStage(t.id, 'done')
+        // only a card I put on the board lands in Done; one still in Discovery/Ignored stays off it
+        if (ACTIVE_STAGES.has(t.stage)) await setStage(t.id, 'done')
         continue
       }
     }

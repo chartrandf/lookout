@@ -167,6 +167,17 @@ describe('syncAll — PR state reconciliation', () => {
     expect(setStage).toHaveBeenCalledWith(active.id, 'done')
   })
 
+  it.each(['discovered', 'ignored'] as const)('keeps a %s card off the board when its PR merges', async (stage) => {
+    const off = task({ stage, prState: 'open' })
+    vi.mocked(allTasks).mockResolvedValue([off])
+    vi.mocked(fetchPrState).mockResolvedValue({ state: 'merged', approved: false })
+
+    await syncAll()
+
+    expect(setPrState).toHaveBeenCalledWith(off.id, 'merged')
+    expect(setStage).not.toHaveBeenCalled()
+  })
+
   // approved then merged between two syncs: the open-PR listing never saw the approval
   it('records an approval that landed just before the merge', async () => {
     const active = task({ stage: 'reviewed', prState: 'open' })
