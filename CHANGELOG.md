@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.5.4 — 2026-11-04
+
+- [NEW] Paste a screenshot thumbnail as an @path image in chat
+- [NEW] Copy PR URL from the card menu
+- [ENHANCED] Board columns fade into the app background
+- [FIX] Merged PRs from Discovery no longer appear on review board
+
 ## v0.5.3 — 2026-11-03
 
 - [NEW] Queue messages typed while the agent is running
