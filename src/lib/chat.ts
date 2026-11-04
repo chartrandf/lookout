@@ -17,3 +17,6 @@ export const parseChatPrompt = (prompt: string): { prNumber: number; branch: str
   const question = first.length > QUESTION_MAX ? `${first.slice(0, QUESTION_MAX).join('')}…` : first.join('')
   return { prNumber: Number(m[1]), branch: m[2], question }
 }
+
+// `exit` typed alone, as in a shell: closes the terminal instead of going to the agent
+export const isExit = (text: string) => text.trim().toLowerCase() === 'exit'

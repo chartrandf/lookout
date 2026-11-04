@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chatPrompt, parseChatPrompt } from './chat'
+import { chatPrompt, isExit, parseChatPrompt } from './chat'
 
 describe('chatPrompt', () => {
   it('names the PR and its branch, then the question', () => {
@@ -34,5 +34,17 @@ describe('parseChatPrompt', () => {
   it('is null for anything else', () => {
     expect(parseChatPrompt('please review this')).toBeNull()
     expect(parseChatPrompt('Notes: About PR #7 in acme/app (branch x):\n\nhi')).toBeNull()
+  })
+})
+
+describe('isExit', () => {
+  it('matches exit typed alone, any case or padding', () => {
+    expect(isExit('exit')).toBe(true)
+    expect(isExit('  EXIT \n')).toBe(true)
+  })
+
+  it('leaves a message that only mentions exit', () => {
+    expect(isExit('exit code 1 in CI?')).toBe(false)
+    expect(isExit('/exit')).toBe(false)
   })
 })

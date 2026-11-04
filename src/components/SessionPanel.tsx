@@ -6,6 +6,7 @@ import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } fr
 import { agentBin } from '../lib/agent'
 import { avatarUrl } from '../lib/avatar'
 import { cardActions, snoozeAction } from '../lib/cardactions'
+import { isExit } from '../lib/chat'
 import { listSlashCommands } from '../lib/commands'
 import { subscribeCardEvents } from '../lib/db'
 import { buildFeed, type FeedEvent, mergeReports, reportEvents, type TimelineSummary } from '../lib/feed'
@@ -814,6 +815,11 @@ export const SessionPanel = ({
 
   const send = (to: string | null) => {
     if (!input.trim()) return
+    if (isExit(input)) {
+      setTermOpen(false)
+      setInput('')
+      return
+    }
     if (running) setQueued((q) => [...q, { text: input.trim(), to }])
     else onReply(input.trim(), to)
     setInput('')
