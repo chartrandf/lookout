@@ -51,7 +51,7 @@ export const SessionPicker = ({ options, selected, onSelect, open, onOpenChange 
         >
           <Icon name={current ? current.icon : NEW_ICON} size={12} />
           <span className="min-w-0 truncate">{current ? current.label : NEW_SHORT}</span>
-          <span className="text-deck-500">⌄</span>
+          <Icon name="chevron-down" size={12} className="text-deck-500" />
         </button>
       </Tip>
       {open && (
