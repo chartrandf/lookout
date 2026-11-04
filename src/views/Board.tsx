@@ -9,7 +9,7 @@ import { Tip } from '../components/Tip'
 import { ToggleChip } from '../components/ToggleChip'
 import { type BoardFilter, emptyFilter, matchesFilter, openAuthorOptions, openRepoOptions } from '../lib/filters'
 import type { Run } from '../lib/runs'
-import { doneExpired, STAGE_LABEL } from '../lib/stages'
+import { doneExpired, STAGE_ICON, STAGE_LABEL } from '../lib/stages'
 import type { ReviewTask, Stage, StreamItem } from '../types'
 
 type Props = {
@@ -224,7 +224,8 @@ export const Board = ({ tasks, runs, alertedIds, onOpenSession, onSeen, onReorde
               }`}
             >
               <Tip label={col.hint}>
-                <h3 className="w-fit shrink-0 cursor-help px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+                <h3 className="flex w-fit shrink-0 cursor-help items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-deck-300">
+                  <Icon name={STAGE_ICON[col.stage[0]]} size={12} />
                   {col.title} <span className="font-normal text-deck-400">({items.length})</span>
                 </h3>
               </Tip>

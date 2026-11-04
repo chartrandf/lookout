@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { advanceStage, doneExpired, parseStage } from './stages'
+import { advanceStage, doneExpired, parseStage, STAGE_ICON, STAGES } from './stages'
 
 describe('advanceStage', () => {
   it('moves a card forward', () => {
@@ -69,5 +69,13 @@ describe('doneExpired', () => {
 
   it('never hides a card outside Done', () => {
     expect(doneExpired({ stage: 'reviewed', prState: 'merged', doneAt: old }, now)).toBe(false)
+  })
+})
+
+describe('STAGE_ICON', () => {
+  it('gives each stage its own icon', () => {
+    const icons = STAGES.map((s) => STAGE_ICON[s.value])
+    expect(icons.every(Boolean)).toBe(true)
+    expect(new Set(icons).size).toBe(icons.length)
   })
 })

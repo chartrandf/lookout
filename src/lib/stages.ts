@@ -1,4 +1,5 @@
 import type { Stage } from '../types'
+import type { IconName } from './icons'
 
 // The label the UI shows for each stage, in the order menus list them. Single source of truth: the
 // board columns, the card's stage picker, global search and the Settings action editor all read from
@@ -12,6 +13,18 @@ export const STAGE_LABEL: Record<Stage, string> = {
   followup: 'Follow-up',
   done: 'Done',
   ignored: 'Ignored',
+}
+
+// The glyph each stage shows: on its board column and in the card's stage picker
+export const STAGE_ICON: Record<Stage, IconName> = {
+  discovered: 'telescope',
+  watching: 'eye',
+  needs_review: 'inbox',
+  reviewing: 'hourglass',
+  reviewed: 'comment',
+  followup: 'issue-reopened',
+  done: 'check-circle',
+  ignored: 'circle-slash',
 }
 
 // Same thing as a list, for the pickers that render every stage as an option.

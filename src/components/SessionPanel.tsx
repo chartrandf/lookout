@@ -20,7 +20,6 @@ import { drainQueue, type Queued } from '../lib/queue'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd, sessionLines } from '../lib/sessions'
-import { STAGES } from '../lib/stages'
 import { messageTime } from '../lib/time'
 import type { ActionButton, MergeMethod, MergePreference, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
@@ -37,6 +36,7 @@ import { Markdown } from './Markdown'
 import { PrLink } from './PrLink'
 import { SessionPicker } from './SessionPicker'
 import { SidePanel } from './SidePanel'
+import { StagePicker } from './StagePicker'
 import { Tip } from './Tip'
 
 type Props = {
@@ -622,6 +622,9 @@ export const SessionPanel = ({
   const [commands, setCommands] = useState<string[]>([]) // this repo's skills + slash commands, for `/`
   const pickerOpenRef = useRef(false)
   pickerOpenRef.current = pickerOpen
+  const [stageMenu, setStageMenu] = useState(false)
+  const stageMenuRef = useRef(false)
+  stageMenuRef.current = stageMenu
   const mergeBoxRef = useRef<HTMLDivElement>(null)
   const taskRef = useRef(task)
   taskRef.current = task
@@ -871,6 +874,10 @@ export const SessionPanel = ({
       setPickerOpen(false)
       return true
     }
+    if (stageMenuRef.current) {
+      setStageMenu(false)
+      return true
+    }
     if (transcriptRef.current) {
       setTranscript(null)
       return true
@@ -1083,19 +1090,12 @@ export const SessionPanel = ({
               <CopyButton label="Copy PR URL" copied={copiedUrl} onCopy={copyUrl} group="url" />
               <div className="ml-auto flex items-center gap-1.5">
                 {!isPr && (
-                  <Tip label="Move the card to another column">
-                    <select
-                      value={task.stage}
-                      onChange={(e) => onStageChange(e.target.value as Stage)}
-                      className="h-7 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
-                    >
-                      {STAGES.map((s) => (
-                        <option key={s.value} value={s.value}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
-                  </Tip>
+                  <StagePicker
+                    value={task.stage}
+                    onChange={onStageChange}
+                    open={stageMenu}
+                    onOpenChange={setStageMenu}
+                  />
                 )}
                 {isPr ? (
                   // my own PR's ⋯ was only Snooze + Open in browser (the header link already opens it;
