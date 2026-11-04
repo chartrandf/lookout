@@ -28,7 +28,11 @@ export const STAGE_ICON: Record<Stage, IconName> = {
 }
 
 // Same thing as a list, for the pickers that render every stage as an option.
-export const STAGES = (Object.keys(STAGE_LABEL) as Stage[]).map((value) => ({ value, label: STAGE_LABEL[value] }))
+export const STAGES = (Object.keys(STAGE_LABEL) as Stage[]).map((value) => ({
+  value,
+  label: STAGE_LABEL[value],
+  icon: STAGE_ICON[value],
+}))
 
 // Ignore case, spaces and dashes, so "Needs Review", "needs-review" and "needsreview" are one key.
 const normalize = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')

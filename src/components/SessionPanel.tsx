@@ -20,6 +20,7 @@ import { drainQueue, type Queued } from '../lib/queue'
 import { sessionOptions } from '../lib/replytarget'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd, sessionLines } from '../lib/sessions'
+import { STAGES } from '../lib/stages'
 import { messageTime } from '../lib/time'
 import type { ActionButton, MergeMethod, MergePreference, ReviewTask, Stage } from '../types'
 import { ActionIcon } from './ActionIcon'
@@ -30,13 +31,13 @@ import { CloseButton } from './CloseButton'
 import { CommandTextarea } from './CommandTextarea'
 import { type Confirm, ConfirmDialog } from './ConfirmDialog'
 import { DiffIcon, DiffView } from './DiffView'
+import { Dropdown } from './Dropdown'
 import { FollowupBadge } from './FollowupBadge'
 import { Icon, IconBox } from './Icon'
 import { Markdown } from './Markdown'
 import { PrLink } from './PrLink'
 import { SessionPicker } from './SessionPicker'
 import { SidePanel } from './SidePanel'
-import { StagePicker } from './StagePicker'
 import { Tip } from './Tip'
 
 type Props = {
@@ -622,9 +623,6 @@ export const SessionPanel = ({
   const [commands, setCommands] = useState<string[]>([]) // this repo's skills + slash commands, for `/`
   const pickerOpenRef = useRef(false)
   pickerOpenRef.current = pickerOpen
-  const [stageMenu, setStageMenu] = useState(false)
-  const stageMenuRef = useRef(false)
-  stageMenuRef.current = stageMenu
   const mergeBoxRef = useRef<HTMLDivElement>(null)
   const taskRef = useRef(task)
   taskRef.current = task
@@ -874,10 +872,6 @@ export const SessionPanel = ({
       setPickerOpen(false)
       return true
     }
-    if (stageMenuRef.current) {
-      setStageMenu(false)
-      return true
-    }
     if (transcriptRef.current) {
       setTranscript(null)
       return true
@@ -1090,11 +1084,12 @@ export const SessionPanel = ({
               <CopyButton label="Copy PR URL" copied={copiedUrl} onCopy={copyUrl} group="url" />
               <div className="ml-auto flex items-center gap-1.5">
                 {!isPr && (
-                  <StagePicker
+                  <Dropdown
+                    key={task.id}
                     value={task.stage}
+                    options={STAGES}
                     onChange={onStageChange}
-                    open={stageMenu}
-                    onOpenChange={setStageMenu}
+                    label="Move the card to another column"
                   />
                 )}
                 {isPr ? (
