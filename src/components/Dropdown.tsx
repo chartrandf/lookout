@@ -109,7 +109,7 @@ export const Dropdown = <T extends string>({ value, options, onChange, label, di
         >
           {current?.icon && <Icon name={current.icon} size={12} />}
           <span>{current?.label}</span>
-          <span className="text-deck-500">⌄</span>
+          <Icon name="chevron-down" size={12} className="text-deck-500" />
         </button>
       </Tip>
       {open && (
