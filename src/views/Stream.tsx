@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardMenuPopover, MENU_WIDTH } from '../components/CardMenu'
 import { CloseButton } from '../components/CloseButton'
 import { type Confirm, ConfirmDialog } from '../components/ConfirmDialog'
+import { Dropdown } from '../components/Dropdown'
 import { PriorityChip } from '../components/PriorityChip'
 import { SidePanel } from '../components/SidePanel'
 import { actorIcon, RefChip, StreamPanel } from '../components/StreamPanel'
@@ -389,36 +390,32 @@ const Dump = ({
           className="min-h-0 w-full flex-1 resize-none bg-transparent px-4 pt-3 pb-2 text-[17px] leading-relaxed text-deck-100 placeholder:text-deck-500 focus:outline-none"
         />
         <div className="flex items-center gap-2 border-t border-grass-600/20 px-3 py-2">
-          <select
+          <Dropdown
             value={names.includes(repo) ? repo : ''}
-            onChange={(e) => setRepo(e.target.value)}
-            aria-label="Project"
-            title="The project of lines with no #project tag"
-            className={`${control} max-w-[16rem] cursor-pointer truncate border border-deck-700 bg-deck-800 px-2 text-deck-200 focus:border-deck-500 focus:outline-none`}
-          >
-            <option value="">All projects</option>
-            {repos.map((r) => (
-              <option key={r.repo} value={r.repo}>
-                {r.repo}
-              </option>
-            ))}
-          </select>
+            options={[{ value: '', label: 'All projects' }, ...repos.map((r) => ({ value: r.repo, label: r.repo }))]}
+            onChange={setRepo}
+            label="The project of lines with no #project tag"
+            align="left"
+            menuUp
+            className={`${control} max-w-[16rem] border border-deck-700 bg-deck-800 px-2 text-deck-200 hover:border-deck-500`}
+          />
           {/* the flow the cards follow: none = one step, approve = done */}
-          <select
+          <Dropdown
             value={templateId ?? ''}
-            onChange={(e) => (e.target.value === MANAGE ? onManageTemplates() : setTemplateId(e.target.value || null))}
-            aria-label="Flow"
-            title="The flow template these cards follow"
-            className={`${control} max-w-[12rem] cursor-pointer truncate border border-deck-700 bg-deck-800 px-2 text-deck-200 focus:border-deck-500 focus:outline-none`}
-          >
-            <option value="">No flow</option>
-            {templates.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} · {t.steps.length} step{t.steps.length === 1 ? '' : 's'}
-              </option>
-            ))}
-            <option value={MANAGE}>Manage flows…</option>
-          </select>
+            options={[
+              { value: '', label: 'No flow' },
+              ...templates.map((t) => ({
+                value: t.id,
+                label: `${t.name} · ${t.steps.length} step${t.steps.length === 1 ? '' : 's'}`,
+              })),
+              { value: MANAGE, label: 'Manage flows…' },
+            ]}
+            onChange={(v) => (v === MANAGE ? onManageTemplates() : setTemplateId(v || null))}
+            label="The flow template these cards follow"
+            align="left"
+            menuUp
+            className={`${control} max-w-[12rem] border border-deck-700 bg-deck-800 px-2 text-deck-200 hover:border-deck-500`}
+          />
           {/* where the cards land: a setting of the dump, not a second button competing with Add */}
           <fieldset aria-label="Add to" className={`${control} flex border border-deck-700 bg-deck-800 p-0.5`}>
             {(

@@ -10,13 +10,14 @@ import changelog from '../../CHANGELOG.md?raw'
 import { ActionChip, ActionEditor, Switch } from '../components/ActionEditor'
 import { CloseButton } from '../components/CloseButton'
 import { type Confirm, ConfirmDialog } from '../components/ConfirmDialog'
+import { Dropdown } from '../components/Dropdown'
 import { Icon } from '../components/Icon'
 import { MergeHookChip, MergeHookEditor } from '../components/MergeHookEditor'
 import { SidePanel } from '../components/SidePanel'
 import { StreamTemplates } from '../components/StreamTemplates'
 import { Tip } from '../components/Tip'
 import { dropAction } from '../lib/actionlist'
-import { AGENT_CLIS, type AgentCli, type AgentSettings, defaultModel, listModels, type PickedTier } from '../lib/agent'
+import { AGENT_CLIS, type AgentSettings, defaultModel, listModels, type PickedTier } from '../lib/agent'
 import { avatarUrl } from '../lib/avatar'
 import { type ChangeTag, parseChangelog } from '../lib/changelog'
 import { listSlashCommands } from '../lib/commands'
@@ -129,20 +130,22 @@ const ModelRow = ({
         {models?.length === 0 && ' The CLI listed no models: is it on your PATH, with a provider set up?'}
       </p>
     </div>
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={models === null}
-      aria-label={label}
-      className="h-7 w-56 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 font-mono text-xs text-deck-200 outline-none disabled:opacity-60"
-    >
-      <option value="">{models === null ? 'Loading models…' : fallback}</option>
-      {[...(value && !models?.includes(value) ? [value] : []), ...(models ?? [])].map((m) => (
-        <option key={m} value={m}>
-          {m}
-        </option>
-      ))}
-    </select>
+    <div className="flex w-56 shrink-0 justify-end">
+      <Dropdown
+        value={value}
+        options={[
+          { value: '', label: models === null ? 'Loading models…' : fallback },
+          ...[...(value && !models?.includes(value) ? [value] : []), ...(models ?? [])].map((m) => ({
+            value: m,
+            label: m,
+          })),
+        ]}
+        onChange={onChange}
+        disabled={models === null}
+        label={label}
+        className="h-7 w-56 justify-between rounded border border-deck-600 bg-deck-800 px-1.5 font-mono text-xs text-deck-200 hover:bg-deck-700"
+      />
+    </div>
   </div>
 )
 
@@ -717,21 +720,13 @@ export const Settings = ({
                 they stay Claude-only. On opencode, a run's allowed tools become its permissions.
               </p>
             </div>
-            <select
+            <Dropdown
               value={agent.cli}
+              options={AGENT_CLIS}
               // model names differ per CLI: a Claude alias means nothing to opencode, and back
-              onChange={(e) =>
-                onSaveAgent({ cli: e.target.value as AgentCli, fastModel: '', strongModel: '', workModel: '' })
-              }
-              aria-label="Agent CLI"
-              className="h-7 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
-            >
-              {AGENT_CLIS.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+              onChange={(cli) => onSaveAgent({ cli, fastModel: '', strongModel: '', workModel: '' })}
+              label="Agent CLI"
+            />
           </div>
           {MODEL_ROWS.map((r) => (
             <ModelRow
@@ -793,18 +788,12 @@ export const Settings = ({
                 button picks another.
               </p>
             </div>
-            <select
+            <Dropdown<MergePreference>
               value={config.mergeMethod}
-              onChange={(e) => onSaveMergeMethod(e.target.value as MergePreference)}
-              className="h-7 shrink-0 cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 text-xs text-deck-200 outline-none"
-            >
-              {MERGE_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-              <option value="github">My GitHub default</option>
-            </select>
+              options={[...MERGE_METHODS, { value: 'github', label: 'My GitHub default' }]}
+              onChange={onSaveMergeMethod}
+              label="Default merge strategy"
+            />
           </div>
 
           <ToggleRow

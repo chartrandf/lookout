@@ -5,6 +5,7 @@ import { STAGES } from '../lib/stages'
 import type { ActionButton, ButtonBoard, Stage } from '../types'
 import { ACTION_ICON_NAMES, ActionIcon } from './ActionIcon'
 import { CommandTextarea } from './CommandTextarea'
+import { Dropdown } from './Dropdown'
 import { Tip } from './Tip'
 
 type Props = {
@@ -146,23 +147,16 @@ export const ActionEditor = ({ board, button: b, primary, commands, onChange, on
                 <span className="rounded bg-deck-700 px-1.5 py-0.5 text-[11px] font-semibold text-deck-300">
                   {idx === 0 ? 'Where' : 'And'}
                 </span>
-                <select
+                <Dropdown
                   value={c.field}
-                  onChange={(e) =>
-                    setConditions(
-                      b.conditions.map((x, j) =>
-                        j === idx ? { field: e.target.value as typeof c.field, values: [] } : x,
-                      ),
-                    )
+                  options={fields.map((f) => ({ value: f.field, label: f.label }))}
+                  onChange={(field) =>
+                    setConditions(b.conditions.map((x, j) => (j === idx ? { field, values: [] } : x)))
                   }
-                  className="cursor-pointer rounded border border-deck-600 bg-deck-800 px-1.5 py-0.5 text-xs text-deck-200 outline-none focus:border-grass-500"
-                >
-                  {fields.map((f) => (
-                    <option key={f.field} value={f.field}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
+                  label="The card field this rule checks"
+                  align="left"
+                  className="rounded border border-deck-600 bg-deck-800 px-1.5 py-0.5 text-xs text-deck-200 hover:bg-deck-700"
+                />
                 <span className="text-xs text-deck-500">is any of</span>
                 <Tip label="Remove this rule">
                   <button
@@ -215,18 +209,13 @@ export const ActionEditor = ({ board, button: b, primary, commands, onChange, on
               <p className="text-sm text-deck-200">Move card to stage</p>
               <p className="text-xs text-deck-500">Where the card goes once the run finishes</p>
             </div>
-            <select
+            <Dropdown<Stage | ''>
               value={b.advanceTo ?? ''}
-              onChange={(e) => onChange({ advanceTo: (e.target.value || undefined) as Stage | undefined }, true)}
-              className="w-44 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
-            >
-              <option value="">Leave unchanged</option>
-              {STAGES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'Leave unchanged' }, ...STAGES]}
+              onChange={(v) => onChange({ advanceTo: v || undefined }, true)}
+              label="Move card to stage"
+              className="w-44 justify-between rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 hover:bg-deck-700"
+            />
           </div>
           <div className="flex items-center justify-between gap-3">
             <div>
@@ -242,17 +231,17 @@ export const ActionEditor = ({ board, button: b, primary, commands, onChange, on
           {b.saveReport !== 'off' && (
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-deck-500">Saved as</p>
-              <select
+              <Dropdown<NonNullable<ActionButton['saveReport']> | ''>
                 value={b.saveReport ?? ''}
-                onChange={(e) =>
-                  onChange({ saveReport: (e.target.value || undefined) as ActionButton['saveReport'] }, true)
-                }
-                className="w-44 cursor-pointer rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 outline-none focus:border-grass-500"
-              >
-                <option value="">Auto-detect</option>
-                <option value="review">Review</option>
-                <option value="followup">Follow-up</option>
-              </select>
+                options={[
+                  { value: '', label: 'Auto-detect' },
+                  { value: 'review', label: 'Review' },
+                  { value: 'followup', label: 'Follow-up' },
+                ]}
+                onChange={(v) => onChange({ saveReport: v || undefined }, true)}
+                label="Save the answer as"
+                className="w-44 justify-between rounded border border-deck-600 bg-deck-800 px-2 py-1 text-xs text-deck-200 hover:bg-deck-700"
+              />
             </div>
           )}
         </Section>

@@ -20,6 +20,7 @@ import { messageTime } from '../lib/time'
 import type { StreamEvent, StreamItem } from '../types'
 import { CardMenuPopover, MENU_WIDTH } from './CardMenu'
 import { CloseButton } from './CloseButton'
+import { Dropdown } from './Dropdown'
 import { Markdown } from './Markdown'
 import { PrLink } from './PrLink'
 import { SidePanel } from './SidePanel'
@@ -225,20 +226,18 @@ export const StreamPanel = ({ item, version, repos, onAction, onRun, busy, onPro
                 className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-base font-medium text-white hover:border-deck-700 focus:border-deck-500 focus:outline-none"
               />
               <div className="mt-1 flex flex-wrap items-center gap-1.5 px-1 text-xs text-deck-400">
-                <select
+                <Dropdown
                   value={item.repo}
-                  onChange={(e) => e.target.value && onProject(item, e.target.value)}
+                  options={[
+                    ...(item.repo ? [] : [{ value: '', label: 'no project yet' }]),
+                    ...repos.map((r) => ({ value: r, label: r })),
+                  ]}
+                  onChange={(r) => r && onProject(item, r)}
                   disabled={item.status === 'running'}
-                  aria-label="Project"
-                  className="cursor-pointer rounded border border-transparent bg-transparent py-0.5 text-deck-300 hover:border-deck-700 focus:border-deck-500 focus:outline-none disabled:cursor-default"
-                >
-                  {!item.repo && <option value="">no project yet</option>}
-                  {repos.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                  label="Project"
+                  align="left"
+                  className="rounded border border-transparent px-1 py-0.5 text-deck-300 hover:border-deck-700"
+                />
                 <RefChip item={item} />
                 <span className="rounded bg-deck-700 px-1 py-0.5">{STATUS_LABEL[item.status]}</span>
                 <span title={`created by ${item.createdBy}`}>{actorIcon(item.createdBy)}</span>
