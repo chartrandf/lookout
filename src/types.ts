@@ -108,7 +108,7 @@ export type CapturedReview = {
 //  addressed     the author pushed real work after my review (merges/rebases don't count)
 //  ready_to_send my review session finished but I haven't said anything on GitHub yet
 //  awaiting_me   someone reviewed my own PR and I haven't pushed since
-//  ci_fail       CI is red on a PR I'm involved in
+//  ci_fail       CI is red on a PR I own
 export type AlertKind = 'addressed' | 'ready_to_send' | 'awaiting_me' | 'ci_fail'
 
 export type Alert = {

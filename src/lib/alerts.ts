@@ -98,8 +98,10 @@ export const taskAlerts = (t: ReviewTask, x: PrExchange, me: string): Alert[] =>
     )
   }
 
-  // no event ts: one alert per PR while CI stays red, cleared when it goes green
-  if (x.ciState === 'fail') out.push(alert('ci_fail', t.id, null, 'CI failed', label(t.repo, t.prNumber, t.prTitle)))
+  // no event ts: one alert per PR while CI stays red, cleared when it goes green. Only on my own PR:
+  // someone else's red build is theirs to fix
+  if (x.ciState === 'fail' && t.prAuthor === me)
+    out.push(alert('ci_fail', t.id, null, 'CI failed', label(t.repo, t.prNumber, t.prTitle)))
   return out
 }
 

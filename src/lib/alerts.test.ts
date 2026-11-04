@@ -191,13 +191,18 @@ describe('taskAlerts — my review is done but unsent', () => {
 })
 
 describe('taskAlerts — CI', () => {
-  it('adds a single keyless ci_fail alert while red', () => {
-    const alerts = taskAlerts(task({ stage: 'watching' }), exchange({ ciState: 'fail' }), ME)
+  it('adds a single keyless ci_fail alert while red on my PR', () => {
+    const alerts = taskAlerts(task({ stage: 'watching', prAuthor: ME }), exchange({ ciState: 'fail' }), ME)
     expect(alerts.map((a) => a.key)).toEqual(['ci_fail:o/r#1'])
   })
 
   it('drops it when CI is green', () => {
-    expect(taskAlerts(task({ stage: 'watching' }), exchange({ ciState: 'pass' }), ME)).toEqual([])
+    expect(taskAlerts(task({ stage: 'watching', prAuthor: ME }), exchange({ ciState: 'pass' }), ME)).toEqual([])
+  })
+
+  // someone else's red build is theirs to fix: the card's badge shows it, the bell stays quiet
+  it('ignores a red build on a PR I do not own', () => {
+    expect(taskAlerts(task({ stage: 'watching' }), exchange({ ciState: 'fail' }), ME)).toEqual([])
   })
 })
 
