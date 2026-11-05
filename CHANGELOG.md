@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.5.6 — 2026-11-05
+
+- [NEW] find bar in the diff view with platform-aware shortcut chords
+
 ## v0.5.5 — 2026-11-05
 
 - [NEW] Stage icons on board columns with a custom stage picker
