@@ -4,15 +4,30 @@
   <br />
 </div>
 
-Desktop overview of all your Claude Code review sessions: discover open PRs across hand-picked repos, dispatch review/follow-up sessions, track follow-ups, auto-clear merged PRs.
+A desktop cockpit for your GitHub pull request workflow: the PRs waiting on your review, your own PRs waiting on someone else's, and the agent sessions behind them — one board for both sides of the table.
 
-Tauri v2 + React + TypeScript + Tailwind. No remote server — everything runs locally: the app polls `gh`, scans `~/.claude/projects/` sessions and each repo's `AI_TASKS/code-review/` exports.
+Lookout watches the local git repos you select, discovers open PRs you haven't reviewed yet, and keeps each card's whole history together. Dispatch a review or a follow-up from the card, resume the session later, and let the board follow GitHub.
 
-> ⚠️ **Opinionated.** This app encodes my personal review flow (discover → dispatch a Claude review → push comments → follow up → approve) and has only been tested against my personal commands — it may not fit yours out of the box.
->
-> But you can configure the dispatched prompts in **Settings → Claude commands** (defaults use Claude Code's built-in `/review`; placeholders `<branch_name>` and `<pr_id>` are supported).
+No remote server — everything runs locally: the app polls `gh`, reads Claude/OpenCode sessions and keeps its state in SQLite locally. The bundled `lookout` CLI writes to that same database, so a skill or script can move a card from a terminal whether or not the app is open.
+
+> The flow is yours: action buttons dispatch the prompts you write in **Settings → Review actions** / **Pull Request actions**.
+
+## Usage
+
+1. **Settings** — add local clone paths; `owner/repo` is detected from each clone's git origin. Your GitHub login is auto-detected; your own PRs are never listed.
+2. **Discovery** — new open PRs land here. **Review** (add to board + dispatch `/review`), **Watch** (add to board), **Ignore** (hide forever). PRs you already reviewed or commented on skip Discovery.
+3. **Reviews** — Watching / Needs Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
+4. **Pull Requests** — your own PRs: Waiting / In Review / Ready to merge / Done. A human review moves a card to In Review, an approval to Ready to merge (where the CI tag is all you need to decide). Cards only ever move *forward* on their own, so re-requesting a review or flipping back to draft can't drop one out of In Review. Bot reviews (Cursor, Sonar) show a 🤖 badge but never move a card — they're lint, not review. Drag anywhere, in either direction: a drop stays put until GitHub itself changes its mind. Done holds what you merged or closed today and empties overnight.
+5. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
+6. **Worktrees** — you only ever register the clone path. A branch checked out in a linked worktree is followed there: actions run in that worktree, its sessions and `AI_TASKS/code-review/` reports show up on the card, and resume opens the directory the session actually ran in.
 
 ## Install
+
+### Manual
+
+Grab the latest `.dmg` from [Releases](https://github.com/chartrandf/lookout/releases) (universal — Apple Silicon + Intel) and drag **Lookout** to Applications.
+
+On **Linux** (x86_64), grab the `.deb` (`sudo apt install ./Lookout_*.deb`) or the `.AppImage` (`chmod +x`, then run it).
 
 ### Homebrew
 
@@ -28,12 +43,6 @@ brew install --cask lookout                    # --force to replace a hand-insta
 > `chartrandf/homebrew-lookout`, which doesn't exist — so not even the fully-qualified
 > `brew install --cask chartrandf/lookout/lookout` can tap this repo on its own. Skip the `brew tap`
 > line and you get `Invalid usage: Casks must be fully-qualified` / `No Cask with this name exists`.
-
-### Manual
-
-Grab the latest `.dmg` from [Releases](https://github.com/chartrandf/lookout/releases) (universal — Apple Silicon + Intel) and drag **Lookout** to Applications.
-
-On **Linux** (x86_64), grab the `.deb` (`sudo apt install ./Lookout_*.deb`) or the `.AppImage` (`chmod +x`, then run it).
 
 ### 🔒 Quarantine Issue
 
@@ -60,20 +69,11 @@ Requirements — see [Tauri's prerequisites](https://v2.tauri.app/start/prerequi
 - **Rust** (stable) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`. Without it
   `pnpm tauri dev` dies at `cargo metadata … No such file or directory (os error 2)`.
 - **Xcode Command Line Tools** (macOS) — `xcode-select --install`, for the linker `cargo` shells out to.
-- **`gh`** (authenticated) and the **`claude`** CLI.
+- **`gh`** (authenticated) and a coding-agent CLI — **`claude`** (the default) or **`opencode`**.
 
 pnpm is pinned by the `packageManager` field — `corepack enable` picks up the right version.
 `npm install` can't build this tree: `package-lock.json` is stale, and resolving the missing dev
 deps from scratch crashes Arborist with `Cannot read properties of null (reading 'edgesOut')`.
-
-## Usage
-
-1. **Settings** — add local clone paths; `owner/repo` is detected from each clone's git origin. Your GitHub login is auto-detected; your own PRs are never listed.
-2. **Discovery** — new open PRs land here. **Review** (add to board + dispatch `/do-review`), **Watch** (add to board), **Ignore** (hide forever). PRs you already reviewed or commented on skip Discovery.
-3. **Reviews** — Watching / Needs Review / Reviewed / Follow-up / Done. Drag cards to triage or prioritize. Merged or closed PRs auto-move to Done and drop off after 24 h.
-4. **Pull Requests** — your own PRs: Waiting / In Review / Ready to merge / Done. A human review moves a card to In Review, an approval to Ready to merge (where the CI tag is all you need to decide). Cards only ever move *forward* on their own, so re-requesting a review or flipping back to draft can't drop one out of In Review. Bot reviews (Cursor, Sonar) show a 🤖 badge but never move a card — they're lint, not review. Drag anywhere, in either direction: a drop stays put until GitHub itself changes its mind. Done holds what you merged or closed today and empties overnight.
-5. **PR panel** — click a card: chat-style history (sessions, reports, commits, reviews), dispatch buttons, stage selector, one-click approve when follow-up is all green, resume sessions in Ghostty.
-6. **Worktrees** — you only ever register the clone path. A branch checked out in a linked worktree is followed there: actions run in that worktree, its sessions and `AI_TASKS/code-review/` reports show up on the card, and resume opens the directory the session actually ran in.
 
 ## Reviews with no report file
 
@@ -133,11 +133,6 @@ lookout review capture --hook              # Stop-hook entry point: payload on s
 lookout mine list --column ready           # my PRs that are approved and just need a CI check
 lookout mine show                          # my PR for this repo + branch
 lookout mine ready                         # → Ready to merge
-
-lookout stream add "#app implement card 1,2"   # dump work onto the Stream board (--queue for Queued)
-lookout stream list --status needs_review      # what waits on me
-lookout stream gate --summary "Plan ready"     # an agent stops for my review (--kind question to ask)
-lookout stream note "tests are slow here"      # a line in the item's trail
 
 lookout doctor                             # database path and both board counts
 ```
