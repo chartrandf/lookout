@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.5.5 — 2026-11-05
+
+- [NEW] Stage icons on board columns with a custom stage picker
+- [ENHANCED] Dropdowns with icons and keyboard navigation
+- [ENHANCED] Exiting chat collapses the terminal instead of sending
+- [FIX] Alert no longer fires on CI failures for PRs you don't own
+- [FIX] Dropdown caret alignment
+
 ## v0.5.4 — 2026-11-04
 
 - [NEW] Paste a screenshot thumbnail as an @path image in chat
