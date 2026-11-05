@@ -20,6 +20,7 @@ import {
   streamItems,
 } from '../lib/db'
 import { logError } from '../lib/log'
+import { chord, chordLabel } from '../lib/platform'
 import { listSlashEntries, matchSlash, type SlashEntry, slashQuery } from '../lib/skills'
 import {
   applyStreamAction,
@@ -184,7 +185,9 @@ const Card = ({ item, onOpen, onAction, onDragStart, onDragEnd, busy, onPriority
   )
 }
 
-const ReturnKey = () => <kbd className="rounded bg-black/20 px-1 font-sans text-[10px] leading-4 text-white/80">⌘↵</kbd>
+const ReturnKey = () => (
+  <kbd className="rounded bg-black/20 px-1 font-sans text-[10px] leading-4 text-white/80">{chordLabel('↵')}</kbd>
+)
 
 // The dump: type or paste what I want done, one line each; a list of targets splits into one card
 // per target unless I say they go together. `#project` picks the project; with none, "All projects"
@@ -213,7 +216,7 @@ const Dump = ({
   const [queue, setQueue] = useState(false) // where the cards land: Inbox (false) or Queued
   const [templateId, setTemplateId] = useState<string | null>(null) // the flow the cards follow
   const [listOpen, setListOpen] = useState(false)
-  // once per dump: a double click or ⌘↵ held down adds the cards one time
+  // once per dump: a double click, or the chord held down, adds the cards one time
   const adding = useRef(false)
   const listRef = useRef<HTMLDivElement>(null)
   const names = useMemo(() => repos.map((r) => r.repo), [repos])
@@ -366,7 +369,7 @@ const Dump = ({
           onBlur={() => setDismissedAt(at?.start ?? null)}
           onFocus={() => setDismissedAt(null)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && e.metaKey) {
+            if (chord(e, 'Enter')) {
               e.preventDefault()
               add()
               return

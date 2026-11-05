@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { avatarUrl } from '../lib/avatar'
+import { chord, chordLabel } from '../lib/platform'
 import { BOARD_STAGES, STAGE_LABEL } from '../lib/stages'
 import type { ReviewTask } from '../types'
 import { Tip } from './Tip'
@@ -38,10 +39,10 @@ export const GlobalSearch = ({ tasks, onOpen, onReview, onWatch, onIgnore, onUni
   const inputRef = useRef<HTMLInputElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
 
-  // ⌘K opens the search from anywhere (and re-selects the query when it is already open)
+  // ⌘K (Ctrl+K on Linux) opens the search from anywhere (and re-selects the query when it is already open)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+      if (chord(e, 'k')) {
         e.preventDefault()
         setOpen(true)
         inputRef.current?.focus()
@@ -87,9 +88,11 @@ export const GlobalSearch = ({ tasks, onOpen, onReview, onWatch, onIgnore, onUni
     reset()
   }
 
+  const searchHint = chordLabel('K')
+
   return (
     <div ref={wrapRef} className="relative">
-      <Tip label="Search cards  ⌘K">
+      <Tip label={searchHint ? `Search cards  ${searchHint}` : 'Search cards'}>
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}

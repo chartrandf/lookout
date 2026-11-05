@@ -11,6 +11,24 @@ export type DiffFile = {
   body: string[] // from the first @@ on
 }
 
+// What the find bar counts per file: the path (old or new) matches once, and each matching line
+// counts once. Hunk headers and the no-newline marker are not content, so they never match.
+export type FileMatches = { path: boolean; lines: number }
+
+export const fileMatches = (files: DiffFile[], query: string): FileMatches[] => {
+  const q = query.trim().toLowerCase()
+  return files.map((f) => {
+    if (!q) return { path: false, lines: 0 }
+    const path = `${f.oldPath ? `${f.oldPath} ` : ''}${f.path}`.toLowerCase().includes(q)
+    let lines = 0
+    for (const l of f.body) {
+      if (l.startsWith('@@') || l.startsWith('\\')) continue
+      if (l.toLowerCase().includes(q)) lines++
+    }
+    return { path, lines }
+  })
+}
+
 export type DiffLine =
   | { kind: 'hunk'; text: string }
   | { kind: 'add' | 'del' | 'ctx'; text: string; old: number | null; new: number | null }

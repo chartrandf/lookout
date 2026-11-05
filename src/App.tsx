@@ -75,6 +75,7 @@ import {
 } from './lib/mergehook'
 import { snoozeMyPr, syncMyPrs } from './lib/myprs'
 import { notify, onNotificationClick, setNotificationsEnabled } from './lib/notify'
+import { chord, chordLabel } from './lib/platform'
 import { applyTimeline } from './lib/prboard'
 import { fillPrompt } from './lib/prompt'
 import { setOpenLinksInBrowser } from './lib/prwindow'
@@ -416,11 +417,11 @@ const App = () => {
     }
   }, [reloadAlerts, streamOn])
 
-  // ⌘1..⌘n switch tabs, indexes follow the visible tabs
+  // ⌘1..⌘n (Ctrl on Linux) switch tabs, indexes follow the visible tabs
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const v = tabForKey(e.key, visibleTabs(streamOn))
-      if (e.metaKey && !e.shiftKey && !e.altKey && v) {
+      if (v && chord(e, e.key)) {
         e.preventDefault()
         switchView(v)
       }
@@ -760,6 +761,7 @@ const App = () => {
 
   const tab = ({ view: v, label }: (typeof TAB_ORDER)[number], index: number) => {
     const badge = badges[v]
+    const hint = chordLabel(String(index + 1))
     return (
       <button
         key={v}
@@ -777,9 +779,13 @@ const App = () => {
             </span>
           </Tip>
         ) : null}
-        <span className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}>
-          ⌘{index + 1}
-        </span>
+        {hint ? (
+          <span
+            className={`ml-1.5 text-xs ${view === v ? 'text-deck-400' : 'text-deck-600 group-hover:text-deck-500'}`}
+          >
+            {hint}
+          </span>
+        ) : null}
       </button>
     )
   }

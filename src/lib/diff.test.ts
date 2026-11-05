@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffLines, LARGE_FILE_LINES, MANY_FILES, parseDiff, splitRows, startsOpen } from './diff'
+import { diffLines, fileMatches, LARGE_FILE_LINES, MANY_FILES, parseDiff, splitRows, startsOpen } from './diff'
 
 const DIFF = `diff --git a/src/app.ts b/src/app.ts
 index 1111111..2222222 100644
@@ -71,6 +71,32 @@ describe('diffLines', () => {
 
   it('leaves out the no-newline marker', () => {
     expect(diffLines(parseDiff(DIFF)[1].body).map((l) => l.kind)).toEqual(['hunk', 'add'])
+  })
+})
+
+describe('fileMatches', () => {
+  const files = parseDiff(DIFF)
+
+  it('counts a matching path once and each matching line', () => {
+    expect(fileMatches(files, 'app.ts')[0]).toEqual({ path: true, lines: 0 })
+    expect(fileMatches(files, 'const')[0]).toEqual({ path: false, lines: 4 })
+  })
+
+  it('ignores case, so a query finds what it should', () => {
+    expect(fileMatches(files, 'HELLO')[1]).toEqual({ path: false, lines: 1 })
+  })
+
+  it('skips hunk headers: their @@ is not content', () => {
+    expect(fileMatches(files, '@@')[0]).toEqual({ path: false, lines: 0 })
+  })
+
+  it('matches a rename by either side of the path', () => {
+    expect(fileMatches(files, 'old.ts')[2]).toEqual({ path: true, lines: 0 })
+    expect(fileMatches(files, 'new.ts')[2]).toEqual({ path: true, lines: 0 })
+  })
+
+  it('finds nothing for a blank query', () => {
+    expect(fileMatches(files, '  ').every((m) => !m.path && m.lines === 0)).toBe(true)
   })
 })
 

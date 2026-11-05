@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { atLeastRatio, isTextField, stepPanelWidth } from '../lib/panelwidth'
+import { chord } from '../lib/platform'
 import { Tip } from './Tip'
 
 type SidePanelApi = {
@@ -57,12 +58,11 @@ export const SidePanel = ({ onClose, children, initialWidth, minWidth = DEFAULT_
     }
   }, [minWidth])
 
-  // Cmd+← widens, Cmd+→ narrows — unless a text field has focus (caret navigation)
+  // ⌘← widens, ⌘→ narrows (Ctrl on Linux) — unless a text field has focus (caret navigation)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.shiftKey || e.altKey || e.ctrlKey) return
       const dir = e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0
-      if (!dir || isTextField(document.activeElement)) return
+      if (!dir || isTextField(document.activeElement) || !chord(e, e.key)) return
       e.preventDefault()
       setWidth((w) => stepPanelWidth(w, dir, window.innerWidth))
     }
