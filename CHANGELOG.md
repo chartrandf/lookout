@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.7 — 2026-11-06
+
+- [NEW] Automation tab with a flows side panel for managing streams
+- [NEW] Discovery cards with a direct ignore button and seen-only menu option
+
 ## v0.5.6 — 2026-11-05
 
 - [NEW] find bar in the diff view with platform-aware shortcut chords
