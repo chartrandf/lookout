@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_TEMPLATES, type FlowTemplate, type TemplateStep } from '../lib/streamflow'
 import { TRIGGERS, type Trigger } from '../lib/streamwatch'
+import { Dropdown } from './Dropdown'
 
 type Props = {
   templates: FlowTemplate[]
@@ -122,24 +123,25 @@ export const StreamTemplates = ({ templates, onSave }: Props) => {
                           />
                           approve before going on
                         </label>
-                        <select
+                        <Dropdown
                           value={s.waitFor ?? ''}
-                          onChange={(e) =>
+                          options={[
+                            { value: '', label: 'no wait' },
+                            ...TRIGGERS.map((tr) => ({
+                              value: tr.value,
+                              label: `wait first: ${tr.label.toLowerCase()}`,
+                            })),
+                          ]}
+                          onChange={(v) =>
                             patchStep(t.id, k, (x) => {
-                              const { waitFor: _, ...rest } = x
-                              return e.target.value ? { ...rest, waitFor: e.target.value as Trigger } : rest
+                              const { waitFor: _gone, ...rest } = x
+                              return v ? { ...rest, waitFor: v as Trigger } : rest
                             })
                           }
-                          aria-label="Wait first"
-                          className="cursor-pointer rounded bg-deck-800 px-1.5 py-0.5 text-deck-200 focus:outline-none"
-                        >
-                          <option value="">no wait</option>
-                          {TRIGGERS.map((tr) => (
-                            <option key={tr.value} value={tr.value}>
-                              wait first: {tr.label.toLowerCase()}
-                            </option>
-                          ))}
-                        </select>
+                          label="Wait for something on the PR before this step runs"
+                          align="left"
+                          className="rounded bg-deck-800 px-1.5 py-0.5 text-xs text-deck-200"
+                        />
                         <button
                           type="button"
                           onClick={() => patch(t.id, (x) => ({ ...x, steps: x.steps.filter((_, i) => i !== k) }))}

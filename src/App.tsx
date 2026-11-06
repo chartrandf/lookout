@@ -123,6 +123,7 @@ import type {
   StreamItem,
   WatchedRepo,
 } from './types'
+import { Automation } from './views/Automation'
 import { Board } from './views/Board'
 import { Discovery } from './views/Discovery'
 import { PullRequests } from './views/PullRequests'
@@ -293,9 +294,9 @@ const App = () => {
   }, [streamAll, streamOn])
   // the PR cards' history shows Stream entries only while Stream is on
   useEffect(() => setStreamFeed(streamOn), [streamOn])
-  // switched off while on its tab: back to the first one
+  // switched off while on one of its tabs: back to the first one
   useEffect(() => {
-    if (!streamOn && view === 'stream') setView(TAB_ORDER[0].view)
+    if (!streamOn && (view === 'stream' || view === 'automation')) setView(TAB_ORDER[0].view)
   }, [streamOn, view])
   // a Stream entry clicked in a PR's history: switch to Stream and open that card there
   const [streamOpen, setStreamOpen] = useState<{ id: string; at: number } | null>(null)
@@ -815,10 +816,11 @@ const App = () => {
             </button>
           </Tip>
         </h1>
-        {tabs.filter((t) => t.view !== 'settings').map((t) => tab(t, tabs.indexOf(t)))}
+        {tabs.filter((t) => t.view !== 'settings' && t.view !== 'automation').map((t) => tab(t, tabs.indexOf(t)))}
         {/* empty space between the tabs and the right-hand icons: still part of the titlebar drag region */}
         <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
-        {tabs.filter((t) => t.view === 'settings').map((t) => tab(t, tabs.indexOf(t)))}
+        {/* right-aligned: the automation side, then Settings */}
+        {tabs.filter((t) => t.view === 'automation' || t.view === 'settings').map((t) => tab(t, tabs.indexOf(t)))}
         <GlobalSearch
           tasks={tasks}
           onOpen={openCard}
@@ -890,14 +892,23 @@ const App = () => {
             autoRun={config.streamAutoRun}
             openRequest={streamOpen}
             templates={config.streamTemplates}
-            onManageTemplates={() => setView('settings')}
-            watchers={config.streamWatchers}
-            onSaveWatchers={async (watchers) => {
-              await setStreamWatchers(watchers)
+            onSaveTemplates={async (templates) => {
+              await setStreamTemplates(templates)
               setConfig(await getConfig())
             }}
             onAutoRun={async (on) => {
               await setStreamAutoRun(on)
+              setConfig(await getConfig())
+            }}
+          />
+        )}
+        {streamOn && view === 'automation' && (
+          <Automation
+            watchers={config.streamWatchers}
+            templates={config.streamTemplates}
+            repos={config.repos}
+            onSaveWatchers={async (watchers) => {
+              await setStreamWatchers(watchers)
               setConfig(await getConfig())
             }}
           />

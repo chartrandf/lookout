@@ -2,16 +2,10 @@ import { useEffect, useState } from 'react'
 import { tierLabel } from '../lib/agent'
 import type { WatcherRun } from '../lib/config'
 import type { FlowTemplate } from '../lib/streamflow'
-import {
-  DEFAULT_TASK,
-  DEFAULT_WATCHERS,
-  WATCHER_CHECKS,
-  type Watcher,
-  type WatcherCheck,
-  type WatcherModel,
-} from '../lib/streamwatchers'
+import { DEFAULT_TASK, DEFAULT_WATCHERS, WATCHER_CHECKS, type Watcher } from '../lib/streamwatchers'
 import { messageTime } from '../lib/time'
 import type { WatchedRepo } from '../types'
+import { Dropdown } from './Dropdown'
 
 type Props = {
   watchers: Watcher[]
@@ -141,47 +135,42 @@ export const StreamWatchers = ({ watchers, templates, repos, runs, onSave }: Pro
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="When" hint={WATCHER_CHECKS.find((c) => c.value === w.check)?.hint}>
-                <select
+                <Dropdown
                   value={w.check}
-                  onChange={(e) => patch(w.id, (x) => ({ ...x, check: e.target.value as WatcherCheck }))}
-                  className={`${control} w-full cursor-pointer`}
-                >
-                  {WATCHER_CHECKS.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.label}
-                    </option>
-                  ))}
-                </select>
+                  options={WATCHER_CHECKS.map((c) => ({ value: c.value, label: c.label }))}
+                  onChange={(v) => patch(w.id, (x) => ({ ...x, check: v }))}
+                  label="The trigger that creates the cards"
+                  align="left"
+                  className={`${control} justify-between`}
+                />
               </Field>
 
               <Field label="Project" hint={w.repo ? `Only ${w.repo}.` : 'Every project Lookout watches.'}>
-                <select
+                <Dropdown
                   value={w.repo ?? ''}
-                  onChange={(e) => patch(w.id, (x) => ({ ...x, repo: e.target.value || null }))}
-                  className={`${control} w-full cursor-pointer truncate`}
-                >
-                  <option value="">All projects</option>
-                  {repos.map((r) => (
-                    <option key={r.repo} value={r.repo}>
-                      {r.repo}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'All projects' },
+                    ...repos.map((r) => ({ value: r.repo, label: r.repo })),
+                  ]}
+                  onChange={(v) => patch(w.id, (x) => ({ ...x, repo: v || null }))}
+                  label="The projects it watches"
+                  align="left"
+                  className={`${control} justify-between`}
+                />
               </Field>
 
               <Field label="What the card does" hint={doesHint(w, templates)}>
-                <select
+                <Dropdown
                   value={w.templateId ?? ''}
-                  onChange={(e) => patch(w.id, (x) => ({ ...x, templateId: e.target.value || null }))}
-                  className={`${control} w-full cursor-pointer`}
-                >
-                  <option value="">Single task</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      Flow: {t.name}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: '', label: 'Single task' },
+                    ...templates.map((t) => ({ value: t.id, label: `Flow: ${t.name}` })),
+                  ]}
+                  onChange={(v) => patch(w.id, (x) => ({ ...x, templateId: v || null }))}
+                  label="What each created card runs"
+                  align="left"
+                  className={`${control} justify-between`}
+                />
               </Field>
 
               <Field label="Check every" hint="How often it looks for something new.">
@@ -211,15 +200,18 @@ export const StreamWatchers = ({ watchers, templates, repos, runs, onSave }: Pro
                 </Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Model" hint="The fast model is cheap enough to run often.">
-                    <select
+                    <Dropdown
                       value={w.model}
-                      onChange={(e) => patch(w.id, (x) => ({ ...x, model: e.target.value as WatcherModel }))}
-                      className={`${control} w-full cursor-pointer`}
-                    >
-                      <option value="haiku">Fast — {tierLabel('fast')}</option>
-                      <option value="sonnet">Strong — {tierLabel('strong')}</option>
-                      <option value="default">My default model</option>
-                    </select>
+                      options={[
+                        { value: 'haiku', label: `Fast — ${tierLabel('fast')}` },
+                        { value: 'sonnet', label: `Strong — ${tierLabel('strong')}` },
+                        { value: 'default', label: 'My default model' },
+                      ]}
+                      onChange={(v) => patch(w.id, (x) => ({ ...x, model: v }))}
+                      label="The model that runs the checks"
+                      align="left"
+                      className={`${control} justify-between`}
+                    />
                   </Field>
                   <Field label="Extra tools" hint="Beyond reading files and gh, e.g. an MCP server.">
                     <input

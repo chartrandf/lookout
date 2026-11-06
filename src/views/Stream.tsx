@@ -6,8 +6,7 @@ import { Dropdown } from '../components/Dropdown'
 import { PriorityChip } from '../components/PriorityChip'
 import { SidePanel } from '../components/SidePanel'
 import { actorIcon, RefChip, StreamPanel } from '../components/StreamPanel'
-import { StreamWatchers } from '../components/StreamWatchers'
-import { getWatcherRuns, type WatcherRun } from '../lib/config'
+import { StreamTemplates } from '../components/StreamTemplates'
 import {
   addStreamItems,
   askStreamProject,
@@ -52,7 +51,6 @@ import {
   unwatchStream,
 } from '../lib/streamrunner'
 import { waitingLabel } from '../lib/streamwatch'
-import type { Watcher } from '../lib/streamwatchers'
 import { timeAgo } from '../lib/time'
 import type { StreamColumn, StreamItem, StreamPriority, StreamStatus, WatchedRepo } from '../types'
 
@@ -64,10 +62,8 @@ type Props = {
   autoRun: boolean // agents pick queued cards on their own
   onAutoRun: (on: boolean) => void
   openRequest: { id: string; at: number } | null // open this card (a new `at` reopens the same one)
-  templates: FlowTemplate[] // flow templates for the dump's picker (Settings → Stream)
-  onManageTemplates: () => void // to Settings, where they are edited
-  watchers: Watcher[] // rules that create cards (the 👁 side panel edits them)
-  onSaveWatchers: (watchers: Watcher[]) => void
+  templates: FlowTemplate[] // flow templates for the dump's picker (the 🌊 side panel edits them)
+  onSaveTemplates: (templates: FlowTemplate[]) => void
 }
 
 // statuses whose column already says it all get no tag
@@ -192,7 +188,7 @@ const ReturnKey = () => (
 // The dump: type or paste what I want done, one line each; a list of targets splits into one card
 // per target unless I say they go together. `#project` picks the project; with none, "All projects"
 // lets Haiku place each card, and the ones it can't place wait in Needs you.
-// the flow picker's last option: open Settings → Stream instead of picking
+// the flow picker's last option: open the flows side panel instead of picking
 const MANAGE = '__manage__'
 
 // one row of the caret dropdown: a #project or a /skill
@@ -202,14 +198,14 @@ const Dump = ({
   repos,
   slash,
   templates,
-  onManageTemplates,
+  onManageFlows,
   onAdd,
 }: {
   repos: WatchedRepo[]
   slash: SlashEntry[] // my skills and commands, for `/`
   templates: FlowTemplate[]
   onAdd: (text: string, picked: string | null, queue: boolean, templateId: string | null) => Promise<unknown>
-  onManageTemplates: () => void
+  onManageFlows: () => void
 }) => {
   const [text, setText] = useState('')
   const [repo, setRepo] = useState('') // '' = All projects
@@ -413,7 +409,7 @@ const Dump = ({
               })),
               { value: MANAGE, label: 'Manage flows…' },
             ]}
-            onChange={(v) => (v === MANAGE ? onManageTemplates() : setTemplateId(v || null))}
+            onChange={(v) => (v === MANAGE ? onManageFlows() : setTemplateId(v || null))}
             label="The flow template these cards follow"
             align="left"
             menuUp
@@ -486,31 +482,8 @@ const Dump = ({
   )
 }
 
-export const Stream = ({
-  repos,
-  autoRun,
-  onAutoRun,
-  openRequest,
-  templates,
-  onManageTemplates,
-  watchers,
-  onSaveWatchers,
-}: Props) => {
-  const watchersOn = watchers.filter((w) => w.enabled).length
-  // the watchers side panel, and each watcher's last run (re-read on every board change)
-  const [watchersPanel, setWatchersPanel] = useState(false)
-  const [watcherRuns, setWatcherRuns] = useState<Record<string, WatcherRun>>({})
-  useEffect(() => {
-    if (!watchersPanel) return
-    const load = () => {
-      getWatcherRuns()
-        .then(setWatcherRuns)
-        .catch(() => null)
-    }
-    load()
-    return onStreamChange(load)
-  }, [watchersPanel])
-
+export const Stream = ({ repos, autoRun, onAutoRun, openRequest, templates, onSaveTemplates }: Props) => {
+  const [flowsPanel, setFlowsPanel] = useState(false) // the 🌊 flows, edited as a draft side panel
   const [items, setItems] = useState<StreamItem[]>([])
   const [version, setVersion] = useState(0) // bumped after every write: the open panel re-reads its feed
   const [openId, setOpenId] = useState<string | null>(null)
@@ -686,11 +659,11 @@ export const Stream = ({
       <div className="mb-2 flex shrink-0 items-center justify-end gap-3 text-xs text-deck-400">
         <button
           type="button"
-          onClick={() => setWatchersPanel(true)}
-          title="Watchers create cards on their own — open them here"
+          onClick={() => setFlowsPanel(true)}
+          title="Step lists a card can follow — edit them here"
           className="cursor-pointer rounded-md px-2 py-1 hover:bg-deck-800 hover:text-deck-200"
         >
-          👁 {watchersOn ? `${watchersOn} watcher${watchersOn === 1 ? '' : 's'} on` : 'no watchers'}
+          🌊 {templates.length ? `${templates.length} flow${templates.length === 1 ? '' : 's'}` : 'no flows'}
         </button>
         <span>{items.filter((x) => x.status === 'running').length} running</span>
         <button
@@ -807,7 +780,13 @@ export const Stream = ({
       </div>
       {/* the dump sits under the board, like a chat box */}
       <div className="mx-[70px] my-[35px] shrink-0">
-        <Dump repos={repos} slash={slash} templates={templates} onAdd={onAdd} onManageTemplates={onManageTemplates} />
+        <Dump
+          repos={repos}
+          slash={slash}
+          templates={templates}
+          onAdd={onAdd}
+          onManageFlows={() => setFlowsPanel(true)}
+        />
       </div>
       {open && (
         <StreamPanel
@@ -823,22 +802,16 @@ export const Stream = ({
           onClose={() => setOpenId(null)}
         />
       )}
-      {watchersPanel && (
-        <SidePanel onClose={() => setWatchersPanel(false)}>
+      {flowsPanel && (
+        <SidePanel onClose={() => setFlowsPanel(false)}>
           {({ close }) => (
             <>
               <div className="flex shrink-0 items-center gap-2 border-b border-deck-800 p-4">
-                <h2 className="min-w-0 flex-1 text-base font-medium text-white">👁 Watchers</h2>
+                <h2 className="min-w-0 flex-1 text-base font-medium text-white">🌊 Flows</h2>
                 <CloseButton onClick={close} />
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
-                <StreamWatchers
-                  watchers={watchers}
-                  templates={templates}
-                  repos={repos}
-                  runs={watcherRuns}
-                  onSave={onSaveWatchers}
-                />
+                <StreamTemplates templates={templates} onSave={onSaveTemplates} />
               </div>
             </>
           )}
