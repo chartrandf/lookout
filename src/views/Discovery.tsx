@@ -23,17 +23,16 @@ type Props = {
   onReorderRepos: (repoNames: string[]) => void
 }
 
-// per-card "⋯" menu: mark seen/unseen + ignore/unignore, the option shown depending on the card's state
+// per-card "⋯" menu: mark seen/unseen (+ unignore for entries in the ignored list)
+// ignoring itself is the card's direct button
 const RowMenu = ({
   task,
   big,
-  onIgnore,
   onUnignore,
   onSetSeen,
 }: {
   task: ReviewTask
   big?: boolean
-  onIgnore: (id: string) => void
   onUnignore: (id: string) => void
   onSetSeen: (id: string, seen: boolean) => void
 }) => {
@@ -78,7 +77,7 @@ const RowMenu = ({
             >
               {task.seen ? 'Mark as unseen' : 'Mark as seen'}
             </button>
-            {task.stage === 'ignored' ? (
+            {task.stage === 'ignored' && (
               <button
                 type="button"
                 onClick={(e) => {
@@ -89,18 +88,6 @@ const RowMenu = ({
                 className={item}
               >
                 Unignore
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onIgnore(task.id)
-                  setOpen(false)
-                }}
-                className={item}
-              >
-                Ignore
               </button>
             )}
           </div>
@@ -174,7 +161,19 @@ const DiscoveryCard = ({
       >
         watch
       </button>
-      <RowMenu task={t} big={wide} onIgnore={onIgnore} onUnignore={onUnignore} onSetSeen={onSetSeen} />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          onIgnore(t.id)
+        }}
+        className={`cursor-pointer rounded border border-deck-600 text-deck-300 hover:bg-deck-700 ${
+          wide ? 'h-7 px-3 text-sm' : 'h-5 px-1.5'
+        }`}
+      >
+        ignore
+      </button>
+      <RowMenu task={t} big={wide} onUnignore={onUnignore} onSetSeen={onSetSeen} />
     </div>
   </CardFrame>
 )
@@ -436,7 +435,7 @@ export const Discovery = ({
                     <span className="min-w-0 flex-1 truncate">
                       {t.repo.split('/')[1]}#{t.prNumber} — {t.prTitle}
                     </span>
-                    <RowMenu task={t} onIgnore={onIgnore} onUnignore={onUnignore} onSetSeen={onSetSeen} />
+                    <RowMenu task={t} onUnignore={onUnignore} onSetSeen={onSetSeen} />
                   </div>
                 ))}
               </div>
