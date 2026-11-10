@@ -1,10 +1,13 @@
-import { type KeyboardEvent, type RefObject, useRef, useState } from 'react'
+import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react'
 import { droppedPaths, fileRefs, saveDroppedImages } from '../lib/filerefs'
+import { fuzzyFilter } from '../lib/fuzzy'
 import { errText, logWarn } from '../lib/log'
 
 type Props = {
   value: string
   commands: string[] // command names without the leading slash
+  // repo paths suggested on `@` (dirs end with `/`), fetched on the first `@`; none = no `@` menu
+  loadFiles?: () => Promise<string[]>
   onChange: (v: string) => void
   onBlur?: () => void
   placeholder?: string
@@ -20,31 +23,38 @@ type Props = {
 // prompt placeholders filled in at run time (see lib/prompt.ts)
 const PLACEHOLDERS = ['pr_id', 'branch_name']
 
-// `/name` (slash command) or `<name` (placeholder) typed at the caret
+// `/name` (slash command), `@path` (file) or `<name` (placeholder) typed at the caret
 const COMMAND_RE = /(^|\s)(\/[\w:-]*)$/
+const FILE_RE = /(^|\s)(@[^\s@]*)$/
 const PLACEHOLDER_RE = /(<[\w_]*)$/
 
-type Menu = { kind: 'command' | 'placeholder'; start: number; query: string }
+type Menu = { kind: 'command' | 'file' | 'placeholder'; start: number; query: string }
 
-// how each kind renders in the list and inserts into the text
-const render = (kind: Menu['kind'], name: string) => (kind === 'command' ? `/${name}` : `<${name}>`)
-const insertText = (kind: Menu['kind'], name: string) => (kind === 'command' ? `/${name} ` : `<${name}>`)
+// how each kind renders in the list and inserts into the text; a dir goes in without the space,
+// so the menu stays open on its content
+const render = (kind: Menu['kind'], name: string) =>
+  kind === 'command' ? `/${name}` : kind === 'file' ? `@${name}` : `<${name}>`
+const insertText = (kind: Menu['kind'], name: string) =>
+  kind === 'command' ? `/${name} ` : kind === 'file' ? `@${name}${name.endsWith('/') ? '' : ' '}` : `<${name}>`
 
-const detect = (el: HTMLTextAreaElement, placeholders: boolean): Menu | null => {
+const detect = (el: HTMLTextAreaElement, placeholders: boolean, files: boolean): Menu | null => {
   const before = el.value.slice(0, el.selectionStart ?? 0)
   const cmd = before.match(COMMAND_RE)
   if (cmd) return { kind: 'command', start: before.length - cmd[2].length, query: cmd[2].slice(1) }
+  const file = files ? before.match(FILE_RE) : null
+  if (file) return { kind: 'file', start: before.length - file[2].length, query: file[2].slice(1) }
   if (!placeholders) return null
   const ph = before.match(PLACEHOLDER_RE)
   if (ph) return { kind: 'placeholder', start: before.length - ph[1].length, query: ph[1].slice(1) }
   return null
 }
 
-// Textarea that suggests the user's Claude slash-commands while typing `/…` and the prompt
-// placeholders while typing `<…`. Arrow keys navigate, Enter/Tab inserts, Esc dismisses.
+// Textarea that suggests the user's Claude slash-commands while typing `/…`, the repo's files
+// (fuzzy, like claude and opencode) while typing `@…` and the prompt placeholders while typing `<…`. Arrow keys navigate, Enter/Tab inserts, Esc dismisses.
 export const CommandTextarea = ({
   value,
   commands,
+  loadFiles,
   onChange,
   onBlur,
   placeholder,
@@ -60,19 +70,37 @@ export const CommandTextarea = ({
   const ref = inputRef ?? own
   const [menu, setMenu] = useState<Menu | null>(null)
   const [active, setActive] = useState(0)
+  const [files, setFiles] = useState<string[] | null>(null) // null = not fetched yet
+  const fetching = useRef(false)
+
+  // another repo: fetch its files on its own first `@`
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset trigger only
+  useEffect(() => {
+    setFiles(null)
+    fetching.current = false
+  }, [loadFiles])
 
   const q = menu?.query.toLowerCase() ?? ''
-  const suggestions = menu
-    ? (menu.kind === 'command' ? commands : PLACEHOLDERS)
-        .filter((c) => c.toLowerCase().includes(q))
-        .sort((a, b) => Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q)))
-        .slice(0, 8)
-    : []
+  const suggestions = !menu
+    ? []
+    : menu.kind === 'file'
+      ? fuzzyFilter(menu.query, files ?? [], 50)
+      : (menu.kind === 'command' ? commands : PLACEHOLDERS)
+          .filter((c) => c.toLowerCase().includes(q))
+          .sort((a, b) => Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q)))
+          .slice(0, 8)
   const open = suggestions.length > 0
 
   const refresh = (el: HTMLTextAreaElement) => {
-    setMenu(detect(el, placeholders))
+    const next = detect(el, placeholders, !!loadFiles)
+    setMenu(next)
     setActive(0)
+    if (next?.kind === 'file' && loadFiles && !files && !fetching.current) {
+      fetching.current = true
+      loadFiles()
+        .then(setFiles)
+        .catch(() => setFiles([]))
+    }
   }
 
   const choose = (name: string) => {
@@ -81,7 +109,8 @@ export const CommandTextarea = ({
     const inserted = insertText(menu.kind, name)
     const next = value.slice(0, menu.start) + inserted + value.slice(el.selectionStart ?? 0)
     onChange(next)
-    setMenu(null)
+    setMenu(menu.kind === 'file' && name.endsWith('/') ? { ...menu, query: name } : null)
+    setActive(0)
     const pos = menu.start + inserted.length
     requestAnimationFrame(() => {
       el.focus()

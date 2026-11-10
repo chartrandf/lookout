@@ -2,7 +2,7 @@ import { GitMergeIcon } from '@primer/octicons-react'
 import { writeText } from '@tauri-apps/plugin-clipboard-manager'
 import { readTextFile } from '@tauri-apps/plugin-fs'
 import { openUrl } from '@tauri-apps/plugin-opener'
-import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, type Ref, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { agentBin } from '../lib/agent'
 import { avatarUrl } from '../lib/avatar'
 import { cardActions, snoozeAction } from '../lib/cardactions'
@@ -18,6 +18,7 @@ import { type CheckItem, ciRatio } from '../lib/prboard'
 import { onPrWindowClosed, openPrWindow } from '../lib/prwindow'
 import { drainQueue, type Queued } from '../lib/queue'
 import { sessionOptions } from '../lib/replytarget'
+import { listRepoFiles } from '../lib/repofiles'
 import type { Run, RunLine } from '../lib/runs'
 import { sessionCwd, sessionLines } from '../lib/sessions'
 import { STAGES } from '../lib/stages'
@@ -76,6 +77,7 @@ type ReplyBoxProps = {
   queued: Queued[] // sent one by one once the running turn ends
   onUnqueue: (index: number) => void
   commands: string[] // skills + slash commands suggested on `/`
+  loadFiles?: () => Promise<string[]> // repo paths suggested on `@`, fetched on the first one
   autoFocus?: boolean // take the caret on mount
 }
 
@@ -110,6 +112,7 @@ const ReplyBox = ({
   queued,
   onUnqueue,
   commands,
+  loadFiles,
   autoFocus,
 }: ReplyBoxProps) => {
   const ref = useRef<HTMLTextAreaElement>(null)
@@ -152,6 +155,7 @@ const ReplyBox = ({
         rows={1}
         value={value}
         commands={commands}
+        loadFiles={loadFiles}
         placeholders={false}
         menuUp
         onChange={onChange}
@@ -740,6 +744,11 @@ export const SessionPanel = ({
     listSlashCommands(task.repoPath ? [task.repoPath] : [])
       .then(setCommands)
       .catch(() => setCommands([]))
+  }, [task.repoPath])
+
+  const loadFiles = useMemo(() => {
+    const repo = task.repoPath
+    return repo ? () => listRepoFiles(repo) : undefined
   }, [task.repoPath])
 
   // another card talks to its own latest session
@@ -1502,6 +1511,7 @@ export const SessionPanel = ({
               running={running}
               placeholder={chatPlaceholder}
               commands={commands}
+              loadFiles={loadFiles}
               tools={
                 !!task.repoPath && (
                   <SessionPicker
@@ -1541,6 +1551,7 @@ export const SessionPanel = ({
                     running={running}
                     placeholder='send comments from here — e.g. "1,3" or "all"'
                     commands={commands}
+                    loadFiles={loadFiles}
                     autoFocus
                   />
                 </div>
@@ -1590,6 +1601,7 @@ export const SessionPanel = ({
                   running={running}
                   placeholder="Message this session…"
                   commands={commands}
+                  loadFiles={loadFiles}
                   autoFocus
                 />
               </div>
