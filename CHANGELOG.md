@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.5.8 — 2026-11-11
+
+- [NEW] Fuzzy file picker in chat when typing @
+- [FIX] @ menu scrolling, path display, and prefix handling
+- [FIX] Agent runs dispatched to OpenCode v2 with results captured
+
 ## v0.5.7 — 2026-11-06
 
 - [NEW] Automation tab with a flows side panel for managing streams
