@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pr-toolbar",
+  "description": "PR browser windows, local toolbar webview (remote pages never match a local capability): drive the page, drag/maximize the window",
+  "windows": ["pr-*"],
+  "permissions": [
+    "prnav:allow-nav",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize"
+  ]
+}

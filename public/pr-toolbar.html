@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <!-- PR browser window toolbar: its own webview above the remote page (see src-tauri/src/pr_window.rs).
+         Left padding keeps the buttons clear of the macOS traffic lights (overlay titlebar). -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #ececec;
+      }
+      #bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 46px; /* the page webview starts below it (BAR_H in pr_window.rs) */
+        padding: 0 16px 0 88px;
+        box-sizing: border-box;
+        border-bottom: 1px solid #d0d0d0;
+        font: 13px -apple-system, BlinkMacSystemFont, sans-serif;
+        color: #333;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      .nav {
+        width: 30px;
+        height: 30px;
+        flex: none;
+        border: 0;
+        border-radius: 9999px;
+        background: transparent;
+        color: #444;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .nav:hover:not(:disabled) {
+        background: #dcdcdc;
+      }
+      .nav:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+      .nav svg {
+        display: block;
+      }
+      /* the copy button sits inside the input's box: the field positions it, the input's
+         right padding keeps a long URL from sliding under it */
+      #field {
+        position: relative;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        margin: 0 8px;
+      }
+      #url {
+        width: 100%;
+        height: 30px;
+        border: 1px solid #cfcfcf;
+        border-radius: 8px;
+        background: #fff;
+        color: #333;
+        padding: 0 34px 0 10px;
+        box-sizing: border-box;
+        font: 12px ui-monospace, SFMono-Regular, monospace;
+        outline: none;
+        transition:
+          background-color 150ms,
+          border-color 150ms;
+      }
+      #field:hover #url:not(:focus) {
+        background: #f0f0f0;
+      }
+      #url:focus {
+        border: 2px solid #2bbd6e;
+        padding: 0 33px 0 9px; /* compensate the extra border px: no layout shift */
+      }
+      #copy {
+        position: absolute;
+        right: 5px;
+        width: 22px;
+        height: 22px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: #666;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #copy:hover {
+        background: #e2e2e2;
+      }
+      #copy.done {
+        color: #2bbd6e;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- empty toolbar space drags the window (buttons/input are separate targets, unaffected) -->
+    <div id="bar" data-tauri-drag-region>
+      <button id="back" class="nav" type="button" title="Back" disabled></button>
+      <button id="forward" class="nav" type="button" title="Forward" disabled></button>
+      <button id="reload" class="nav" type="button" title="Reload"></button>
+      <div id="field">
+        <input id="url" spellcheck="false" />
+        <button id="copy" type="button" title="Copy URL"></button>
+      </div>
+    </div>
+    <script>
+      ;(() => {
+        // feather-style icons: identical viewBox/stroke so all of them center the same way
+        const SVG = (size, inner) =>
+          `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+          `stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`
+        const ICONS = {
+          back: SVG(16, '<polyline points="15 18 9 12 15 6"/>'),
+          forward: SVG(16, '<polyline points="9 18 15 12 9 6"/>'),
+          reload: SVG(15, '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
+          copy: SVG(
+            13,
+            '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>' +
+              '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+          ),
+          check: SVG(13, '<polyline points="20 6 9 17 4 12"/>'),
+        }
+
+        const $ = (id) => document.getElementById(id)
+        const back = $('back')
+        const forward = $('forward')
+        const reload = $('reload')
+        const input = $('url')
+        const copy = $('copy')
+        back.innerHTML = ICONS.back
+        forward.innerHTML = ICONS.forward
+        reload.innerHTML = ICONS.reload
+        copy.innerHTML = ICONS.copy
+
+        const nav = (action, url) =>
+          window.__TAURI_INTERNALS__.invoke('plugin:prnav|nav', { action, url }).catch(() => {})
+
+        // the page reports its URL and history position (prnav report in pr_window.rs)
+        let href = ''
+        window.__lookoutState = (s) => {
+          href = s.url
+          back.disabled = !s.back
+          forward.disabled = !s.forward
+          if (document.activeElement !== input) input.value = href // skip while the user is typing
+        }
+
+        back.onclick = () => nav('back')
+        forward.onclick = () => nav('forward')
+        reload.onclick = () => {
+          reload.firstElementChild.animate([{ transform: 'rotate(0deg)' }, { transform: 'rotate(360deg)' }], {
+            duration: 600,
+            easing: 'ease-in-out',
+          })
+          nav('reload')
+        }
+
+        let justFocused = false
+        input.onfocus = () => {
+          justFocused = true
+          input.select()
+        }
+        // the click's mouseup would collapse the select-all right after focus — swallow it once
+        input.onmouseup = (e) => {
+          if (!justFocused) return
+          e.preventDefault()
+          justFocused = false
+        }
+        input.onblur = () => {
+          justFocused = false
+        }
+        input.onkeydown = (e) => {
+          if (e.key === 'Escape') {
+            input.value = href // drop any edits
+            input.blur()
+            return
+          }
+          if (e.key !== 'Enter') return
+          let v = input.value.trim()
+          if (!v) return
+          if (!/^https?:\/\//i.test(v)) v = `https://${v}`
+          input.blur()
+          nav('go', v)
+        }
+
+        // keep the caret/selection where it is: clicking the icon must not focus it nor re-select the input
+        copy.onmousedown = (e) => e.preventDefault()
+        let copiedTimer
+        copy.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(href)
+          } catch {
+            return // clipboard denied: leave the icon untouched
+          }
+          copy.innerHTML = ICONS.check
+          copy.classList.add('done')
+          clearTimeout(copiedTimer)
+          copiedTimer = setTimeout(() => {
+            copy.innerHTML = ICONS.copy
+            copy.classList.remove('done')
+          }, 1200)
+        }
+
+        // Cmd+F (Ctrl+F off macOS) while the toolbar has focus: open find in the page below
+        const isMac = /Mac/.test(navigator.platform)
+        addEventListener('keydown', (e) => {
+          if (!(isMac ? e.metaKey : e.ctrlKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'f') return
+          e.preventDefault()
+          nav('find')
+        })
+
+        // the page may have reported before this webview loaded: ask it again
+        nav('sync')
+      })()
+    </script>
+  </body>
+</html>

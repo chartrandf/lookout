@@ -12,7 +12,7 @@ export const setOpenLinksInBrowser = (on: boolean) => {
 const prWindowLabel = (repo: string, prNumber: number) => `pr-${repo}-${prNumber}`.replace(/[^a-zA-Z0-9-]/g, '-')
 
 // One window per PR (label = repo + number): re-clicking focuses instead of opening another tab.
-// Built Rust-side (open_pr_window) so a navigation toolbar is injected into every page.
+// Built Rust-side (open_pr_window): a navigation toolbar webview above the page.
 // cmd = the link was CMD+clicked: it flips whichever of the two the setting made the default.
 export const openPrWindow = async (url: string, repo: string, prNumber: number, cmd = false) => {
   if (cmd !== preferBrowser) {
