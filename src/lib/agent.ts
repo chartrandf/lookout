@@ -1,6 +1,7 @@
 import { type Child, Command } from '@tauri-apps/plugin-shell'
 import { REVIEW_TOOLS, type StreamEvent, spawnClaude } from './claude'
 import { opencodeToolName } from './opencode'
+import { resolveOcCommand } from './opencmd'
 import { toolDetail } from './transcript'
 
 // Which coding-agent CLI Lookout drives (Settings → Agent). Claude Code by default; opencode as the
@@ -208,18 +209,19 @@ export const opencodeParser = (onEvent: (e: StreamEvent) => void) => {
   }
 }
 
-// opencode has no slash-command syntax in a message: `/review 12` is `--command review` with "12"
+// `/name args` at the start of a prompt is a command; the rest is its argument text
 const splitCommand = (prompt: string): { command: string; message: string } => {
   const m = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/.exec(prompt.trim())
   return m ? { command: m[1], message: m[2] ?? '' } : { command: '', message: prompt }
 }
 
 // `opencode run` reads stdin to the end before it starts, and a spawned child's stdin stays open, so
-// it is started through sh with stdin on /dev/null. The script and its four slots (session, model,
-// command, message) are pinned in the shell capability; an empty slot adds no flag.
+// it is started through sh with stdin on /dev/null. The script and its three slots (session, model,
+// message) are pinned in the shell capability; an empty slot adds no flag. v2 has no --command: a
+// `/command` prompt is expanded client-side (lib/opencmd.ts) before it lands in the message slot.
 export const OPENCODE_RUN_SCRIPT =
   // biome-ignore lint/suspicious/noTemplateCurlyInString: sh parameter expansion, not a template
-  'exec opencode run --format json ${1:+--session "$1"} ${2:+--model "$2"} ${3:+--command "$3"} "$4" </dev/null'
+  'exec opencode run --format json ${1:+--session "$1"} ${2:+--model "$2"} "$3" </dev/null'
 
 const opencodeEnv = (allowed: string, denied?: string) => ({
   OPENCODE_PERMISSION: JSON.stringify(opencodePermission(allowed, denied)),
@@ -289,9 +291,12 @@ export const spawnAgent = async (
   if (current.cli === 'claude')
     return spawnClaude(prompt, cwd, onEvent, resumeSessionId, allowedTools, disallowedTools, model ?? undefined)
   const { command, message } = splitCommand(prompt)
+  // v2 runs commands as expanded text: a template found in the user's/repo's command dirs goes in
+  // expanded, an unknown one verbatim — the agent then sees what a Claude run would
+  const text = command ? ((await resolveOcCommand(command, message, cwd)) ?? prompt) : prompt
   const cmd = Command.create(
     'opencode-run',
-    ['-c', OPENCODE_RUN_SCRIPT, 'sh', resumeSessionId ?? '', model ?? '', command, message],
+    ['-c', OPENCODE_RUN_SCRIPT, 'sh', resumeSessionId ?? '', model ?? '', text],
     { cwd, env: opencodeEnv(allowedTools, disallowedTools) },
   )
   cmd.stdout.on('data', opencodeParser(onEvent))

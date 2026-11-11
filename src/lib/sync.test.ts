@@ -45,7 +45,12 @@ vi.mock('./sessions', () => ({
     async (cwd: string, id: string) => `/home/.claude/projects/${cwd.replace(/\//g, '-')}/${id}.jsonl`,
   ),
 }))
-vi.mock('./capture', () => ({ captureIfGrown: vi.fn(), captureFromTranscript: vi.fn() }))
+vi.mock('./capture', () => ({
+  captureIfGrown: vi.fn(),
+  captureFromTranscript: vi.fn(),
+  captureOpencodeSession: vi.fn(),
+  isOpencodeSession: (id: string) => id.startsWith('ses_'),
+}))
 
 import { captureFromTranscript, captureIfGrown } from './capture'
 import { classifySession } from './classify'

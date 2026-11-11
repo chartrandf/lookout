@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { frontmatter, matchSlash, pluginName, type SlashEntry, slashQuery } from './skills'
+import { frontmatter, matchSlash, pluginName, type SlashEntry, slashQuery, splitFrontmatter } from './skills'
+
+describe('splitFrontmatter', () => {
+  it('splits the block from the body', () => {
+    expect(splitFrontmatter('---\nname: rebase\n---\n# Rebase')).toEqual({
+      data: 'name: rebase',
+      body: '# Rebase',
+    })
+  })
+
+  it('keeps the whole text as the body without a block', () => {
+    expect(splitFrontmatter('# Just a doc')).toEqual({ data: null, body: '# Just a doc' })
+  })
+})
 
 describe('frontmatter', () => {
   it('reads name and description', () => {

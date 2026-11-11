@@ -62,11 +62,10 @@
           "cmd": "sh",
           "args": [
             "-c",
-            "exec opencode run --format json ${1:+--session \"$1\"} ${2:+--model \"$2\"} ${3:+--command \"$3\"} \"$4\" </dev/null",
+            "exec opencode run --format json ${1:+--session \"$1\"} ${2:+--model \"$2\"} \"$3\" </dev/null",
             "sh",
             { "validator": "(ses_[A-Za-z0-9]+)?" },
             { "validator": "[A-Za-z0-9._@/:+-]*" },
-            { "validator": "[A-Za-z0-9._:/-]*" },
             { "validator": "(?s).*" }
           ]
         },

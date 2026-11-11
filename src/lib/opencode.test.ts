@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { opencodeToolName, opencodeTranscriptLines } from './opencode'
+import { opencodeCapture, opencodeToolName, opencodeTranscriptLines } from './opencode'
 
 // A slice of what `opencode session export <id>` prints: the user turn, an assistant turn with a
 // reasoning part, two tool parts and text, then its closing turn. Field shapes come from a real
@@ -61,5 +61,84 @@ describe('opencodeToolName', () => {
     expect(opencodeToolName('list')).toBe('LS')
     expect(opencodeToolName('unknown-tool')).toBe('Unknown-tool')
     expect(opencodeToolName('')).toBe('')
+  })
+})
+
+describe('opencodeCapture', () => {
+  // a review is at least MIN_BODY (200) of text; everything here is made up
+  const line = 'The diff reads clean, the tests cover the renamed prop and the docs say so.'
+  const verdict = `Verdict: approve. ${Array(4).fill(line).join(' ')}`
+
+  it('captures the last assistant turn, tools and reasoning left out', () => {
+    const exported = {
+      messages: [
+        { type: 'user', text: '"Review PR 4"' },
+        { type: 'assistant', content: [{ type: 'tool', name: 'read', state: { input: { path: '/repo/src/x.ts' } } }] },
+        { type: 'assistant', content: [{ type: 'text', text: verdict }] },
+      ],
+    }
+    expect(opencodeCapture(exported)).toEqual({ kind: 'captured', body: verdict, ts: null })
+  })
+
+  it('stops at the prompt, so a short closing turn reads as nothing', () => {
+    const exported = {
+      messages: [
+        { type: 'assistant', content: [{ type: 'text', text: verdict }] },
+        { type: 'user', text: '"thanks"' },
+        { type: 'assistant', content: [{ type: 'text', text: 'done' }] },
+      ],
+    }
+    expect(opencodeCapture(exported)).toEqual({ kind: 'none' })
+  })
+
+  it('glues the text blocks of one turn together', () => {
+    const exported = {
+      messages: [
+        {
+          type: 'assistant',
+          content: [{ type: 'text', text: 'Verdict: approve.' }, { type: 'text', text: verdict }],
+        },
+      ],
+    }
+    expect(opencodeCapture(exported)).toEqual({ kind: 'captured', body: `Verdict: approve.\n\n${verdict}`, ts: null })
+  })
+
+  it('reads a short answer as nothing to capture', () => {
+    expect(
+      opencodeCapture({ messages: [{ type: 'assistant', content: [{ type: 'text', text: 'done' }] }] }),
+    ).toEqual({ kind: 'none' })
+  })
+
+  it('reads a report the session wrote itself as exported', () => {
+    const exported = {
+      messages: [
+        {
+          type: 'assistant',
+          content: [{ type: 'tool', name: 'write', state: { input: { path: 'AI_TASKS/code-review/pr-4.md' } } }],
+        },
+        { type: 'assistant', content: [{ type: 'text', text: verdict }] },
+      ],
+    }
+    expect(opencodeCapture(exported)).toEqual({ kind: 'exported' })
+  })
+
+  it('reads a heredoc write as exported too', () => {
+    const exported = {
+      messages: [
+        {
+          type: 'assistant',
+          content: [
+            { type: 'tool', name: 'shell', state: { input: { command: 'cat > AI_TASKS/code-review/pr-4.md <<EOF' } } },
+          ],
+        },
+        { type: 'assistant', content: [{ type: 'text', text: verdict }] },
+      ],
+    }
+    expect(opencodeCapture(exported)).toEqual({ kind: 'exported' })
+  })
+
+  it('reads anything that is not an exported session as nothing', () => {
+    expect(opencodeCapture(null)).toEqual({ kind: 'none' })
+    expect(opencodeCapture({})).toEqual({ kind: 'none' })
   })
 })

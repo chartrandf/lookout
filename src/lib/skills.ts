@@ -9,12 +9,18 @@ export type SlashEntry = { name: string; description: string | null; kind: 'skil
 
 // the `name:` and `description:` of a markdown file's frontmatter
 export const frontmatter = (md: string): { name: string | null; description: string | null } => {
-  const block = md.match(/^---\r?\n([\s\S]*?)\r?\n---/)
+  const { data: block } = splitFrontmatter(md)
   const read = (key: string) => {
-    const m = block?.[1].match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
+    const m = block?.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'))
     return m ? m[1].trim().replace(/^(['"])(.*)\1$/, '$2') : null
   }
   return { name: read('name'), description: read('description') }
+}
+
+// the frontmatter block (without the `---` fences) and the markdown body that follows it
+export const splitFrontmatter = (md: string): { data: string | null; body: string } => {
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/)
+  return m ? { data: m[1], body: md.slice(m[0].length) } : { data: null, body: md }
 }
 
 // installed_plugins.json keys are `plugin@marketplace`; the command namespace is the plugin

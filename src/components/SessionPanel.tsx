@@ -823,17 +823,20 @@ export const SessionPanel = ({
   // the event's own wording is the title — a follow-up must not open under a review's name
   const openCaptured = (content: string, title: string) => setReport({ title, content })
 
-  const send = (to: string | null) => {
-    if (!input.trim()) return
+  // returns whether the input was handled (sent, queued or exit): the report overlay backs out
+  // only when something went out, an empty field keeps it open
+  const send = (to: string | null): boolean => {
+    if (!input.trim()) return false
     if (isExit(input)) {
       setTermOpen(false)
       setInput('')
-      return
+      return true
     }
     if (running) setQueued((q) => [...q, { text: input.trim(), to }])
     else onReply(input.trim(), to)
     setInput('')
     if (to === null) setPick(undefined) // the new chat becomes the latest session: follow it
+    return true
   }
 
   // unsent messages go back on top of what's being typed
@@ -1543,7 +1546,11 @@ export const SessionPanel = ({
                   <ReplyBox
                     value={input}
                     onChange={setInput}
-                    onSend={() => send(sessionId ?? null)}
+                    onSend={() => {
+                      // a comment sent from the report goes back to the card: the reply shows
+                      // on the panel's feed, and the report has nothing more to read
+                      if (send(sessionId ?? null)) setReport(null)
+                    }}
                     onCancel={cancel}
                     queued={queued}
                     onUnqueue={(i) => setQueued((q) => q.filter((_, j) => j !== i))}

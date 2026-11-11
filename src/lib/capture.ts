@@ -1,5 +1,7 @@
+import { Command } from '@tauri-apps/plugin-shell'
 import { open, SeekMode, stat } from '@tauri-apps/plugin-fs'
 import { errText, logWarn } from './log'
+import { opencodeCapture } from './opencode'
 import { type CaptureResult, reviewFromLines } from './transcript'
 
 // A review that only ever existed in a session transcript. The shipped default review button runs
@@ -50,6 +52,34 @@ const readCapture = async (filePath: string, maxBytes: number): Promise<CaptureR
 
 export const captureFromTranscript = async (filePath: string, maxBytes = TAIL_BYTES): Promise<CaptureResult> =>
   (await readCapture(filePath, maxBytes)) ?? { kind: 'none' }
+
+// opencode keeps its sessions in its own store, not on the Claude-transcript path: one is read back
+// with `opencode session export` and captured by the same rules. opencode ids start with `ses_`,
+// Claude's are UUIDs, so the id alone says which reader a session needs.
+export const isOpencodeSession = (sessionId: string) => sessionId.startsWith('ses_')
+
+// a run's capture fires the moment its answer lands: the agent may still be closing the session
+// down, so a failed export, or one that shows nothing yet, is tried again briefly before it counts
+const RETRY_MS = 1500
+const RETRIES = 2
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+export const captureOpencodeSession = async (sessionId: string): Promise<CaptureResult> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const out = await Command.create('opencode', ['session', 'export', sessionId]).execute()
+      if (out.code !== 0) throw new Error(out.stderr?.trim() || `opencode session export exited ${out.code}`)
+      const result = opencodeCapture(JSON.parse(out.stdout))
+      if (result.kind !== 'none' || attempt >= RETRIES) return result
+    } catch (e) {
+      if (attempt >= RETRIES) {
+        logWarn('capture', `unreadable opencode session ${sessionId}: ${errText(e)}`)
+        return { kind: 'none' }
+      }
+    }
+    await wait(RETRY_MS)
+  }
+}
 
 // A sync pass runs every ~28 s and a finished session never changes again, so a tail read per pass
 // per session would be waste. Size is the cheap "did anything happen" signal: a grown transcript is

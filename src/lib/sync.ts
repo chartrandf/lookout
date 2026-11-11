@@ -1,6 +1,6 @@
 import type { Alert, ReviewTask } from '../types'
 import { type AlertScope, myLastWordAt, TASK_ALERT_KINDS, taskAlerts } from './alerts'
-import { captureFromTranscript, captureIfGrown } from './capture'
+import { captureFromTranscript, captureIfGrown, captureOpencodeSession, isOpencodeSession } from './capture'
 import { classifySession } from './classify'
 import { getConfig, setGithubName, setGithubUser } from './config'
 import {
@@ -137,7 +137,9 @@ export const captureRun = async (
   const files = await scanReviewFiles(r.repoPath)
   const hasReportFiles = (files.get(r.branch) ?? files.get(r.branch.replace(/\//g, '-')) ?? []).length > 0
   if (hasReportFiles && r.kind === 'review') return deleteCapturedReview(r.sessionId) // skip the read
-  const result = await captureFromTranscript(await transcriptPath(r.cwd, r.sessionId))
+  const result = isOpencodeSession(r.sessionId)
+    ? await captureOpencodeSession(r.sessionId)
+    : await captureFromTranscript(await transcriptPath(r.cwd, r.sessionId))
   const kind = r.kind ?? (result.kind === 'captured' ? await classifySession(r.sessionId, result.body) : null)
   if (kind) await storeCapture({ ...r, kind }, hasReportFiles, async () => result)
 }
