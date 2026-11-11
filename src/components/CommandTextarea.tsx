@@ -33,7 +33,7 @@ type Menu = { kind: 'command' | 'file' | 'placeholder'; start: number; query: st
 // how each kind renders in the list and inserts into the text; a dir goes in without the space,
 // so the menu stays open on its content
 const render = (kind: Menu['kind'], name: string) =>
-  kind === 'command' ? `/${name}` : kind === 'file' ? `@${name}` : `<${name}>`
+  kind === 'command' ? `/${name}` : kind === 'file' ? name : `<${name}>`
 const insertText = (kind: Menu['kind'], name: string) =>
   kind === 'command' ? `/${name} ` : kind === 'file' ? `@${name}${name.endsWith('/') ? '' : ' '}` : `<${name}>`
 
@@ -72,6 +72,7 @@ export const CommandTextarea = ({
   const [active, setActive] = useState(0)
   const [files, setFiles] = useState<string[] | null>(null) // null = not fetched yet
   const fetching = useRef(false)
+  const listRef = useRef<HTMLUListElement>(null)
 
   // another repo: fetch its files on its own first `@`
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset trigger only
@@ -90,6 +91,17 @@ export const CommandTextarea = ({
           .sort((a, b) => Number(b.toLowerCase().startsWith(q)) - Number(a.toLowerCase().startsWith(q)))
           .slice(0, 8)
   const open = suggestions.length > 0
+
+  // keep the highlighted suggestion visible when navigating with the arrows
+  useEffect(() => {
+    const list = listRef.current
+    const el = list?.querySelector<HTMLElement>('[data-active="true"]')
+    if (!list || !el) return
+    const top = el.offsetTop
+    const bottom = top + el.offsetHeight
+    if (top < list.scrollTop) list.scrollTop = top
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight
+  }, [active, suggestions])
 
   const refresh = (el: HTMLTextAreaElement) => {
     const next = detect(el, placeholders, !!loadFiles)
@@ -184,10 +196,11 @@ export const CommandTextarea = ({
       />
       {open && menu && (
         <ul
-          className={`absolute inset-x-0 z-40 max-h-56 ${menuUp ? 'bottom-full mb-1' : 'top-full mt-1'} overflow-y-auto rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl`}
+          ref={listRef}
+          className={`absolute inset-x-0 z-40 max-h-56 ${menuUp ? 'bottom-full mb-1' : 'top-full mt-1'} overflow-y-auto overflow-x-hidden rounded-md border border-deck-700 bg-deck-800 py-1 shadow-xl`}
         >
           {suggestions.map((name, i) => (
-            <li key={name}>
+            <li key={name} data-active={i === active}>
               <button
                 type="button"
                 onMouseDown={(e) => {
@@ -199,7 +212,7 @@ export const CommandTextarea = ({
                   i === active ? 'bg-grass-600/25 text-grass-100' : 'text-deck-200 hover:bg-deck-700'
                 }`}
               >
-                {render(menu.kind, name)}
+                <span className="truncate">{render(menu.kind, name)}</span>
               </button>
             </li>
           ))}
