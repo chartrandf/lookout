@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.9 — 2026-11-12
+
+- [NEW] PR board lanes grouped by repository; stream view on right
+- [FIX] Browser toolbar no longer overlaps sticky headers
+
 ## v0.5.8 — 2026-11-11
 
 - [NEW] Fuzzy file picker in chat when typing @
