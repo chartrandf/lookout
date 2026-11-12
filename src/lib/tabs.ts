@@ -1,7 +1,8 @@
 export type View = 'pulls' | 'board' | 'discovery' | 'stream' | 'automation' | 'settings'
 
 // Single source of truth for tab order: shortcuts (⌘1..⌘n, Ctrl on Linux) derive from the index of the visible ones.
-// The right-aligned side of the header (App) picks up automation + settings.
+// The right-aligned side of the header (App) picks up stream + automation + settings; TAB_ORDER keeps them
+// in visual order (stream just before automation) so the right side renders correctly.
 export const TAB_ORDER: { view: View; label: string }[] = [
   { view: 'pulls', label: 'Pull Requests' },
   { view: 'board', label: 'Reviews' },

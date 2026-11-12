@@ -52,6 +52,7 @@ const config = (repos = [REPO, OTHER]): Config => ({
   logging: false,
   captureReviews: false,
   openInBrowser: false,
+  prsGroupByRepo: true,
   notifications: true,
   mergeMethod: 'merge',
   streamEnabled: false,

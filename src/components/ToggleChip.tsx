@@ -1,4 +1,5 @@
-// A board's "show …" switch, beside its filters: shaped like a filter button, a small switch on its right
+// A board's "show …" switch, beside its filters: shaped like a filter button, a small switch on its right.
+// `count` is optional: switches without a meaningful count (e.g. "group by repo") leave it out
 export const ToggleChip = ({
   label,
   count,
@@ -6,7 +7,7 @@ export const ToggleChip = ({
   onToggle,
 }: {
   label: string
-  count: number
+  count?: number
   on: boolean
   onToggle: () => void
 }) => (
@@ -20,7 +21,9 @@ export const ToggleChip = ({
     }`}
   >
     {label}
-    <span className="rounded-full bg-deck-700/60 px-1.5 text-[10px] leading-4 text-deck-400">{count}</span>
+    {count !== undefined && (
+      <span className="rounded-full bg-deck-700/60 px-1.5 text-[10px] leading-4 text-deck-400">{count}</span>
+    )}
     <span
       className={`relative h-3.5 w-6 shrink-0 rounded-full transition-colors duration-200 ${on ? 'bg-grass-500' : 'bg-deck-600'}`}
     >

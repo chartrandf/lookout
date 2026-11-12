@@ -85,6 +85,8 @@ export const getConfig = async (): Promise<Config> => {
     // a switch they have to find first would leave the flow broken for exactly them.
     captureReviews: (await s.get<boolean>('captureReviews')) ?? true,
     openInBrowser: (await s.get<boolean>('openInBrowser')) ?? false,
+    // on by default: lanes grouped by repo priority, as set in the watched-repo order
+    prsGroupByRepo: (await s.get<boolean>('prsGroupByRepo')) ?? true,
     notifications: (await s.get<boolean>('notifications')) ?? true,
     mergeMethod: (await s.get<MergePreference>('mergeMethod')) ?? 'merge',
     // on by default: the board is for work agents pick up; a card still waits for me before anything leaves
@@ -170,6 +172,11 @@ export const setStreamAutoRun = async (streamAutoRun: boolean) => {
 export const setOpenInBrowser = async (openInBrowser: boolean) => {
   const s = await getStore()
   await s.set('openInBrowser', openInBrowser)
+}
+
+export const setPrsGroupByRepo = async (prsGroupByRepo: boolean) => {
+  const s = await getStore()
+  await s.set('prsGroupByRepo', prsGroupByRepo)
 }
 
 export const setMergeMethod = async (mergeMethod: MergePreference) => {

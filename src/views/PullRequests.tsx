@@ -6,7 +6,7 @@ import { Icon } from '../components/Icon'
 import { StreamChip } from '../components/StreamChip'
 import { Tip } from '../components/Tip'
 import { ToggleChip } from '../components/ToggleChip'
-import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions } from '../lib/filters'
+import { type BoardFilter, emptyFilter, matchesFilter, openRepoOptions, repoTitle } from '../lib/filters'
 import { PR_COLUMNS } from '../lib/prboard'
 import type { Run } from '../lib/runs'
 import type { CiChecks, CiState, MyPr, PrColumn, ReviewFlavor, StreamItem } from '../types'
@@ -21,6 +21,9 @@ type Props = {
   onReorder: (pr: MyPr, column: PrColumn, orderedIds: string[]) => void
   menuFor: (pr: MyPr) => CardMenu // quick actions: hover ⋯ and right-click
   streamByRef: Map<string, StreamItem> // the live Stream card working on each PR (🌊 chip)
+  repoOrder: string[] // watched repos in the settings order: first = highest priority
+  groupByRepo: boolean // group the cards in each lane by repo (persisted in config)
+  onGroupByRepo: (on: boolean) => void
 }
 
 // the board shows the pipeline columns; Done is appended on demand
@@ -124,6 +127,17 @@ const PrCard = ({
 // default (unranked) position: manual drag order first, then non-drafts, drafts at the bottom
 const orderKey = (p: MyPr) => p.sortOrder ?? (p.isDraft ? 2e9 : 1e9)
 
+// consecutive runs of the same repo, in the order the items are already sorted in
+const repoGroups = (items: MyPr[]): { repo: string; items: MyPr[] }[] => {
+  const out: { repo: string; items: MyPr[] }[] = []
+  for (const p of items) {
+    const last = out[out.length - 1]
+    if (last && last.repo === p.repo) last.items.push(p)
+    else out.push({ repo: p.repo, items: [p] })
+  }
+  return out
+}
+
 export const PullRequests = ({
   prs,
   me,
@@ -134,6 +148,9 @@ export const PullRequests = ({
   onReorder,
   menuFor,
   streamByRef,
+  repoOrder,
+  groupByRepo,
+  onGroupByRepo,
 }: Props) => {
   const [showDone, setShowDone] = useState(false)
   const [showSnoozed, setShowSnoozed] = useState(false)
@@ -144,6 +161,11 @@ export const PullRequests = ({
   const [dropLine, setDropLine] = useState<{ col: PrColumn; before: string | null } | null>(null)
   const repoOptions = openRepoOptions(prs.map((p) => ({ repo: p.repo, open: p.state === 'open' })))
   const runByPr = new Map(runs.map((r) => [r.taskId, r]))
+  // priority of a repo = its position in the settings order; unwatched repos rank last
+  const repoRank = (repo: string) => {
+    const i = repoOrder.indexOf(repo)
+    return i < 0 ? repoOrder.length : i
+  }
   const byColumn = (c: PrColumn) =>
     prs
       // snoozed cards stay hidden until new activity; Done always shows, as on the review board
@@ -151,12 +173,16 @@ export const PullRequests = ({
         (p) =>
           p.column === c && (showSnoozed || !p.snoozed || c === 'done') && matchesFilter(filter, p.repo, p.ciState),
       )
-      // Done ignores drag order: it holds today's merges and closes, most recently dealt with first
-      .sort((a, b) =>
-        c === 'done'
+      // grouped mode: repo priority (settings order) first, the usual order within each repo
+      .sort((a, b) => {
+        if (groupByRepo) {
+          const dr = repoRank(a.repo) - repoRank(b.repo)
+          if (dr !== 0) return dr
+        }
+        return c === 'done'
           ? (b.doneAt ?? b.createdAt).localeCompare(a.doneAt ?? a.createdAt)
-          : orderKey(a) - orderKey(b) || b.createdAt.localeCompare(a.createdAt),
-      )
+          : orderKey(a) - orderKey(b) || b.createdAt.localeCompare(a.createdAt)
+      })
   const doneCount = prs.filter((p) => p.column === 'done' && matchesFilter(filter, p.repo, p.ciState)).length
   const snoozedCount = prs.filter(
     (p) => p.snoozed && p.column !== 'done' && matchesFilter(filter, p.repo, p.ciState),
@@ -195,6 +221,7 @@ export const PullRequests = ({
     <div className="flex h-full flex-col gap-3">
       <div className="flex shrink-0 items-center gap-2">
         <BoardFilters repos={repoOptions} filter={filter} onChange={setFilter} />
+        <ToggleChip label="Group by repo" on={groupByRepo} onToggle={() => onGroupByRepo(!groupByRepo)} />
         <div className="ml-auto flex items-center gap-2">
           {snoozedCount > 0 && (
             <ToggleChip
@@ -248,47 +275,61 @@ export const PullRequests = ({
               {/* p-px: WebKit clips 1px card borders sitting exactly on the scroll container's
                   (fractional-width) clip edge — give them 1px of breathing room */}
               <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-px pb-12">
-                {items.map((pr) => (
-                  // wrapper (line + card) is the drop target: hovering the line itself stays stable
-                  // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
-                  <div
-                    key={pr.id}
-                    className="flex flex-col gap-2"
-                    onDragOver={(e) => {
-                      if (!dragging) return
-                      e.preventDefault()
-                      e.stopPropagation()
-                      e.dataTransfer.dropEffect = 'move'
-                      setDropTarget(col.value)
-                      setDropLine((cur) =>
-                        cur?.col === col.value && cur.before === pr.id ? cur : { col: col.value, before: pr.id },
-                      )
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      drop(items, col.value, pr)
-                    }}
-                  >
-                    {dropLine?.col === col.value && dropLine.before === pr.id && !isNoMove(items, pr) && (
-                      <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
+                {repoGroups(items).map((group) => (
+                  <div key={group.repo} className="flex flex-col gap-2">
+                    {groupByRepo && (
+                      <div className="flex items-baseline gap-1.5 px-1 pt-1">
+                        <Tip label={group.repo}>
+                          <span className="cursor-help text-[10px] font-semibold uppercase tracking-wide text-deck-300">
+                            {repoTitle(group.repo)}
+                          </span>
+                        </Tip>
+                        <span className="text-[10px] text-deck-500">{group.items.length}</span>
+                      </div>
                     )}
-                    <PrCard
-                      pr={pr}
-                      me={me}
-                      run={runByPr.get(pr.id)}
-                      alerted={alertedIds.has(pr.id)}
-                      onOpen={onOpen}
-                      onDismissNew={onDismissNew}
-                      menu={menuFor(pr)}
-                      stream={streamByRef.get(pr.id)}
-                      onDragStart={() => setDragging(pr)}
-                      onDragEnd={() => {
-                        setDragging(null)
-                        setDropTarget(null)
-                        setDropLine(null)
-                      }}
-                    />
+                    {group.items.map((pr) => (
+                      // wrapper (line + card) is the drop target: hovering the line itself stays stable
+                      // biome-ignore lint/a11y/noStaticElementInteractions: drop target for kanban dnd
+                      <div
+                        key={pr.id}
+                        className="flex flex-col gap-2"
+                        onDragOver={(e) => {
+                          if (!dragging) return
+                          e.preventDefault()
+                          e.stopPropagation()
+                          e.dataTransfer.dropEffect = 'move'
+                          setDropTarget(col.value)
+                          setDropLine((cur) =>
+                            cur?.col === col.value && cur.before === pr.id ? cur : { col: col.value, before: pr.id },
+                          )
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          drop(items, col.value, pr)
+                        }}
+                      >
+                        {dropLine?.col === col.value && dropLine.before === pr.id && !isNoMove(items, pr) && (
+                          <div className="pointer-events-none h-0.5 rounded-full bg-grass-400" />
+                        )}
+                        <PrCard
+                          pr={pr}
+                          me={me}
+                          run={runByPr.get(pr.id)}
+                          alerted={alertedIds.has(pr.id)}
+                          onOpen={onOpen}
+                          onDismissNew={onDismissNew}
+                          menu={menuFor(pr)}
+                          stream={streamByRef.get(pr.id)}
+                          onDragStart={() => setDragging(pr)}
+                          onDragEnd={() => {
+                            setDragging(null)
+                            setDropTarget(null)
+                            setDropLine(null)
+                          }}
+                        />
+                      </div>
+                    ))}
                   </div>
                 ))}
                 {dropLine?.col === col.value && dropLine.before === null && !isNoMove(items, null) && (

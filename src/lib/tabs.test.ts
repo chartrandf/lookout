@@ -2,15 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { TAB_ORDER, tabForKey, visibleTabs } from './tabs'
 
 describe('TAB_ORDER', () => {
-  it('puts Stream on ⌘4 and the Automation tab on ⌘5, next to Settings on the right', () => {
-    expect(TAB_ORDER.map((t) => t.view)).toEqual([
-      'pulls',
-      'board',
-      'discovery',
-      'stream',
-      'automation',
-      'settings',
-    ])
+  it('puts Stream on ⌘4 and the Automation tab on ⌘5 — both on the right, before Settings', () => {
+    expect(TAB_ORDER.map((t) => t.view)).toEqual(['pulls', 'board', 'discovery', 'stream', 'automation', 'settings'])
   })
 })
 

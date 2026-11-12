@@ -25,6 +25,7 @@ import {
   setNotifications,
   setOpenInBrowser,
   setPrButtons,
+  setPrsGroupByRepo,
   setRepos,
   setReviewButtons,
   setStreamAutoRun,
@@ -156,6 +157,7 @@ const App = () => {
     logging: false,
     captureReviews: true,
     openInBrowser: false,
+    prsGroupByRepo: true,
     notifications: true,
     mergeMethod: 'merge',
     streamEnabled: false,
@@ -816,11 +818,15 @@ const App = () => {
             </button>
           </Tip>
         </h1>
-        {tabs.filter((t) => t.view !== 'settings' && t.view !== 'automation').map((t) => tab(t, tabs.indexOf(t)))}
+        {tabs
+          .filter((t) => t.view !== 'settings' && t.view !== 'automation' && t.view !== 'stream')
+          .map((t) => tab(t, tabs.indexOf(t)))}
         {/* empty space between the tabs and the right-hand icons: still part of the titlebar drag region */}
         <div data-tauri-drag-region className="min-w-0 flex-1 self-stretch" />
-        {/* right-aligned: the automation side, then Settings */}
-        {tabs.filter((t) => t.view === 'automation' || t.view === 'settings').map((t) => tab(t, tabs.indexOf(t)))}
+        {/* right-aligned: Stream, the automation side, then Settings */}
+        {tabs
+          .filter((t) => t.view === 'automation' || t.view === 'settings' || t.view === 'stream')
+          .map((t) => tab(t, tabs.indexOf(t)))}
         <GlobalSearch
           tasks={tasks}
           onOpen={openCard}
@@ -876,6 +882,12 @@ const App = () => {
             me={config.githubUser}
             runs={runs}
             alertedIds={alertedIds}
+            repoOrder={config.repos.map((r) => r.repo)}
+            groupByRepo={config.prsGroupByRepo}
+            onGroupByRepo={async (on) => {
+              await setPrsGroupByRepo(on)
+              setConfig(await getConfig())
+            }}
             onOpen={async (pr, checks) => {
               setPanelTaskId(pr.id)
               setPanelChecksFor(checks ? pr.id : null)
